@@ -1,0 +1,89 @@
+# .github/dependabot.yml
+# Dependabot configuration for automated dependency updates
+# See: https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+
+version: 2
+updates:
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "04:00"
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "ci(deps)"
+    open-pull-requests-limit: 10
+
+  # Docker (for compose images)
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "04:00"
+    labels:
+      - "dependencies"
+      - "docker"
+    commit-message:
+      prefix: "ci(deps)"
+    open-pull-requests-limit: 10
+
+  # Rust (Cargo) - ENABLE IN PHASE 1
+  # - package-ecosystem: "cargo"
+  #   directory: "/rust"
+  #   schedule:
+  #     interval: "weekly"
+  #     day: "monday"
+  #     time: "04:00"
+  #   labels:
+  #     - "dependencies"
+  #     - "rust"
+  #   commit-message:
+  #     prefix: "ci(deps)"
+  #   open-pull-requests-limit: 10
+
+  # Java (Gradle) - ENABLE IN PHASE 4
+  # - package-ecosystem: "gradle"
+  #   directory: "/java"
+  #   schedule:
+  #     interval: "weekly"
+  #     day: "monday"
+  #     time: "04:00"
+  #   labels:
+  #     - "dependencies"
+  #     - "java"
+  #   commit-message:
+  #     prefix: "ci(deps)"
+  #   open-pull-requests-limit: 10
+
+  # Python (pip) - ENABLE IN PHASE 6
+  # - package-ecosystem: "pip"
+  #   directory: "/python"
+  #   schedule:
+  #     interval: "weekly"
+  #     day: "monday"
+  #     time: "04:00"
+  #   labels:
+  #     - "dependencies"
+  #     - "python"
+  #   commit-message:
+  #     prefix: "ci(deps)"
+  #   open-pull-requests-limit: 10
+
+  # JavaScript/TypeScript (npm/pnpm) - ENABLE IN PHASE 9
+  # - package-ecosystem: "npm"
+  #   directory: "/frontend"
+  #   schedule:
+  #     interval: "weekly"
+  #     day: "monday"
+  #     time: "04:00"
+  #   labels:
+  #     - "dependencies"
+  #     - "web"
+  #   commit-message:
+  #     prefix: "ci(deps)"
+  #   open-pull-requests-limit: 10

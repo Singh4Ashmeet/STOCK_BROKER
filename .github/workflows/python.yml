@@ -1,0 +1,94 @@
+name: Python
+
+on:
+  pull_request:
+    paths:
+      - 'python/**'
+      - 'proto/**'
+      - 'pyproject.toml'
+      - 'requirements*.txt'
+      - '.github/workflows/python.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'python/**'
+      - 'proto/**'
+      - 'pyproject.toml'
+      - 'requirements*.txt'
+      - '.github/workflows/python.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: python-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      exists: ${{ steps.check.outputs.exists }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: check
+        run: |
+          if [ -d python ] && [ -f python/pyproject.toml ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  lint:
+    needs: detect
+    if: needs.detect.outputs.exists == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: |
+          pip install -q ruff mypy
+      - name: Ruff lint
+        run: ruff check python
+        working-directory: python
+      - name: Mypy type check
+        run: mypy --strict python
+        working-directory: python
+
+  test:
+    needs: detect
+    if: needs.detect.outputs.exists == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: |
+          pip install -q pytest pytest-cov
+          pip install -e '.[test]'
+        working-directory: python
+      - name: Run tests
+        run: pytest --cov=python --cov-report=xml
+        working-directory: python
+
+  pip-audit:
+    needs: detect
+    if: needs.detect.outputs.exists == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pip-audit
+        run: pip install pip-audit
+      - name: Run pip-audit
+        run: pip-audit -r python/requirements.txt

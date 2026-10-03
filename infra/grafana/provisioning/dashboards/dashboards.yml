@@ -1,0 +1,16 @@
+# infra/grafana/provisioning/dashboards/dashboards.yml
+# Grafana dashboard provisioning for stock_broker
+# Points to the dashboards directory for automatic loading
+
+apiVersion: 1
+
+providers:
+  - name: 'stockbroker-dashboards'
+    orgId: 1
+    folder: 'Stock Broker'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 10
+    allowUiUpdates: false
+    options:
+      path: /var/lib/grafana/dashboards

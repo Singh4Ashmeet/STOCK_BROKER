@@ -1,0 +1,52 @@
+# .pre-commit-config.yaml
+# See https://pre-commit.com/ for documentation
+# Install: pip install pre-commit && pre-commit install --install-hooks -t pre-commit -t commit-msg
+# Run manually: pre-commit run --all-files
+
+repos:
+  # General file checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ['--maxkb=500']
+      - id: detect-private-key
+      - id: mixed-line-ending
+        args: ['--fix=lf']
+
+  # Gitleaks for secret detection
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.0
+    hooks:
+      - id: gitleaks
+
+  # Shellcheck for shell scripts (using shellcheck-py for portability)
+  - repo: https://github.com/koalaman/shellcheck-precommit
+    rev: v0.10.0
+    hooks:
+      - id: shellcheck
+        args: ['--severity=warning']
+
+  # Conventional Commits enforcement
+  - repo: https://github.com/commitizen-tools/commitizen
+    rev: v3.13.0
+    hooks:
+      - id: commitizen
+        stages: [commit-msg]
+        args: ['--check']
+
+  # YAML linting
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-yaml
+        args: ['--unsafe']
+
+ci:
+  autofix_commit_msg: "style: pre-commit auto-fixes"
+  autofix_prs: true
+  skip: [gitleaks]  # gitleaks is slow, run in CI instead

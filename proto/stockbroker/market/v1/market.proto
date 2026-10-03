@@ -1,0 +1,153 @@
+// Market data contract between the Rust feed service and its consumers (Java gateway, Python tools).
+// Source of truth for all three languages. See docs/04-API-SPEC.md and docs/06-ORDER-BOOK-SPEC.md.
+//
+// Rules:
+//  - Prices and quantities are fixed-point int64. The scale (number of decimals) comes from InstrumentSpec.
+//    real_price = price / 10^price_scale ; real_qty = qty / 10^qty_scale
+//  - All timestamps are UTC nanoseconds since the Unix epoch.
+//  - Doubles appear ONLY in derived analytics (Metrics). Never use them for balances or fills.
+//  - Never reuse or renumber fields. Add new fields with new numbers; reserve removed ones.
+syntax = "proto3";
+
+package stockbroker.market.v1;
+
+option java_multiple_files = true;
+option java_package = "com.stockbroker.market.v1";
+
+// ---------- Reference data ----------
+
+message InstrumentSpec {
+  string symbol = 1; // canonical, e.g. "BINANCE:BTC-USDT"
+  string venue = 2; // "BINANCE"
+  string base_asset = 3; // "BTC"
+  string quote_asset = 4; // "USDT"
+  uint32 price_scale = 5; // decimals in price, e.g. 2
+  uint32 qty_scale = 6; // decimals in quantity, e.g. 5
+  int64 tick_size = 7; // minimum price increment, in price units
+  int64 lot_size = 8; // minimum quantity increment, in qty units
+  int64 min_notional = 9; // optional venue minimum notional (quote units scaled by price_scale+qty_scale), 0 if unknown
+}
+
+message ListInstrumentsRequest {}
+message ListInstrumentsResponse {
+  repeated InstrumentSpec instruments = 1;
+}
+
+// ---------- Timing carried on every streamed message ----------
+
+message Timing {
+  int64 exchange_ts_ns = 1; // venue event time (venues often give milliseconds; converted to ns)
+  int64 recv_ts_ns = 2; // local time when the frame was received by the Rust process
+  int64 publish_ts_ns = 3; // local time just before the message was handed to the gRPC stream
+}
+
+// ---------- Order book ----------
+
+message Level {
+  int64 price = 1; // price units
+  int64 qty = 2; // qty units; 0 in a delta means "remove level"
+}
+
+message BookSnapshot {
+  repeated Level bids = 1; // best (highest) first
+  repeated Level asks = 2; // best (lowest) first
+}
+
+message BookDelta {
+  repeated Level bids = 1; // absolute quantity at price (not a difference)
+  repeated Level asks = 2;
+}
+
+message BookUpdate {
+  string symbol = 1;
+  uint64 epoch = 2; // increments whenever the book is rebuilt (resync, reconnect). New epoch => next message is a snapshot.
+  uint64 seq = 3; // strictly increasing by 1 within an epoch. A gap means the consumer must resubscribe/resync.
+  Timing timing = 4;
+  oneof payload {
+    BookSnapshot snapshot = 10;
+    BookDelta delta = 11;
+  }
+}
+
+// ---------- Trades ----------
+
+enum Side {
+  SIDE_UNSPECIFIED = 0;
+  SIDE_BUY = 1; // aggressor was a buyer
+  SIDE_SELL = 2; // aggressor was a seller
+}
+
+message Trade {
+  string symbol = 1;
+  uint64 epoch = 2;
+  uint64 seq = 3;
+  Timing timing = 4;
+  int64 price = 5;
+  int64 qty = 6;
+  Side aggressor = 7;
+  string venue_trade_id = 8;
+}
+
+// ---------- Derived metrics (analytics only; doubles allowed here) ----------
+
+message DepthPoint {
+  uint32 levels = 1; // depth measured over the top N levels
+  int64 bid_qty = 2; // summed quantity, qty units
+  int64 ask_qty = 3;
+}
+
+message Metrics {
+  string symbol = 1;
+  uint64 epoch = 2;
+  uint64 seq = 3;
+  Timing timing = 4;
+  int64 best_bid = 5; // price units
+  int64 best_ask = 6;
+  int64 best_bid_qty = 7;
+  int64 best_ask_qty = 8;
+  int64 spread = 9; // best_ask - best_bid, price units
+  double mid = 10; // in real price units (analytics)
+  double microprice = 11; // (bid*ask_qty + ask*bid_qty) / (bid_qty + ask_qty), real price units
+  double imbalance_top_n = 12; // (bid_depth - ask_depth) / (bid_depth + ask_depth) over top N levels, range [-1, 1]
+  double rolling_vwap = 13; // rolling VWAP over configured window, real price units
+  double trade_flow_imbalance = 14; // (buy_vol - sell_vol) / (buy_vol + sell_vol) over window, range [-1, 1]
+  repeated DepthPoint depth = 15;
+  bool book_valid = 16; // false while resyncing; consumers must not trade on invalid books
+}
+
+// ---------- Service ----------
+
+message SubscribeRequest {
+  repeated string symbols = 1;
+  uint32 depth_levels = 2; // 0 = server default; limits levels in snapshots/deltas
+  uint32 metrics_levels = 3; // N for depth/imbalance metrics, 0 = default
+}
+
+message SnapshotRequest {
+  string symbol = 1;
+  uint32 depth_levels = 2;
+}
+
+message HealthRequest {}
+message SymbolHealth {
+  string symbol = 1;
+  bool book_valid = 2;
+  uint64 epoch = 3;
+  uint64 resync_count = 4;
+  int64 last_event_age_ms = 5;
+}
+message HealthResponse {
+  bool connected = 1;
+  repeated SymbolHealth symbols = 2;
+  string build_version = 3;
+}
+
+service MarketData {
+  rpc ListInstruments(ListInstrumentsRequest) returns (ListInstrumentsResponse);
+  // First message per symbol is always a snapshot; deltas follow. Slow consumers are conflated to a fresh snapshot (new epoch).
+  rpc SubscribeBook(SubscribeRequest) returns (stream BookUpdate);
+  rpc SubscribeTrades(SubscribeRequest) returns (stream Trade);
+  rpc SubscribeMetrics(SubscribeRequest) returns (stream Metrics);
+  rpc GetSnapshot(SnapshotRequest) returns (BookUpdate);
+  rpc Health(HealthRequest) returns (HealthResponse);
+}

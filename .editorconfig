@@ -1,0 +1,59 @@
+# .editorconfig
+# See https://editorconfig.org/ for documentation
+# This file should be committed to the repository
+
+root = true
+
+[*]
+# All files
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{yml,yaml,json,md,proto}]
+# 2 spaces for structured data files
+indent_style = space
+indent_size = 2
+
+[*.{sh,bash}]
+# 2 spaces for shell scripts
+indent_style = space
+indent_size = 2
+
+[*.{java,kt,ktm,kts}]
+# 4 spaces for Java/Kotlin
+indent_style = space
+indent_size = 4
+
+[*.{rs}]
+# 4 spaces for Rust (rustfmt manages this)
+indent_style = space
+indent_size = 4
+
+[*.{py}]
+# 4 spaces for Python (black/ruff manages this)
+indent_style = space
+indent_size = 4
+
+[*.{js,jsx,ts,tsx}]
+# 2 spaces for JavaScript/TypeScript (prettier/eslint manages this)
+indent_style = space
+indent_size = 2
+
+[Makefile]
+# Makefiles MUST use tabs
+indent_style = tab
+indent_size = 4
+
+[*.{parquet,zst,zstd}]
+# Binary files
+binary
+
+[*.{pem,key,crt,cer}]
+# Certificate/key files
+binary
+
+# Editor-specific settings (optional, can be overridden by user)
+# [*.rs]
+# rustfmt.toml manages formatting

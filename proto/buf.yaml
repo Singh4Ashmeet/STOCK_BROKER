@@ -1,0 +1,21 @@
+version: v2
+modules:
+  - path: .
+lint:
+  use:
+    - DEFAULT
+  except:
+    # RPC_REQUEST_RESPONSE_UNIQUE: SubscribeRequest is intentionally shared across SubscribeBook, SubscribeTrades, SubscribeMetrics
+    - RPC_REQUEST_RESPONSE_UNIQUE
+    # RPC_REQUEST_STANDARD_NAME: SubscribeRequest is generic, not RPC-specific
+    - RPC_REQUEST_STANDARD_NAME
+    # RPC_RESPONSE_STANDARD_NAME: Responses use domain messages (BookUpdate, Trade, Metrics), not RPC-specific names
+    - RPC_RESPONSE_STANDARD_NAME
+    # SERVICE_SUFFIX: Service is named MarketData per docs, not MarketDataService
+    - SERVICE_SUFFIX
+    # RPC_NO_CLIENT_STREAMING / RPC_NO_SERVER_STREAMING: We intentionally use server streaming for market data
+    - RPC_NO_CLIENT_STREAMING
+    - RPC_NO_SERVER_STREAMING
+breaking:
+  use:
+    - FILE

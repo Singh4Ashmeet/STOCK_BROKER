@@ -1,0 +1,59 @@
+name: Protobuf
+
+on:
+  pull_request:
+    paths:
+      - 'proto/**'
+      - 'buf.yaml'
+      - '.github/workflows/proto.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'proto/**'
+      - 'buf.yaml'
+      - '.github/workflows/proto.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: proto-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  buf:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup buf
+        uses: bufbuild/buf-setup-action@v1
+        with:
+          version: '1.32.0'
+
+      - name: Buf lint
+        run: buf lint proto
+
+      - name: Buf format check
+        run: buf format -d --exit-code proto
+
+      - name: Buf build
+        run: buf build proto
+
+      - name: Buf breaking (against base)
+        if: github.event_name == 'pull_request'
+        run: buf breaking proto --against 'input=${{ github.base_ref }}'
+
+      - name: Proto compile check (Python)
+        run: |
+          pip install -q grpcio-tools
+          mkdir -p /tmp/proto_gen
+          python -m grpc_tools.protoc \
+            --proto_path=proto \
+            --python_out=/tmp/proto_gen \
+            --grpc_python_out=/tmp/proto_gen \
+            proto/stockbroker/market/v1/market.proto
+          echo "Python proto compilation successful"

@@ -1,0 +1,43 @@
+# Rust
+target/
+**/*.rs.bk
+# Java
+build/
+out/
+.gradle/
+*.class
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+# Node
+node_modules/
+.next/
+dist/
+# Env and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+# Data (keep tiny fixtures only)
+data/
+*.parquet
+*.zst
+!testdata/**
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+# IDE extensions / agent temp folders
+.postqode/
+.antigravity/
+.agents/
+.claude/
+# Benchmarks raw outputs
+benchmarks/raw/
+infra/secrets/
+!/.env.example
