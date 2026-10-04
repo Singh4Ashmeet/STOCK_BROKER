@@ -23,14 +23,15 @@ concurrency:
 jobs:
   buf:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
 
       - name: Setup buf
-        uses: bufbuild/buf-setup-action@v1
+        uses: bufbuild/buf-setup-action@d8a8d72da2e1575971a754f43e01442420869b5e # v1.8.0
         with:
           version: '1.32.0'
 

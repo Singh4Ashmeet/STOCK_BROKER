@@ -12,7 +12,7 @@ This project is currently in pre-release development. Security fixes are applied
 
 **Please report security vulnerabilities privately.**
 
-**Contact:** `<your-security-contact>` (e.g., security@yourdomain.com)
+**Contact:** ashmeet.singh.talwar1@gmail.com
 
 When reporting, please include:
 - Description of the vulnerability

@@ -20,6 +20,28 @@ ENV_EXAMPLE="${REPO_ROOT}/.env.example"
 SECRETS_DIR="${REPO_ROOT}/infra/secrets"
 FORCE=false
 
+# Detect filesystem type for permission handling
+detect_filesystem() {
+    local fs_type
+    fs_type=$(stat -f -c %T "${REPO_ROOT}" 2>/dev/null || echo "unknown")
+    echo "${fs_type}"
+}
+
+is_posix_filesystem() {
+    local fs_type
+    fs_type=$(detect_filesystem)
+    # ext4, xfs, btrfs, etc. are POSIX filesystems that enforce permissions
+    # v9fs (WSL drvfs), ntfs, fat, exfat do not enforce POSIX permissions
+    case "${fs_type}" in
+        ext4|xfs|btrfs|ext3|ext2|zfs)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
 # Parse arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -73,9 +95,17 @@ generate_ed25519_keypair() {
     # Extract public key
     openssl pkey -in "${private_key_path}" -pubout -out "${public_key_path}" 2>/dev/null
 
-    # Set restrictive permissions
-    chmod 600 "${private_key_path}" 2>/dev/null || true
-    chmod 644 "${public_key_path}" 2>/dev/null || true
+    # Set restrictive permissions (only enforced on POSIX filesystems)
+    if is_posix_filesystem; then
+        chmod 600 "${private_key_path}"
+        chmod 644 "${public_key_path}"
+        log_success "Set restrictive permissions on JWT keys (mode 600/644)"
+    else
+        log_warn "Filesystem does not enforce POSIX permissions (detected: $(detect_filesystem))."
+        log_warn "JWT private key permissions cannot be restricted to 600."
+        log_warn "Secrets are protected only by Windows user-profile ACLs and .gitignore."
+        log_warn "For production-grade permissions, store the repo on a Linux filesystem (e.g., ~/dev/stock_broker in WSL2)."
+    fi
 }
 
 # Safe sed replacement that works on NTFS (avoids sed -i rename issue)
@@ -167,6 +197,14 @@ create_env_file() {
 create_secrets() {
     mkdir -p "${SECRETS_DIR}"
 
+    # Set directory permissions (only enforced on POSIX filesystems)
+    if is_posix_filesystem; then
+        chmod 700 "${SECRETS_DIR}"
+        log_success "Set restrictive permissions on infra/secrets/ (mode 700)"
+    else
+        log_warn "Filesystem does not enforce POSIX permissions; infra/secrets/ mode 700 not enforced."
+    fi
+
     local private_key="${SECRETS_DIR}/jwt_private.key"
     local public_key="${SECRETS_DIR}/jwt_public.key"
 
@@ -210,14 +248,29 @@ Makefile text eol=lf
 }
 
 print_summary() {
+    local fs_type
+    fs_type=$(detect_filesystem)
+    local posix_fs="no"
+    if is_posix_filesystem; then
+        posix_fs="yes"
+    fi
+
     echo
     echo "========================================"
     echo "  Bootstrap Complete"
     echo "========================================"
     echo
+    echo "Filesystem: ${fs_type} (POSIX permissions enforced: ${posix_fs})"
+    echo
     echo "Created/updated:"
     echo "  - .env              (gitignored, contains all secrets)"
-    echo "  - infra/secrets/    (gitignored, JWT Ed25519 keypair, mode 600)"
+    if [[ "${posix_fs}" == "yes" ]]; then
+        echo "  - infra/secrets/    (gitignored, JWT Ed25519 keypair, mode 700/600)"
+    else
+        echo "  - infra/secrets/    (gitignored, JWT Ed25519 keypair, POSIX permissions NOT enforced)"
+        echo "    WARNING: Secrets protected only by Windows user-profile ACLs and .gitignore."
+        echo    "    For production-grade permissions, use a Linux filesystem (e.g., ~/dev/stock_broker in WSL2)."
+    fi
     echo "  - .gitignore        (updated with secret patterns)"
     echo "  - .gitattributes    (LF line endings)"
     echo

@@ -46,6 +46,16 @@ repos:
       - id: check-yaml
         args: ['--unsafe']
 
+  # Local hook: check GitHub Action pins
+  - repo: local
+    hooks:
+      - id: check-action-pins
+        name: Check GitHub Action pins
+        entry: bash scripts/check-action-pins.sh
+        language: system
+        files: '\.github/workflows/.*\.ya?ml$'
+        pass_filenames: false
+
 ci:
   autofix_commit_msg: "style: pre-commit auto-fixes"
   autofix_prs: true

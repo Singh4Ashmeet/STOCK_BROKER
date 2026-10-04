@@ -72,13 +72,25 @@ Running `./scripts/bootstrap.sh` creates:
    - Service-to-service token
    - JWT configuration
 
-2. **`infra/secrets/`** (gitignored, mode 700):
+2. **`infa/secrets/`** (gitignored, mode 700 on POSIX filesystems):
    - `jwt_private.key` (mode 600) - Ed25519 private key for JWT signing
    - `jwt_public.key` (mode 644) - Ed25519 public key for JWT verification
 
 3. **`.gitignore`** - Updated with secret patterns
 
 4. **`.gitattributes`** - Enforces LF line endings for scripts, YAML, SQL, env files
+
+### Filesystem Permissions Note
+
+**RECOMMENDED**: Store the repository on a WSL2 Linux filesystem (e.g., `~/dev/stock_broker`). On ext4/xfs/btrfs, `bootstrap.sh` enforces `mode 700` on `infra/secrets/` and `mode 600` on the JWT private key.
+
+**SUPPORTED WITH LIMITATIONS**: A Windows folder outside OneDrive (e.g., `C:\dev\stock_broker`). On NTFS/drvfs (WSL's `v9fs` / `9p` mount), POSIX permissions are **not enforced** — `chmod 600/700` calls succeed silently but have no effect. Secrets are then protected only by:
+- Windows user-profile ACLs (file ownership)
+- `.gitignore` preventing accidental commits
+
+The bootstrap script detects the filesystem and prints a clear warning if permissions cannot be enforced.
+
+**NEVER** keep the repo inside OneDrive (cloud-synced secrets, repo corruption risk, syncing of `target/` and `node_modules/`).
 
 ### Regenerating Secrets
 

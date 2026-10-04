@@ -58,7 +58,9 @@ Workflows:
 
 **SHA pinning policy**: All third-party GitHub Actions are pinned by full commit SHA with a `# vX.Y.Z` comment. If network access is unavailable during authoring, a `# TODO(pin-sha)` comment is added and listed in the PR.
 
-**Security.yml design**: Uses `gitleaks/gitleaks-action` (not paid license) and `aquasecurity/trivy-action` for filesystem + config scanners. Fails on HIGH/CRITICAL. Exceptions documented in `.trivyignore` with header comments justifying each.
+**Security.yml design**: Uses `gitleaks/gitleaks-action` (not paid license) and `aquasecurity/trivy-action` for filesystem + config scanners. Fails on HIGH/CRITICAL. Exceptions documented in `.trivyignore` with header comments justifying each. Also includes a local `check-action-pins.sh` step to verify all actions are SHA-pinned.
+
+**Dependency-Check placeholder**: The `dependency-check/Dependency-Check_Action` action had no recent pinned release tag (only tags up to 1.1.0 from 2021). It has been removed from `java.yml` and replaced with a commented placeholder to run the Gradle/Maven Dependency-Check plugin in Phase 4 when the Java project exists.
 
 Practices: cache Cargo/Gradle/pip/npm; matrix only where useful; required status checks on `main`; path filters to keep CI fast; reusable workflows for shared steps.
 

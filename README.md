@@ -37,11 +37,34 @@ stock_broker/
   scripts/         Dev helper scripts (bootstrap, verify)
 ```
 
-## Where to start
+## Quickstart (local infrastructure)
 
-1. Read `docs/01-PRD.md` and `docs/02-TRD.md`.
-2. Read `docs/14-ROADMAP.md` and begin at **Phase 0**.
-3. When building a part, load the matching skill from `skills/` first.
+```bash
+# 1. Clone and bootstrap (generates .env, JWT keys)
+git clone <repo> && cd stock_broker
+./scripts/bootstrap.sh
+
+# 2. Start the full observability stack
+make up
+
+# 3. Verify infrastructure health (Postgres roles, Redis auth, ClickHouse tables, Prometheus rules, Grafana dashboards, port bindings)
+make verify-infra
+
+# 4. Verify CI configuration (action pins, actionlint)
+make ci-lint
+
+# 5. Check protobuf tooling
+make proto
+
+# 6. Run pre-commit hooks
+pre-commit install --install-hooks -t pre-commit -t commit-msg
+pre-commit run --all-files
+
+# 7. Stop when done
+make down
+```
+
+## Where to start
 
 ## Important disclaimer
 

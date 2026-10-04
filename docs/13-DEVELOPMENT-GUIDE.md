@@ -14,7 +14,29 @@
 | buf | latest | proto lint/breaking/codegen |
 | Optional | `cargo-fuzz`, `cargo-audit`, `cargo-deny`, `k6`, `perf`, `flamegraph`, `gitleaks`, `pre-commit` | quality tooling |
 
-Windows note: the author's machine may be Windows. Use WSL2 (Ubuntu) for the Rust feed, perf tooling, and Docker; native Windows works for Java, Node and most Python, but Linux gives the most representative latency numbers and tooling (`perf`, CPU pinning, governors). Record the environment with every benchmark.
+### Filesystem and Environment
+
+**RECOMMENDED** = repo on the WSL2 Linux filesystem (for example `~/dev/stock_broker`).
+**SUPPORTED WITH LIMITATIONS** = a Windows folder outside OneDrive, such as `C:\dev\stock_broker`: no POSIX permissions (secrets cannot be `chmod 600`), slower and noisier builds, scripts must be invoked with `bash`, git runs on both sides.
+**NEVER** keep the repo inside OneDrive (cloud-synced secrets, repo corruption risk, syncing of `target/` and `node_modules/`).
+
+**IMPORTANT FOR THE PROJECT'S GOALS**: benchmark numbers that will be published must be measured with the build output on a Linux filesystem (for example `CARGO_TARGET_DIR` on ext4 inside Ubuntu), never from a build or run on NTFS or OneDrive; record the filesystem in every benchmark result's environment metadata.
+
+### Running the coding agent from Windows
+
+The agent runs on Windows but executes all Linux commands through WSL2 using this exact form:
+
+```bash
+wsl -d Ubuntu --cd '<PROJECT_WIN>' -- bash -lc '<command>'
+```
+
+Rules:
+- `--cd` takes the Windows path directly (e.g., `C:\dev\stock_broker`). Wrap the whole bash command in **single quotes**. If a command itself needs quotes or a heredoc, do NOT fight the quoting: write it into a script file (e.g., `scripts/tmp-step.sh`), run it with `wsl -d Ubuntu --cd '<PROJECT_WIN>' -- bash -lc 'bash scripts/tmp-step.sh'`, and delete the temp script afterwards.
+- Git: run git from PowerShell (Windows git) in `PROJECT_WIN`. Linux-side tools (pre-commit, gitleaks) also invoke git inside WSL. Set repo-local `core.fileMode=false` and `core.autocrlf=false` (NTFS: the executable bit is not meaningful). Therefore ALWAYS invoke scripts as `bash scripts/<name>.sh` (in the Makefile, docs, CI and pre-commit), never rely on the `+x` bit.
+- Files: UTF-8, LF line endings, NO BOM. After you create or edit any `.sh`, Makefile, `.yml`, `.yaml`, `.sql`, `.proto` or `.md` file, strip CR characters and confirm with `file <path>` that there is no CRLF. A script with CRLF fails with `\r: command not found`.
+- sudo: not available in the agent. If something needs sudo, stop and print the exact command for the user to run in the Ubuntu app.
+- Never touch anything outside `PROJECT_WIN`. A separate clone exists at `~/dev/stock_broker` inside Ubuntu, and an old copy may still exist under OneDrive: do not use or modify either.
+- Never print secret values (print hashes, lengths or permissions only).
 
 ## 2. First-time setup (once the scaffold exists)
 

@@ -16,7 +16,7 @@ Key constraints:
 ## Decision
 
 1. **buf** (v1.32.0, pinned) is used for:
-   - `buf lint` (DEFAULT ruleset with explicit exceptions)
+   - `buf lint` (STANDARD ruleset with explicit exceptions)
    - `buf format` (canonical formatting)
    - `buf build` (validates compilation)
    - `buf breaking` (against `main` branch on PRs)
@@ -28,11 +28,11 @@ Key constraints:
    - TypeScript: `protobuf-es` / `connect-es` if needed (Phase 9)
 
 3. **Lint exceptions** (documented in `proto/buf.yaml`):
-   - `RPC_REQUEST_RESPONSE_UNIQUE`: `SubscribeRequest` intentionally shared across `SubscribeBook`, `SubscribeTrades`, `SubscribeMetrics`.
-   - `RPC_REQUEST_STANDARD_NAME`: `SubscribeRequest` is generic, not RPC-specific.
-   - `RPC_RESPONSE_STANDARD_NAME`: Responses use domain messages (`BookUpdate`, `Trade`, `Metrics`), not RPC-specific names.
-   - `SERVICE_SUFFIX`: Service named `MarketData` per docs, not `MarketDataService`.
-   - `RPC_NO_CLIENT_STREAMING` / `RPC_NO_SERVER_STREAMING`: We intentionally use server streaming for market data.
+    - `RPC_REQUEST_RESPONSE_UNIQUE`: `SubscribeRequest` intentionally shared across `SubscribeBook`, `SubscribeTrades`, `SubscribeMetrics`.
+    - `RPC_REQUEST_STANDARD_NAME`: `SubscribeRequest` is generic, not RPC-specific.
+    - `RPC_RESPONSE_STANDARD_NAME`: Responses use domain messages (`BookUpdate`, `Trade`, `Metrics`), not RPC-specific names.
+    - `SERVICE_SUFFIX`: Service named `MarketData` per docs, not `MarketDataService`.
+    - `RPC_NO_CLIENT_STREAMING` / `RPC_NO_SERVER_STREAMING`: **Removed from exceptions** — these rules belong to the `UNARY_RPC` category, not `STANDARD`. Since we use `STANDARD` (not `DEFAULT` or `UNARY_RPC`), they do not apply and no exception is needed.
 
 4. **Breaking change detection**: `buf breaking` against `main` branch using `FILE` policy (proto file layout changes are breaking).
 

@@ -19,14 +19,15 @@ concurrency:
 jobs:
   gitleaks:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
 
       - name: Run gitleaks
-        uses: gitleaks/gitleaks-action@v2
+        uses: docker://ghcr.io/gitleaks/gitleaks:v8.18.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -34,12 +35,15 @@ jobs:
 
   trivy-fs:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
 
       - name: Run Trivy filesystem scanner
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@8bd2f9fbda2109502356ff8a6a89da55b1ead252 # v0.9.1
         with:
           scan-type: 'fs'
           scan-ref: '.'
@@ -48,9 +52,10 @@ jobs:
           ignore-unfixed: true
           severity: 'HIGH,CRITICAL'
           ignorefile: '.trivyignore'
+          trivy-version: '0.55.1'
 
       - name: Upload Trivy results to GitHub Security
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         if: always()
         with:
           sarif_file: 'trivy-results.sarif'
@@ -58,12 +63,13 @@ jobs:
 
   trivy-config:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Run Trivy config scanner
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@8bd2f9fbda2109502356ff8a6a89da55b1ead252 # v0.9.1
         with:
           scan-type: 'config'
           scan-ref: '.'
@@ -71,10 +77,21 @@ jobs:
           output: 'trivy-config-results.sarif'
           severity: 'HIGH,CRITICAL'
           ignorefile: '.trivyignore'
+          trivy-version: '0.55.1'
 
       - name: Upload Trivy config results to GitHub Security
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
         if: always()
         with:
           sarif_file: 'trivy-config-results.sarif'
           category: trivy-config
+
+  action-pin-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Verify action pins
+        run: bash scripts/check-action-pins.sh
