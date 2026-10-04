@@ -1,0 +1,20 @@
+[package]
+name = "sb-core"
+version = "0.1.0"
+edition = "2024"
+description = "Core types for stock_broker: fixed-point money, timestamps, instrument metadata, symbols, core event types"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/your-org/stock_broker"
+categories = ["finance", "trading", "data-structures"]
+keywords = ["fixed-point", "market-data", "trading"]
+
+[dependencies]
+thiserror = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
+criterion = { workspace = true }
+
+[[bench]]
+name = "decimal"
+harness = false

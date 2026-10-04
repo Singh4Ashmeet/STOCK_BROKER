@@ -1,0 +1,21 @@
+[package]
+name = "sb-core-fuzz"
+version = "0.1.0"
+edition = "2024"
+
+[workspace]
+
+[package.metadata]
+cargo-fuzz = true
+
+[[bin]]
+name = "parse_scaled"
+path = "fuzz_targets/parse_scaled.rs"
+
+[[bin]]
+name = "parse_symbol"
+path = "fuzz_targets/parse_symbol.rs"
+
+[dependencies]
+libfuzzer-sys = "0.4"
+sb-core = { path = ".." }
