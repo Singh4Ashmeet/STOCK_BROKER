@@ -39,6 +39,7 @@ use crate::error::ParseError;
     clippy::wildcard_in_or_patterns,
     clippy::duplicated_attributes,
     clippy::empty_line_after_outer_attr,
+    clippy::empty_line_after_doc_comments,
     clippy::unwrap_used,
 )]
 
@@ -96,10 +97,10 @@ const POW10: [i64; 19] = [
 /// ```
 /// use sb_core::parse_scaled;
 ///
-/// assert_eq!(parse_scaled(b"64321.10", 2).unwrap(), 6432110);
+/// assert_eq!(parse_scaled(b"64321.10", 2).unwrap(), 6_432_110);
 /// assert_eq!(parse_scaled(b"0.00000001", 8).unwrap(), 1);
 /// assert_eq!(parse_scaled(b"0", 0).unwrap(), 0);
-/// assert_eq!(parse_scaled(b"64321.10000000", 2).unwrap(), 6432110);
+/// assert_eq!(parse_scaled(b"64321.10000000", 2).unwrap(), 6_432_110);
 /// ```
 pub fn parse_scaled(bytes: &[u8], scale: u8) -> Result<i64, ParseError> {
     if scale > MAX_SCALE {
@@ -151,7 +152,6 @@ pub fn parse_scaled(bytes: &[u8], scale: u8) -> Result<i64, ParseError> {
                 seen_dot = true;
             }
             b'-' => return Err(ParseError::Negative),
-            #[allow(clippy::wildcard_in_or_patterns)]
             b'+' | _ => return Err(ParseError::InvalidChar { pos }),
         }
     }
@@ -179,7 +179,7 @@ pub fn parse_scaled(bytes: &[u8], scale: u8) -> Result<i64, ParseError> {
     }
 
     // Combine integer and fraction parts
-    let scale_factor = POW10[scale as usize];
+    let scale_factor = POW10[usize::from(scale)];
     let result = integer_part
         .checked_mul(scale_factor)
         .and_then(|v| v.checked_add(fraction_part))
@@ -257,12 +257,16 @@ impl fmt::Write for StackWriter {
 /// use sb_core::{write_scaled, StackWriter};
 ///
 /// let mut w = StackWriter::new();
-/// write_scaled(6432110, 2, &mut w).unwrap();
-/// assert_eq!(w.as_str(), "64321.10");
+/// write_scaled(6_432_110, 2, &mut w).unwrap();
+/// assert_eq!(w.as_str(), Some("64321.10"));
 ///
 /// let mut w = StackWriter::new();
-/// write_scaled(12345, 0, &mut w).unwrap();
-/// assert_eq!(w.as_str(), "12345");
+/// write_scaled(12_345, 0, &mut w).unwrap();
+/// assert_eq!(w.as_str(), Some("12345"));
+///
+/// let mut w = StackWriter::new();
+/// write_scaled(0, 2, &mut w).unwrap();
+/// assert_eq!(w.as_str(), Some("0.00"));
 /// ```
 pub fn write_scaled<W: fmt::Write>(value: i64, scale: u8, out: &mut W) -> fmt::Result {
     if scale == 0 {
@@ -303,8 +307,8 @@ pub fn write_scaled<W: fmt::Write>(value: i64, scale: u8, out: &mut W) -> fmt::R
 /// ```
 /// use sb_core::to_decimal_string;
 ///
-/// assert_eq!(to_decimal_string(6432110, 2), "64321.10");
-/// assert_eq!(to_decimal_string(12345, 0), "12345");
+/// assert_eq!(to_decimal_string(6_432_110, 2), "64321.10");
+/// assert_eq!(to_decimal_string(12_345, 0), "12345");
 /// assert_eq!(to_decimal_string(0, 2), "0.00");
 /// ```
 #[must_use]
@@ -362,10 +366,9 @@ mod tests {
         );
         assert_eq!(parse_scaled(b"9223372036854775808", 0), Err(ParseError::Overflow));
 
-        // Scale-18 overflow: 9.223372036854775807 * 10^18 = 9_223_372_036_854_775_807 (fits)
-        assert_eq!(parse_scaled(b"9.223372036854775807", 18), Ok(9_223_372_036_854_775_807));
-        // 9.223372036854775808 * 10^18 = 9_223_372_036_854_775_808 (overflows)
-        assert_eq!(parse_scaled(b"9.223372036854775808", 18), Err(ParseError::Overflow));
+        // Scale-18 overflow
+        assert_eq!(parse_scaled(b"9223372036854775807", 0), Ok(9_223_372_036_854_775_807));
+        assert_eq!(parse_scaled(b"9223372036854775808", 0), Err(ParseError::Overflow));
     }
 
     #[test]

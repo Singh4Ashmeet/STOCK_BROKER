@@ -42,6 +42,9 @@
 #![allow(clippy::items_after_statements)]
 #![allow(clippy::derivable_impls)]
 #![allow(clippy::unreadable_literal)]
+#![allow(clippy::wildcard_in_or_patterns)]
+#![allow(clippy::empty_line_after_outer_attr)]
+#![allow(clippy::empty_line_after_doc_comments)]
 
 pub mod decimal;
 pub mod error;

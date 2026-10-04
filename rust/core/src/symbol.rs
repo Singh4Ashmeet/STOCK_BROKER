@@ -144,12 +144,12 @@ impl SymbolTable {
     /// Intern a symbol string, returning its ID.
     ///
     /// Validates the symbol format. Same name always returns the same ID.
-    /// Errors if symbol table would exceed u32::MAX entries (practically impossible).
+    /// Errors if symbol table would exceed `u32::MAX` entries (practically impossible).
     ///
     /// # Errors
     ///
     /// Returns `CoreError::InvalidSymbol` for format errors.
-    /// Returns `CoreError::SymbolTableFull` if table is full (u32::MAX entries).
+    /// Returns `CoreError::SymbolTableFull` if table is full (`u32::MAX` entries).
     pub fn intern(&mut self, s: &str) -> Result<SymbolId, CoreError> {
         // Validate first
         parse_symbol(s)?;
@@ -157,6 +157,7 @@ impl SymbolTable {
         // Check if already exists
         for (i, name) in self.names.iter().enumerate() {
             if name == s {
+                #[allow(clippy::unwrap_used)]
                 return Ok(SymbolId(u32::try_from(i).unwrap()));
             }
         }
@@ -167,19 +168,23 @@ impl SymbolTable {
             return Err(CoreError::SymbolTableFull);
         }
         self.names.push(s.to_string());
+        #[allow(clippy::unwrap_used)]
         Ok(SymbolId(u32::try_from(id).unwrap()))
     }
 
     /// Look up the ID for a symbol string (O(n)).
     #[must_use]
     pub fn lookup(&self, s: &str) -> Option<SymbolId> {
-        self.names.iter().position(|n| n == s).map(|i| SymbolId(u32::try_from(i).unwrap()))
+        self.names.iter().position(|n| n == s).map(|i| {
+            #[allow(clippy::unwrap_used)]
+            SymbolId(u32::try_from(i).unwrap())
+        })
     }
 
     /// Get the symbol name for an ID.
     #[must_use]
     pub fn name(&self, id: SymbolId) -> Option<&str> {
-        self.names.get(id.0 as usize).map(|s| s.as_str())
+        self.names.get(id.0 as usize).map(String::as_str)
     }
 
     /// Number of symbols in the table.
