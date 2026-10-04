@@ -114,24 +114,24 @@ proto: proto-lint proto-format-check proto-build proto-compile-check
 
 # Run buf lint
 proto-lint:
-	docker run --rm -v "$(REPO_ROOT):/repo" bufbuild/buf:1.32.0 lint /repo/proto
+	docker run --rm -v "$(REPO_ROOT):/repo" bufbuild/buf:1.73.0 lint /repo/proto
 
 # Format proto files in-place
 proto-format:
-	docker run --rm -v "$(REPO_ROOT):/repo" bufbuild/buf:1.32.0 format -w /repo/proto
+	docker run --rm -v "$(REPO_ROOT):/repo" bufbuild/buf:1.73.0 format -w /repo/proto
 
 # Check formatting (fails on diff)
 proto-format-check:
-	docker run --rm -v "$(REPO_ROOT):/repo" bufbuild/buf:1.32.0 format -d --exit-code /repo/proto
+	docker run --rm -v "$(REPO_ROOT):/repo" bufbuild/buf:1.73.0 format -d --exit-code /repo/proto
 
 # Build proto files
 proto-build:
-	docker run --rm -v "$(REPO_ROOT):/repo" bufbuild/buf:1.32.0 build /repo/proto
+	docker run --rm -v "$(REPO_ROOT):/repo" bufbuild/buf:1.73.0 build /repo/proto
 
 # Check for breaking changes against main branch
 proto-breaking:
 	@if git rev-parse --verify main >/dev/null 2>&1; then \
-		docker run --rm -v "$(REPO_ROOT):/repo" bufbuild/buf:1.32.0 breaking /repo/proto --against '.git#branch=main,subdir=proto'; \
+		docker run --rm -v "$(REPO_ROOT):/repo" bufbuild/buf:1.73.0 breaking /repo/proto --against '.git#branch=main,subdir=proto'; \
 	else \
 		echo "No 'main' branch found or no commits yet; skipping breaking change check"; \
 	fi
@@ -156,7 +156,7 @@ lint: proto-lint
 
 ci-lint:
 	@bash scripts/check-action-pins.sh
-	docker run --rm -v "$(REPO_ROOT):/repo" -w /repo rhysd/actionlint:1.7.4 -color
+	docker run --rm -v "$(REPO_ROOT):/repo" -w /repo rhysd/actionlint:1.7.12 -color
 
 test:
 	@echo "test target: no application code exists yet"

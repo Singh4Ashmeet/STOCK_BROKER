@@ -29,23 +29,23 @@ log_info "Checking GitHub Action pins in $WORKFLOW_DIR..."
 while IFS= read -r line; do
     file=$(echo "$line" | cut -d: -f1)
     uses_line=$(echo "$line" | cut -d: -f3- | sed 's/^[[:space:]]*uses:[[:space:]]*//' | sed 's/^[[:space:]]*//')
-    
+
     # Skip local actions
     if echo "$uses_line" | grep -q '^\./'; then
         continue
     fi
-    
+
     # Skip Docker image references (pinned by tag, not SHA)
     if echo "$uses_line" | grep -q '^docker://'; then
         log_pass "$file: $uses_line (Docker image, pinned by tag)"
         continue
     fi
-    
+
     # Extract the action and ref (everything after @)
     if echo "$uses_line" | grep -q '@'; then
         ref=$(echo "$uses_line" | sed 's/.*@//' | sed 's/[[:space:]]*#.*//' | sed 's/[[:space:]]*$//')
         action=$(echo "$uses_line" | sed 's/@.*//')
-        
+
         # Check if ref is a 40-character hex SHA
         if echo "$ref" | grep -qE '^[a-f0-9]{40}$'; then
             log_pass "$file: $action@$ref (pinned by SHA)"

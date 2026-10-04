@@ -5,3 +5,7 @@
 *.sql   text eol=lf
 *.env*  text eol=lf
 Makefile text eol=lf
+*.toml  text eol=lf
+*.md    text eol=lf
+*.proto text eol=lf
+*.rs    text eol=lf

@@ -213,7 +213,6 @@ log_info "Checking Grafana dashboards..."
 sleep 2
 
 dashboards=$(python3 scripts/check_grafana_dashboards.py 2>&1 || true)
-dashboard_count=$(echo "$dashboards" | grep -c "^" || true)
 # Filter out error lines
 dashboard_titles=$(echo "$dashboards" | grep -v "ERROR" || true)
 expected_dashboards=("Latency" "Feed Health" "Fan-out" "Trading")
