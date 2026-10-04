@@ -41,3 +41,7 @@ data/
 benchmarks/raw/
 infra/secrets/
 !/.env.example
+
+rust/core/fuzz/corpus/
+rust/core/fuzz/artifacts/
+rust/core/fuzz/target/
