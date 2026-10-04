@@ -15,7 +15,7 @@ Key constraints:
 
 ## Decision
 
-1. **buf** (v1.32.0, pinned) is used for:
+1. **buf** (v1.73.0, pinned) is used for:
    - `buf lint` (STANDARD ruleset with explicit exceptions)
    - `buf format` (canonical formatting)
    - `buf build` (validates compilation)

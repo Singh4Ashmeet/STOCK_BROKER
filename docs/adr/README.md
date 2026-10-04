@@ -15,3 +15,4 @@ Format: Status, Context, Decision, Consequences, Alternatives. Write a new ADR (
 | 0009 | Paper trading only | Accepted |
 | 0010 | JSON over WebSocket for v1 | Accepted |
 | 0011 | Protobuf codegen strategy: buf for lint/format/build/breaking; native per-language codegen | Accepted |
+| 0012 | Crate name prefix `sb-` for all workspace packages | Accepted |

@@ -60,7 +60,7 @@ Pin exact versions in lockfiles at scaffold time. Use current stable releases; d
 ## 5. Rust feed service
 
 ### 5.1 Workspace and crates
-`core`, `book`, `metrics`, `connectors`, `server`, `replay`, `pybook`. `core`, `book`, `metrics` are pure (no I/O, no async, no allocation in hot functions) so they are usable from Python.
+`sb-core`, `sb-book`, `sb-metrics`, `sb-connectors`, `sb-feed`, `sb-replay`, `sb-pybook` (directories: `core/`, `book/`, `metrics/`, `connectors/`, `server/`, `replay/`, `pybook/`). `sb-core`, `sb-book`, `sb-metrics` are pure (no I/O, no async, no allocation in hot functions) so they are usable from Python. See ADR-0012 for the `sb-` package name prefix.
 
 ### 5.2 Threading model
 - One async (tokio) task per exchange connection: read frames, stamp `recv_ts`, push raw bytes into a bounded SPSC ring buffer.

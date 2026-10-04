@@ -1,6 +1,6 @@
 ---
 name: rust-hot-path-performance
-description: Rules and patterns for writing low-latency, allocation-free Rust on the market-data hot path (parsing, order book updates, metrics, queues, threading, benchmarking, profiling). Use this skill whenever writing or reviewing Rust in the feed service, `core`, `book`, `metrics` or `server` crates, optimizing latency or throughput, choosing channels/allocators/parsers, adding benchmarks, or investigating a latency regression - even if the user only says "make it faster" or "add a Rust module".
+description: Rules and patterns for writing low-latency, allocation-free Rust on the market-data hot path (parsing, order book updates, metrics, queues, threading, benchmarking, profiling). Use this skill whenever writing or reviewing Rust in the feed service, `sb-core`, `sb-book`, `sb-metrics` or `sb-feed` crates, optimizing latency or throughput, choosing channels/allocators/parsers, adding benchmarks, or investigating a latency regression - even if the user only says "make it faster" or "add a Rust module".
 ---
 
 # Rust hot-path performance
@@ -22,7 +22,7 @@ Everything between "socket frame received" and "message handed to the gRPC/log q
 - Reader task (tokio) only pumps bytes into a ring buffer; workers (dedicated OS threads) own symbols and do parse+book+metrics. Benchmark moving parse to the reader before deciding.
 - Shard by symbol; one book per symbol owned by exactly one thread. No shared mutable state between workers.
 - Optional core pinning (`core_affinity`) and thread names; document in config.
-- Keep `core`, `book`, `metrics` free of async/I/O so they are usable from Python (PyO3) and benchmarkable in isolation.
+- Keep `sb-core`, `sb-book`, `sb-metrics` free of async/I/O so they are usable from Python (PyO3) and benchmarkable in isolation.
 
 ## Data layout
 - Structure-of-arrays for per-level data on the hot path; contiguous `Vec<i64>`/boxed slices indexed by tick offset.
