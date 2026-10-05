@@ -1,0 +1,17 @@
+[package]
+name = "sb-book"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+publish = false
+description = "Optimized order book with dense window, bitset, and BTreeMap oracle"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+sb-core = { path = "../core" }
+smallvec = { version = "1.14", default-features = true }
+thiserror = { workspace = true, default-features = false }
+
+[dev-dependencies]
+proptest = { workspace = true }
+criterion = { workspace = true }

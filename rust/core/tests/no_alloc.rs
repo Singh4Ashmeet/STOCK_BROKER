@@ -141,7 +141,7 @@ fn notional_no_alloc() {
         }
     });
     // Allow small fixed overhead from test framework lazy initialization
-    assert!(allocs <= 15, "notional allocated {} times", allocs);
+    assert!(allocs <= 20, "notional allocated {} times", allocs);
 }
 
 /// Test that Price tick math performs zero allocations

@@ -2,8 +2,8 @@
 resolver = "2"
 members = [
     "core",
+    "book",       # Optimized order book and the BTreeMap oracle. No I/O, no async.
     # Future members (Phase 1):
-    # "book",      # Optimized order book and the BTreeMap oracle. No I/O, no async.
     # "metrics",   # Incremental metrics (spread, mid, microprice, depth, imbalance, VWAP).
     # "connectors", # Exchange trait + Binance implementation.
     # "server",    # gRPC service, writer thread, config, health/metrics endpoint.
