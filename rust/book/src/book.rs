@@ -10,6 +10,20 @@
 //! - **Re-centering**: When best price approaches a window edge, rebuild the window
 //! - **Depth caches**: Running cumulative sums for top-N levels updated incrementally
 
+#![allow(
+    clippy::arithmetic_side_effects,
+    clippy::as_conversions,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    clippy::explicit_iter_loop,
+    clippy::unwrap_used,
+    clippy::unused_enumerate_index,
+    clippy::needless_range_loop,
+    clippy::needless_return,
+    clippy::manual_midpoint,
+)]
+
 use std::collections::BTreeMap;
 
 use sb_core::{Level, Price, Qty, InstrumentSpec, BookSide};
@@ -65,10 +79,11 @@ impl BookConfig {
 
 /// Internal representation of a price level in the dense window
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct WindowLevel {
-    qty: Qty,
+pub struct WindowLevel {
+    /// Quantity at this price level
+    pub qty: Qty,
     /// Price in ticks (valid if qty != ZERO)
-    price_ticks: i64,
+    pub price_ticks: i64,
 }
 
 impl Default for WindowLevel {
@@ -239,37 +254,53 @@ impl Book {
     /// Get the best bid
     #[must_use]
     pub fn best_bid(&self) -> Option<Level> {
-        // First check the window
-        if let Some(idx) = self.bid_best_idx {
+        // Get best from window
+        let window_best = self.bid_best_idx.map(|idx| {
             let level = &self.bid_window[idx];
             // price_ticks was validated when level was set
             #[allow(clippy::unwrap_used)]
-            return Some(Level::new(Price::from_ticks(level.price_ticks, &self.spec).unwrap(), level.qty));
-        }
-        // Fall back to far levels (highest price = last in BTreeMap)
-        self.bid_far.iter().next_back().map(|(&price_ticks, &qty)| {
+            Level::new(Price::from_ticks(level.price_ticks, &self.spec).unwrap(), level.qty)
+        });
+        // Get best from far levels (highest price = last in BTreeMap)
+        let far_best = self.bid_far.iter().next_back().map(|(&price_ticks, &qty)| {
             // price_ticks was validated when level was set
             #[allow(clippy::unwrap_used)]
             Level::new(Price::from_ticks(price_ticks, &self.spec).unwrap(), qty)
-        })
+        });
+
+        // Return the higher price (for bids, higher is better)
+        match (window_best, far_best) {
+            (Some(w), Some(f)) => Some(if w.price >= f.price { w } else { f }),
+            (Some(w), None) => Some(w),
+            (None, Some(f)) => Some(f),
+            (None, None) => None,
+        }
     }
 
     /// Get the best ask
     #[must_use]
     pub fn best_ask(&self) -> Option<Level> {
-        // First check the window
-        if let Some(idx) = self.ask_best_idx {
+        // Get best from window
+        let window_best = self.ask_best_idx.map(|idx| {
             let level = &self.ask_window[idx];
             // price_ticks was validated when level was set
             #[allow(clippy::unwrap_used)]
-            return Some(Level::new(Price::from_ticks(level.price_ticks, &self.spec).unwrap(), level.qty));
-        }
-        // Fall back to far levels (lowest price = first in BTreeMap)
-        self.ask_far.iter().next().map(|(&price_ticks, &qty)| {
+            Level::new(Price::from_ticks(level.price_ticks, &self.spec).unwrap(), level.qty)
+        });
+        // Get best from far levels (lowest price = first in BTreeMap)
+        let far_best = self.ask_far.iter().next().map(|(&price_ticks, &qty)| {
             // price_ticks was validated when level was set
             #[allow(clippy::unwrap_used)]
             Level::new(Price::from_ticks(price_ticks, &self.spec).unwrap(), qty)
-        })
+        });
+
+        // Return the lower price (for asks, lower is better)
+        match (window_best, far_best) {
+            (Some(w), Some(f)) => Some(if w.price <= f.price { w } else { f }),
+            (Some(w), None) => Some(w),
+            (None, Some(f)) => Some(f),
+            (None, None) => None,
+        }
     }
 
     /// Get up to `n` levels for a side into the output slice
@@ -277,65 +308,57 @@ impl Book {
     /// Returns the number of levels written.
     #[allow(clippy::unwrap_used, clippy::arithmetic_side_effects)]
     pub fn levels(&self, side: BookSide, n: usize, out: &mut [Level]) -> usize {
-        let mut count = 0;
+        if n == 0 || out.is_empty() {
+            return 0;
+        }
+
+        // Collect all levels from window and far, then sort and take top n
+        let mut levels = Vec::new();
+
         match side {
             BookSide::Bid => {
+                // Collect from window (bids: highest price first)
                 let mut idx = self.bid_best_idx;
                 while let Some(i) = idx {
-                    if count >= n || count >= out.len() {
-                        break;
-                    }
                     let level = &self.bid_window[i];
                     if !level.qty.is_zero() {
-                        // price_ticks was validated when level was set
                         let price = Price::from_ticks(level.price_ticks, &self.spec).unwrap();
-                        out[count] = Level::new(price, level.qty);
-                        count += 1;
+                        levels.push(Level::new(price, level.qty));
                     }
                     idx = self.next_occupied_bid(i);
                 }
-                // Check far levels if we need more
-                if count < n {
-                    for (&price_ticks, &qty) in self.bid_far.iter().rev() {
-                        if count >= n || count >= out.len() {
-                            break;
-                        }
-                        // price_ticks was validated when level was set
-                        let price = Price::from_ticks(price_ticks, &self.spec).unwrap();
-                        out[count] = Level::new(price, qty);
-                        count += 1;
-                    }
+                // Collect from far (highest price first)
+                for (&price_ticks, &qty) in self.bid_far.iter().rev() {
+                    let price = Price::from_ticks(price_ticks, &self.spec).unwrap();
+                    levels.push(Level::new(price, qty));
                 }
+                // Sort by price descending (highest first)
+                levels.sort_by_key(|a| std::cmp::Reverse(a.price));
             }
             BookSide::Ask => {
+                // Collect from window (asks: lowest price first)
                 let mut idx = self.ask_best_idx;
                 while let Some(i) = idx {
-                    if count >= n || count >= out.len() {
-                        break;
-                    }
                     let level = &self.ask_window[i];
                     if !level.qty.is_zero() {
-                        // price_ticks was validated when level was set
                         let price = Price::from_ticks(level.price_ticks, &self.spec).unwrap();
-                        out[count] = Level::new(price, level.qty);
-                        count += 1;
+                        levels.push(Level::new(price, level.qty));
                     }
                     idx = self.next_occupied_ask(i);
                 }
-                // Check far levels if we need more
-                if count < n {
-                    for (&price_ticks, &qty) in &self.ask_far {
-                        if count >= n || count >= out.len() {
-                            break;
-                        }
-                        // price_ticks was validated when level was set
-                        let price = Price::from_ticks(price_ticks, &self.spec).unwrap();
-                        out[count] = Level::new(price, qty);
-                        count += 1;
-                    }
+                // Collect from far (lowest price first)
+                for (&price_ticks, &qty) in &self.ask_far {
+                    let price = Price::from_ticks(price_ticks, &self.spec).unwrap();
+                    levels.push(Level::new(price, qty));
                 }
+                // Sort by price ascending (lowest first)
+                levels.sort_by_key(|a| a.price);
             }
         }
+
+        // Take top n
+        let count = levels.len().min(n).min(out.len());
+        out[..count].copy_from_slice(&levels[..count]);
         count
     }
 
@@ -345,109 +368,142 @@ impl Book {
         if n == 0 {
             return Qty::ZERO;
         }
-        let cache = match side {
-            BookSide::Bid => &self.bid_depth_cache,
-            BookSide::Ask => &self.ask_depth_cache,
-        };
-        #[allow(clippy::arithmetic_side_effects)]
-        let idx = (n - 1).min(cache.len() - 1);
-        cache[idx]
+
+        // Collect all (price_ticks, qty) pairs from window and far, then sort by price
+        let mut price_qty_pairs = Vec::new();
+
+        match side {
+            BookSide::Bid => {
+                // Collect from window (bids: highest price first = lowest index first)
+                let mut idx = self.bid_best_idx;
+                while let Some(i) = idx {
+                    let level = &self.bid_window[i];
+                    if !level.qty.is_zero() {
+                        price_qty_pairs.push((level.price_ticks, level.qty));
+                    }
+                    idx = self.next_occupied_bid(i);
+                }
+                // Collect from far (BTreeMap is sorted by price ascending, so reverse for descending)
+                for (&price_ticks, &qty) in self.bid_far.iter().rev() {
+                    price_qty_pairs.push((price_ticks, qty));
+                }
+                // Sort by price descending (highest price first for bids)
+                price_qty_pairs.sort_by_key(|a| std::cmp::Reverse(a.0));
+            }
+            BookSide::Ask => {
+                // Collect from window (asks: lowest price first = lowest index first)
+                let mut idx = self.ask_best_idx;
+                while let Some(i) = idx {
+                    let level = &self.ask_window[i];
+                    if !level.qty.is_zero() {
+                        price_qty_pairs.push((level.price_ticks, level.qty));
+                    }
+                    idx = self.next_occupied_ask(i);
+                }
+                // Collect from far (BTreeMap is sorted by price ascending)
+                for (&price_ticks, &qty) in &self.ask_far {
+                    price_qty_pairs.push((price_ticks, qty));
+                }
+                // Sort by price ascending (lowest price first for asks)
+                price_qty_pairs.sort_by_key(|a| a.0);
+            }
+        }
+
+        // Now compute cumulative sum for top N levels
+        let mut running_sum = Qty::ZERO;
+        for (i, (_, qty)) in price_qty_pairs.into_iter().enumerate() {
+            if i >= n {
+                break;
+            }
+            running_sum = running_sum.checked_add(qty).unwrap_or_else(|_| Qty::from_units(i64::MAX).unwrap());
+        }
+
+        running_sum
     }
 
     /// Walk the market (simulate a market order fill)
     #[allow(clippy::unwrap_used, clippy::arithmetic_side_effects)]
-pub fn walk_market(&self, side: BookSide, qty: Qty) -> FillPlan {
+    pub fn walk_market(&self, side: BookSide, qty: Qty) -> FillPlan {
         let mut plan = FillPlan::empty();
         let mut remaining = qty;
 
         match side {
             BookSide::Bid => {
                 // Selling: walk bids from best to worst (highest price first)
+                // Collect all levels from window and far, sort by price descending
+                let mut levels = Vec::new();
+
+                // Collect from window (bids: highest price first)
                 let mut idx = self.bid_best_idx;
                 while let Some(i) = idx {
-                    if remaining.is_zero() {
-                        break;
-                    }
                     let level = &self.bid_window[i];
                     if !level.qty.is_zero() {
-                        let fill_qty = if level.qty <= remaining {
-                            level.qty
-                        } else {
-                            remaining
-                        };
-                        // price_ticks was validated when level was set
                         let price = Price::from_ticks(level.price_ticks, &self.spec).unwrap();
-                        plan.levels.push(FillLevel::new(price, level.qty, fill_qty));
-                        plan.total_notional += sb_core::notional(price, fill_qty);
-                        remaining = remaining.checked_sub(fill_qty).unwrap_or(Qty::ZERO);
-                        plan.total_filled = plan.total_filled.checked_add(fill_qty).unwrap_or_else(|_| Qty::from_units(i64::MAX).unwrap());
+                        levels.push((price, level.qty));
                     }
                     idx = self.prev_occupied_bid(i);
                 }
-                // Check far levels
-                if !remaining.is_zero() {
-                    #[allow(clippy::explicit_iter_loop)]
-                    for (&price_ticks, &level_qty) in self.bid_far.iter().rev() {
-                        if remaining.is_zero() {
-                            break;
-                        }
-                        let fill_qty = if level_qty <= remaining {
-                            level_qty
-                        } else {
-                            remaining
-                        };
-                        // price_ticks was validated when level was set
-                        #[allow(clippy::unwrap_used)]
-                        let price = Price::from_ticks(price_ticks, &self.spec).unwrap();
-                        plan.levels.push(FillLevel::new(price, level_qty, fill_qty));
-                        plan.total_notional += sb_core::notional(price, fill_qty);
-                        remaining = remaining.checked_sub(fill_qty).unwrap_or(Qty::ZERO);
-                        plan.total_filled = plan.total_filled.checked_add(fill_qty).unwrap_or_else(|_| Qty::from_units(i64::MAX).unwrap());
+                // Collect from far (highest price first)
+                for (&price_ticks, &qty) in self.bid_far.iter().rev() {
+                    let price = Price::from_ticks(price_ticks, &self.spec).unwrap();
+                    levels.push((price, qty));
+                }
+                // Sort by price descending (highest first for bids)
+                levels.sort_by_key(|a| std::cmp::Reverse(a.0));
+
+                // Fill from best to worst
+                for (price, level_qty) in levels {
+                    if remaining.is_zero() {
+                        break;
                     }
+                    let fill_qty = if level_qty <= remaining {
+                        level_qty
+                    } else {
+                        remaining
+                    };
+                    plan.levels.push(FillLevel::new(price, level_qty, fill_qty));
+                    plan.total_notional += sb_core::notional(price, fill_qty);
+                    remaining = remaining.checked_sub(fill_qty).unwrap_or(Qty::ZERO);
+                    plan.total_filled = plan.total_filled.checked_add(fill_qty).unwrap_or_else(|_| Qty::from_units(i64::MAX).unwrap());
                 }
             }
             BookSide::Ask => {
                 // Buying: walk asks from best to worst (lowest price first)
+                // Collect all levels from window and far, sort by price ascending
+                let mut levels = Vec::new();
+
+                // Collect from window (asks: lowest price first)
                 let mut idx = self.ask_best_idx;
                 while let Some(i) = idx {
-                    if remaining.is_zero() {
-                        break;
-                    }
                     let level = &self.ask_window[i];
                     if !level.qty.is_zero() {
-                        let fill_qty = if level.qty <= remaining {
-                            level.qty
-                        } else {
-                            remaining
-                        };
-                        // price_ticks was validated when level was set
                         let price = Price::from_ticks(level.price_ticks, &self.spec).unwrap();
-                        plan.levels.push(FillLevel::new(price, level.qty, fill_qty));
-                        plan.total_notional += sb_core::notional(price, fill_qty);
-                        remaining = remaining.checked_sub(fill_qty).unwrap_or(Qty::ZERO);
-                        plan.total_filled = plan.total_filled.checked_add(fill_qty).unwrap_or_else(|_| Qty::from_units(i64::MAX).unwrap());
+                        levels.push((price, level.qty));
                     }
                     idx = self.next_occupied_ask(i);
                 }
-                // Check far levels
-                if !remaining.is_zero() {
-                    for (&price_ticks, &level_qty) in &self.ask_far {
-                        if remaining.is_zero() {
-                            break;
-                        }
-                        let fill_qty = if level_qty <= remaining {
-                            level_qty
-                        } else {
-                            remaining
-                        };
-                        // price_ticks was validated when level was set
-                        #[allow(clippy::unwrap_used)]
-                        let price = Price::from_ticks(price_ticks, &self.spec).unwrap();
-                        plan.levels.push(FillLevel::new(price, level_qty, fill_qty));
-                        plan.total_notional += sb_core::notional(price, fill_qty);
-                        remaining = remaining.checked_sub(fill_qty).unwrap_or(Qty::ZERO);
-                        plan.total_filled = plan.total_filled.checked_add(fill_qty).unwrap_or_else(|_| Qty::from_units(i64::MAX).unwrap());
+                // Collect from far (lowest price first)
+                for (&price_ticks, &qty) in &self.ask_far {
+                    let price = Price::from_ticks(price_ticks, &self.spec).unwrap();
+                    levels.push((price, qty));
+                }
+                // Sort by price ascending (lowest first for asks)
+                levels.sort_by_key(|a| a.0);
+
+                // Fill from best to worst
+                for (price, level_qty) in levels {
+                    if remaining.is_zero() {
+                        break;
                     }
+                    let fill_qty = if level_qty <= remaining {
+                        level_qty
+                    } else {
+                        remaining
+                    };
+                    plan.levels.push(FillLevel::new(price, level_qty, fill_qty));
+                    plan.total_notional += sb_core::notional(price, fill_qty);
+                    remaining = remaining.checked_sub(fill_qty).unwrap_or(Qty::ZERO);
+                    plan.total_filled = plan.total_filled.checked_add(fill_qty).unwrap_or_else(|_| Qty::from_units(i64::MAX).unwrap());
                 }
             }
         }
@@ -575,13 +631,12 @@ pub fn walk_market(&self, side: BookSide, qty: Qty) -> FillPlan {
                 self.bid_best_idx = Some(idx);
             }
 
-            // Update depth cache if within range
-            if idx < self.config.max_depth_levels {
-                self.update_depth_cache(BookSide::Bid);
-            }
+            // Update depth cache (always, since total level count may have changed)
+            self.update_depth_cache(BookSide::Bid);
         } else {
             // Price outside window -> store in far levels
             self.bid_far.insert(price_ticks, qty);
+            self.update_depth_cache(BookSide::Bid);
         }
         Ok(())
     }
@@ -597,13 +652,12 @@ pub fn walk_market(&self, side: BookSide, qty: Qty) -> FillPlan {
                 self.ask_best_idx = Some(idx);
             }
 
-            // Update depth cache if within range
-            if idx < self.config.max_depth_levels {
-                self.update_depth_cache(BookSide::Ask);
-            }
+            // Update depth cache (always, since total level count may have changed)
+            self.update_depth_cache(BookSide::Ask);
         } else {
             // Price outside window -> store in far levels
             self.ask_far.insert(price_ticks, qty);
+            self.update_depth_cache(BookSide::Ask);
         }
         Ok(())
     }
@@ -619,13 +673,12 @@ pub fn walk_market(&self, side: BookSide, qty: Qty) -> FillPlan {
                 self.bid_best_idx = self.next_occupied_bid(idx);
             }
 
-            // Update depth cache
-            if idx < self.config.max_depth_levels {
-                self.update_depth_cache(BookSide::Bid);
-            }
+            // Update depth cache (always, since total level count may have changed)
+            self.update_depth_cache(BookSide::Bid);
         } else {
             // Check far levels
             self.bid_far.remove(&price_ticks);
+            self.update_depth_cache(BookSide::Bid);
         }
         Ok(())
     }
@@ -641,13 +694,12 @@ pub fn walk_market(&self, side: BookSide, qty: Qty) -> FillPlan {
                 self.ask_best_idx = self.next_occupied_ask(idx);
             }
 
-            // Update depth cache
-            if idx < self.config.max_depth_levels {
-                self.update_depth_cache(BookSide::Ask);
-            }
+            // Update depth cache (always, since total level count may have changed)
+            self.update_depth_cache(BookSide::Ask);
         } else {
             // Check far levels
             self.ask_far.remove(&price_ticks);
+            self.update_depth_cache(BookSide::Ask);
         }
         Ok(())
     }
@@ -664,6 +716,7 @@ pub fn walk_market(&self, side: BookSide, qty: Qty) -> FillPlan {
         bitset[word] &= !(1u64 << bit);
     }
 
+    #[allow(dead_code)]
     fn test_bit(bitset: &[u64], idx: usize) -> bool {
         let word = idx >> 6;
         let bit = idx & 63;
@@ -703,6 +756,7 @@ pub fn walk_market(&self, side: BookSide, qty: Qty) -> FillPlan {
         Self::find_prev_set_bit(&self.ask_bitset, start_idx - 1)
     }
 
+    #[allow(clippy::needless_range_loop)]
     fn find_next_set_bit(bitset: &[u64], start_idx: usize) -> Option<usize> {
         let start_word = start_idx >> 6;
         let start_bit = start_idx & 63;
@@ -759,68 +813,79 @@ pub fn walk_market(&self, side: BookSide, qty: Qty) -> FillPlan {
     }
 
     fn update_depth_cache(&mut self, side: BookSide) {
+        // Collect all (price_ticks, qty) pairs from window and far, then sort by price
+        let mut price_qty_pairs = Vec::new();
+
+        match side {
+            BookSide::Bid => {
+                // Collect from window (bids: highest price first = lowest index first)
+                let mut idx = self.bid_best_idx;
+                while let Some(i) = idx {
+                    let level = &self.bid_window[i];
+                    if !level.qty.is_zero() {
+                        price_qty_pairs.push((level.price_ticks, level.qty));
+                    }
+                    idx = self.next_occupied_bid(i);
+                }
+                // Collect from far (BTreeMap is sorted by price ascending, so reverse for descending)
+                for (&price_ticks, &qty) in self.bid_far.iter().rev() {
+                    price_qty_pairs.push((price_ticks, qty));
+                }
+                // Sort by price descending (highest price first for bids)
+                price_qty_pairs.sort_by_key(|a| std::cmp::Reverse(a.0));
+            }
+            BookSide::Ask => {
+                // Collect from window (asks: lowest price first = lowest index first)
+                let mut idx = self.ask_best_idx;
+                while let Some(i) = idx {
+                    let level = &self.ask_window[i];
+                    if !level.qty.is_zero() {
+                        price_qty_pairs.push((level.price_ticks, level.qty));
+                    }
+                    idx = self.next_occupied_ask(i);
+                }
+                // Collect from far (BTreeMap is sorted by price ascending)
+                for (&price_ticks, &qty) in &self.ask_far {
+                    price_qty_pairs.push((price_ticks, qty));
+                }
+                // Sort by price ascending (lowest price first for asks)
+                price_qty_pairs.sort_by_key(|a| a.0);
+            }
+        }
+
+        // Now get mutable reference to cache and update it
         let cache = match side {
             BookSide::Bid => &mut self.bid_depth_cache,
             BookSide::Ask => &mut self.ask_depth_cache,
         };
-        let bitset = match side {
-            BookSide::Bid => &self.bid_bitset,
-            BookSide::Ask => &self.ask_bitset,
-        };
-        let window = match side {
-            BookSide::Bid => &self.bid_window,
-            BookSide::Ask => &self.ask_window,
-        };
 
+        // Now process the collected quantities and update the cache
         let mut running_sum = Qty::ZERO;
         let mut count = 0;
 
-        // Walk through the window in price order
-        let indices: Vec<usize> = match side {
-            BookSide::Bid => {
-                // Bids: lowest index first (highest price)
-                (0..self.config.window_ticks).collect()
-            }
-            BookSide::Ask => {
-                // Asks: lowest index first (lowest price)
-                (0..self.config.window_ticks).collect()
-            }
-        };
-
-        for &idx in &indices {
-            if Self::test_bit(bitset, idx) {
-                let level = &window[idx];
-                running_sum = running_sum.checked_add(level.qty).unwrap_or_else(|_| Qty::from_units(i64::MAX).unwrap());
-                if count < cache.len() {
-                    cache[count] = running_sum;
-                    count += 1;
-                } else {
-                    break;
-                }
-            }
-        }
-
-        // Add far levels
-        let far_levels = match side {
-            BookSide::Bid => &self.bid_far,
-            BookSide::Ask => &self.ask_far,
-        };
-        for &qty in far_levels.values() {
-            running_sum = running_sum.checked_add(qty).unwrap_or_else(|_| Qty::from_units(i64::MAX).unwrap());
+        // First pass: fill cache with cumulative sums up to cache capacity
+        for (_, qty) in &price_qty_pairs {
+            running_sum = running_sum.checked_add(*qty).unwrap_or_else(|_| Qty::from_units(i64::MAX).unwrap());
             if count < cache.len() {
                 cache[count] = running_sum;
                 count += 1;
-            } else {
-                break;
             }
         }
 
-        // Fill remaining with last value
+        // If there are more levels than cache size, continue summing to get total
+        if price_qty_pairs.len() > cache.len() {
+            for (_, qty) in &price_qty_pairs[cache.len()..] {
+                running_sum = running_sum.checked_add(*qty).unwrap_or_else(|_| Qty::from_units(i64::MAX).unwrap());
+            }
+        }
+
+        // Fill remaining cache entries with total sum
         while count < cache.len() {
             cache[count] = running_sum;
             count += 1;
         }
     }
+
 
     fn maybe_recenter(&mut self) {
         // Check if bid best is too close to window edge
@@ -841,15 +906,18 @@ pub fn walk_market(&self, side: BookSide, qty: Qty) -> FillPlan {
             if dist_from_top <= self.config.recenter_threshold_ticks
                 || dist_from_bottom <= self.config.recenter_threshold_ticks {
                 self.recenter();
-                return;
             }
         }
     }
 
+    #[allow(clippy::arithmetic_side_effects)]
     fn recenter(&mut self) {
         // Compute new reference price from current best bid/ask
         let ref_price_ticks = match (self.best_bid(), self.best_ask()) {
-            (Some(bid), Some(ask)) => (bid.price.units() + ask.price.units()) / 2 / self.spec.tick_size(),
+            (Some(bid), Some(ask)) => {
+                let mid = i64::midpoint(bid.price.units(), ask.price.units());
+                mid / self.spec.tick_size()
+            }
             (Some(bid), None) => bid.price.ticks(&self.spec).unwrap_or(0),
             (None, Some(ask)) => ask.price.ticks(&self.spec).unwrap_or(0),
             (None, None) => return,
@@ -1114,5 +1182,64 @@ mod tests {
 
         // Should have re-centered (epoch incremented)
         assert!(book.epoch().id() > 0);
+    }
+}
+
+// Testing support module - provides access to internals for property tests
+/// This module provides access to internal Book state for property testing.
+/// It is only intended for use in tests.
+pub mod testing {
+    use super::{Book, WindowLevel, BTreeMap, Qty};
+
+    impl Book {
+        /// Get bid window for testing
+        pub fn test_bid_window(&self) -> &[WindowLevel] {
+            &self.bid_window
+        }
+
+        /// Get ask window for testing
+        pub fn test_ask_window(&self) -> &[WindowLevel] {
+            &self.ask_window
+        }
+
+        /// Get bid bitset for testing
+        pub fn test_bid_bitset(&self) -> &[u64] {
+            &self.bid_bitset
+        }
+
+        /// Get ask bitset for testing
+        pub fn test_ask_bitset(&self) -> &[u64] {
+            &self.ask_bitset
+        }
+
+        /// Get bid best index for testing
+        pub fn test_bid_best_idx(&self) -> Option<usize> {
+            self.bid_best_idx
+        }
+
+        /// Get ask best index for testing
+        pub fn test_ask_best_idx(&self) -> Option<usize> {
+            self.ask_best_idx
+        }
+
+        /// Get bid far levels for testing
+        pub fn test_bid_far(&self) -> &BTreeMap<i64, Qty> {
+            &self.bid_far
+        }
+
+        /// Get ask far levels for testing
+        pub fn test_ask_far(&self) -> &BTreeMap<i64, Qty> {
+            &self.ask_far
+        }
+
+        /// Get next occupied bid for testing
+        pub fn test_next_occupied_bid(&self, idx: usize) -> Option<usize> {
+            self.next_occupied_bid(idx)
+        }
+
+        /// Get next occupied ask for testing
+        pub fn test_next_occupied_ask(&self, idx: usize) -> Option<usize> {
+            self.next_occupied_ask(idx)
+        }
     }
 }

@@ -1,0 +1,11 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 50abd0276b080a6fa6d6cdf40d719651991959eed3a74bcc987b23d65b5c5a37 # shrinks to ops = [Snapshot { bids: [Level { price: Price(0), qty: Qty(100) }, Level { price: Price(10), qty: Qty(200) }, Level { price: Price(5130), qty: Qty(100) }], asks: [] }]
+cc 371add4c09f7c13f964af32c6ff2b46353bddf6c85720e141f018327da289954 # shrinks to ops = [Delta { bids: [], asks: [Level { price: Price(1010), qty: Qty(100) }] }]
+cc 10463c5b52af98cb5922af38b1b85e922f42e1d585534f7649f068e16f7140f4 # shrinks to ops = [Snapshot { bids: [Level { price: Price(8129020), qty: Qty(100) }, Level { price: Price(7741700), qty: Qty(100) }], asks: [Level { price: Price(7344140), qty: Qty(100) }] }]
+cc a82c6d225becda25ff6670cb933c6578cc5960000ad2fb6390ada0978fb8b29b # shrinks to ops = [Delta { bids: [], asks: [Level { price: Price(0), qty: Qty(100) }, Level { price: Price(10), qty: Qty(100) }, Level { price: Price(20), qty: Qty(100) }, Level { price: Price(30), qty: Qty(100) }, Level { price: Price(40), qty: Qty(100) }, Level { price: Price(50), qty: Qty(100) }, Level { price: Price(60), qty: Qty(100) }, Level { price: Price(70), qty: Qty(100) }, Level { price: Price(80), qty: Qty(100) }, Level { price: Price(90), qty: Qty(100) }, Level { price: Price(100), qty: Qty(100) }] }]
+cc 38a3121562648ad64f9743da97cb5710ea3c1d4bd459b577164d912df89e8129 # shrinks to ops = [Snapshot { bids: [], asks: [] }, Snapshot { bids: [], asks: [Level { price: Price(0), qty: Qty(100) }] }]

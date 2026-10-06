@@ -32,9 +32,9 @@ No fixed deadline. Effort is given in rough T-shirt sizes (S about 1 to 3 days, 
 **Exit criteria met.**
 
 ## Phase 1 - Rust core (L)
-1. `core` types, fixed-point, timestamps, instrument metadata.
+1. `core` types, fixed-point, timestamps, instrument metadata. ✅
 2. Binance connector + normalizer (prints events); recorded-feed capture tool.
-3. Oracle book, optimized book, property tests, sequence/fault tests.
+3. Oracle book, optimized book, property tests, sequence/fault tests. ✅
 4. Metrics engine; criterion benchmarks; allocation tests; parser fuzz target.
 - **Exit:** property tests pass at 100k+ cases; book equals oracle; benchmarks published (parse, apply, metrics); zero hot-path allocations verified.
 

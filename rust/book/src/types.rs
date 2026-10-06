@@ -57,16 +57,9 @@ impl From<sb_core::error::CoreError> for BookError {
     fn from(err: sb_core::error::CoreError) -> Self {
         match err {
             sb_core::error::CoreError::Overflow => BookError::Overflow,
-            sb_core::error::CoreError::Negative => BookError::NotTickAligned,
-            sb_core::error::CoreError::InvalidScale(_) => BookError::InvalidWindowConfig,
-            sb_core::error::CoreError::InvalidTick(_) => BookError::NotTickAligned,
-            sb_core::error::CoreError::InvalidLot(_) => BookError::NotLotAligned,
-            sb_core::error::CoreError::NotTickAligned => BookError::NotTickAligned,
-            sb_core::error::CoreError::NotLotAligned => BookError::NotLotAligned,
-            sb_core::error::CoreError::Parse(_) => BookError::InvalidWindowConfig,
-            sb_core::error::CoreError::TimestampOutOfRange => BookError::InvalidWindowConfig,
-            sb_core::error::CoreError::SymbolTableFull => BookError::InvalidWindowConfig,
-            sb_core::error::CoreError::InvalidSymbol(_) => BookError::InvalidWindowConfig,
+            sb_core::error::CoreError::Negative | sb_core::error::CoreError::InvalidTick(_) | sb_core::error::CoreError::NotTickAligned => BookError::NotTickAligned,
+            sb_core::error::CoreError::InvalidScale(_) | sb_core::error::CoreError::Parse(_) | sb_core::error::CoreError::TimestampOutOfRange | sb_core::error::CoreError::SymbolTableFull | sb_core::error::CoreError::InvalidSymbol(_) => BookError::InvalidWindowConfig,
+            sb_core::error::CoreError::InvalidLot(_) | sb_core::error::CoreError::NotLotAligned => BookError::NotLotAligned,
         }
     }
 }
@@ -103,7 +96,7 @@ pub struct FillPlan {
     pub levels: smallvec::SmallVec<[FillLevel; 8]>,
     /// Total quantity filled
     pub total_filled: Qty,
-    /// Total notional value filled (price_scale + `qty_scale`)
+    /// Total notional value filled (`price_scale` + `qty_scale`)
     pub total_notional: i128,
     /// Average fill price (if any filled)
     pub avg_price: Option<Price>,

@@ -1,8 +1,17 @@
-//! Oracle book - BTreeMap reference implementation for testing
+//! Oracle book - `BTreeMap` reference implementation for testing
 //!
 //! This module provides a simple, obviously-correct order book using `BTreeMap`
 //! per side. It is used as a test oracle for property testing and as a baseline
 //! in benchmarks. Not used in production paths.
+
+#![allow(
+    clippy::arithmetic_side_effects,
+    clippy::as_conversions,
+    clippy::cast_possible_truncation,
+    clippy::explicit_iter_loop,
+    clippy::unwrap_used,
+    clippy::doc_markdown,
+)]
 
 use std::collections::BTreeMap;
 
@@ -10,7 +19,7 @@ use sb_core::{Level, Price, Qty};
 use crate::types::{FillLevel, FillPlan};
 use crate::BookError;
 
-/// Oracle book using BTreeMap per side (reference implementation)
+/// Oracle book using `BTreeMap` per side (reference implementation)
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OracleBook {
     /// Bids sorted descending by price (highest first)
@@ -191,7 +200,7 @@ impl OracleBook {
         if !plan.total_filled.is_zero() {
             // Calculate average price
             let avg_price_units = plan.total_notional / i128::from(plan.total_filled.units());
-            plan.avg_price = Price::from_units(avg_price_units as i64).ok();
+            plan.avg_price = Price::from_units(i64::try_from(avg_price_units).unwrap_or(i64::MAX)).ok();
         }
 
         plan
