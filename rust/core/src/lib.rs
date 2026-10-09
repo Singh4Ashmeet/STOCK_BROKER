@@ -55,10 +55,10 @@ pub mod time;
 pub mod types;
 
 /// Re-export commonly used types
-pub use decimal::{parse_scaled, write_scaled, to_decimal_string, StackWriter};
+pub use decimal::{StackWriter, parse_scaled, to_decimal_string, write_scaled};
 pub use error::{CoreError, ParseError};
 pub use instrument::InstrumentSpec;
 pub use money::{Price, Qty, notional};
-pub use symbol::{parse_symbol, SymbolId, SymbolParts, SymbolTable};
+pub use symbol::{SymbolId, SymbolParts, SymbolTable, parse_symbol};
 pub use time::{Clock, ManualClock, SystemClock, Timing, TsNs};
 pub use types::{Aggressor, BookSide, Epoch, Level, Seq, Trade};

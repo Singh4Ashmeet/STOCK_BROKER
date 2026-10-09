@@ -13,9 +13,11 @@
 #![allow(unsafe_code)]
 #![allow(unsafe_op_in_unsafe_fn)]
 
+use sb_core::{
+    InstrumentSpec, Price, Qty, StackWriter, notional, parse_scaled, parse_symbol, write_scaled,
+};
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use sb_core::{parse_scaled, Price, Qty, notional, StackWriter, write_scaled, parse_symbol, InstrumentSpec};
 
 /// Counting allocator that tracks allocation count
 struct CountingAllocator {
@@ -78,7 +80,11 @@ fn parse_scaled_no_alloc() {
         }
     });
     // Allow small fixed overhead from test framework lazy initialization
-    assert!(allocs <= 20, "parse_scaled allocated {} times (should be 0 or minimal fixed overhead)", allocs);
+    assert!(
+        allocs <= 20,
+        "parse_scaled allocated {} times (should be 0 or minimal fixed overhead)",
+        allocs
+    );
 }
 
 /// Test that Price::parse performs zero allocations
@@ -125,7 +131,11 @@ fn write_scaled_no_alloc() {
         }
     });
     // Allow small fixed overhead from test framework lazy initialization
-    assert!(allocs <= 30, "write_scaled allocated {} times (should be 0 or minimal fixed overhead)", allocs);
+    assert!(
+        allocs <= 30,
+        "write_scaled allocated {} times (should be 0 or minimal fixed overhead)",
+        allocs
+    );
 }
 
 /// Test that notional performs zero allocations
@@ -172,5 +182,9 @@ fn parse_symbol_no_alloc() {
         }
     });
     // Allow small fixed overhead from test framework lazy initialization
-    assert!(allocs <= 30, "parse_symbol allocated {} times (should be 0 or minimal fixed overhead)", allocs);
+    assert!(
+        allocs <= 30,
+        "parse_symbol allocated {} times (should be 0 or minimal fixed overhead)",
+        allocs
+    );
 }

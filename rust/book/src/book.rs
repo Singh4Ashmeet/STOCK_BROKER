@@ -10,26 +10,12 @@
 //! - **Re-centering**: When best price approaches a window edge, rebuild the window
 //! - **Depth caches**: Running cumulative sums for top-N levels updated incrementally
 
-#![allow(
-    clippy::arithmetic_side_effects,
-    clippy::as_conversions,
-    clippy::cast_possible_truncation,
-    clippy::cast_possible_wrap,
-    clippy::cast_sign_loss,
-    clippy::explicit_iter_loop,
-    clippy::unwrap_used,
-    clippy::unused_enumerate_index,
-    clippy::needless_range_loop,
-    clippy::needless_return,
-    clippy::manual_midpoint,
-)]
-
 use std::collections::BTreeMap;
 
-use sb_core::{Level, Price, Qty, InstrumentSpec, BookSide};
+use sb_core::{BookSide, InstrumentSpec, Level, Price, Qty};
 
-use crate::types::{FillLevel, FillPlan, ApplyResult};
 use crate::BookError;
+use crate::types::{ApplyResult, FillLevel, FillPlan};
 
 /// Configuration for the optimized book
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -45,8 +31,8 @@ pub struct BookConfig {
 impl Default for BookConfig {
     fn default() -> Self {
         Self {
-            window_ticks: 8192,  // 8K ticks default
-            recenter_threshold_ticks: 819,  // ~10%
+            window_ticks: 8192,            // 8K ticks default
+            recenter_threshold_ticks: 819, // ~10%
             max_depth_levels: 50,
         }
     }
@@ -59,7 +45,11 @@ impl BookConfig {
     ///
     /// Returns `BookError::InvalidWindowConfig` if `window_ticks` is not a power of 2
     /// or if `recenter_threshold_ticks` >= `window_ticks` / 2.
-    pub fn new(window_ticks: usize, recenter_threshold_ticks: usize, max_depth_levels: usize) -> Result<Self, BookError> {
+    pub fn new(
+        window_ticks: usize,
+        recenter_threshold_ticks: usize,
+        max_depth_levels: usize,
+    ) -> Result<Self, BookError> {
         if !window_ticks.is_power_of_two() {
             return Err(BookError::InvalidWindowConfig);
         }
@@ -103,17 +93,17 @@ pub struct Book {
 
     // Dense window for bids (descending price = descending index)
     bid_window: Vec<WindowLevel>,
-    bid_bitset: Vec<u64>,  // One bit per level: 1 = occupied
-    bid_base_ticks: i64,   // Price in ticks of index 0 (highest price in window)
-    bid_best_idx: Option<usize>,  // Index of best bid in window, or None if empty
-    bid_far: BTreeMap<i64, Qty>,  // Price ticks -> qty for prices below window
+    bid_bitset: Vec<u64>,        // One bit per level: 1 = occupied
+    bid_base_ticks: i64,         // Price in ticks of index 0 (highest price in window)
+    bid_best_idx: Option<usize>, // Index of best bid in window, or None if empty
+    bid_far: BTreeMap<i64, Qty>, // Price ticks -> qty for prices below window
 
     // Dense window for asks (ascending price = ascending index)
     ask_window: Vec<WindowLevel>,
     ask_bitset: Vec<u64>,
-    ask_base_ticks: i64,   // Price in ticks of index 0 (lowest price in window)
+    ask_base_ticks: i64, // Price in ticks of index 0 (lowest price in window)
     ask_best_idx: Option<usize>,
-    ask_far: BTreeMap<i64, Qty>,  // Price ticks -> qty for prices above window
+    ask_far: BTreeMap<i64, Qty>, // Price ticks -> qty for prices above window
 
     // Depth caches (running sums for top N levels)
     bid_depth_cache: Vec<Qty>,
@@ -183,7 +173,7 @@ impl Book {
         self.clear();
 
         // Determine the reference price (mid of best bid/ask or first level)
-        let ref_price_ticks = self.compute_reference_price(bids, asks);
+        let ref_price_ticks = self.compute_reference_price(bids, asks)?;
 
         // Initialize windows around reference price
         self.initialize_windows(ref_price_ticks);
@@ -218,7 +208,11 @@ impl Book {
     /// # Errors
     ///
     /// Returns `BookError::Crossed` if the book becomes crossed after applying
-    pub fn apply_delta(&mut self, bids: &[Level], asks: &[Level]) -> Result<ApplyResult, BookError> {
+    pub fn apply_delta(
+        &mut self,
+        bids: &[Level],
+        asks: &[Level],
+    ) -> Result<ApplyResult, BookError> {
         // Apply bid changes
         for level in bids {
             if level.is_removal() {
@@ -253,19 +247,23 @@ impl Book {
 
     /// Get the best bid
     #[must_use]
+    #[allow(clippy::expect_used, clippy::unwrap_used)]
     pub fn best_bid(&self) -> Option<Level> {
-        // Get best from window
+        // First check the window
         let window_best = self.bid_best_idx.map(|idx| {
             let level = &self.bid_window[idx];
             // price_ticks was validated when level was set
-            #[allow(clippy::unwrap_used)]
-            Level::new(Price::from_ticks(level.price_ticks, &self.spec).unwrap(), level.qty)
+            Level::new(
+                Price::from_ticks(level.price_ticks, &self.spec).expect("valid price_ticks"),
+                level.qty,
+            )
         });
-        // Get best from far levels (highest price = last in BTreeMap)
+        // Fall back to far levels (highest price = last in BTreeMap)
         let far_best = self.bid_far.iter().next_back().map(|(&price_ticks, &qty)| {
-            // price_ticks was validated when level was set
-            #[allow(clippy::unwrap_used)]
-            Level::new(Price::from_ticks(price_ticks, &self.spec).unwrap(), qty)
+            Level::new(
+                Price::from_ticks(price_ticks, &self.spec).expect("valid price_ticks"),
+                qty,
+            )
         });
 
         // Return the higher price (for bids, higher is better)
@@ -279,19 +277,22 @@ impl Book {
 
     /// Get the best ask
     #[must_use]
+    #[allow(clippy::expect_used, clippy::unwrap_used)]
     pub fn best_ask(&self) -> Option<Level> {
-        // Get best from window
+        // First check the window
         let window_best = self.ask_best_idx.map(|idx| {
             let level = &self.ask_window[idx];
-            // price_ticks was validated when level was set
-            #[allow(clippy::unwrap_used)]
-            Level::new(Price::from_ticks(level.price_ticks, &self.spec).unwrap(), level.qty)
+            Level::new(
+                Price::from_ticks(level.price_ticks, &self.spec).expect("valid price_ticks"),
+                level.qty,
+            )
         });
-        // Get best from far levels (lowest price = first in BTreeMap)
+        // Fall back to far levels (lowest price = first in BTreeMap)
         let far_best = self.ask_far.iter().next().map(|(&price_ticks, &qty)| {
-            // price_ticks was validated when level was set
-            #[allow(clippy::unwrap_used)]
-            Level::new(Price::from_ticks(price_ticks, &self.spec).unwrap(), qty)
+            Level::new(
+                Price::from_ticks(price_ticks, &self.spec).expect("valid price_ticks"),
+                qty,
+            )
         });
 
         // Return the lower price (for asks, lower is better)
@@ -306,14 +307,14 @@ impl Book {
     /// Get up to `n` levels for a side into the output slice
     ///
     /// Returns the number of levels written.
-    #[allow(clippy::unwrap_used, clippy::arithmetic_side_effects)]
+    #[allow(clippy::expect_used, clippy::unwrap_used)]
     pub fn levels(&self, side: BookSide, n: usize, out: &mut [Level]) -> usize {
         if n == 0 || out.is_empty() {
             return 0;
         }
 
         // Collect all levels from window and far, then sort and take top n
-        let mut levels = Vec::new();
+        let mut levels = Vec::with_capacity(64);
 
         match side {
             BookSide::Bid => {
@@ -322,7 +323,8 @@ impl Book {
                 while let Some(i) = idx {
                     let level = &self.bid_window[i];
                     if !level.qty.is_zero() {
-                        let price = Price::from_ticks(level.price_ticks, &self.spec).unwrap();
+                        let price = Price::from_ticks(level.price_ticks, &self.spec)
+                            .expect("valid price_ticks");
                         levels.push(Level::new(price, level.qty));
                     }
                     idx = self.next_occupied_bid(i);
@@ -341,7 +343,8 @@ impl Book {
                 while let Some(i) = idx {
                     let level = &self.ask_window[i];
                     if !level.qty.is_zero() {
-                        let price = Price::from_ticks(level.price_ticks, &self.spec).unwrap();
+                        let price = Price::from_ticks(level.price_ticks, &self.spec)
+                            .expect("valid price_ticks");
                         levels.push(Level::new(price, level.qty));
                     }
                     idx = self.next_occupied_ask(i);
@@ -352,6 +355,7 @@ impl Book {
                     levels.push(Level::new(price, qty));
                 }
                 // Sort by price ascending (lowest first)
+                #[allow(clippy::unnecessary_sort_by)]
                 levels.sort_by_key(|a| a.price);
             }
         }
@@ -364,65 +368,35 @@ impl Book {
 
     /// Get total quantity at top N levels
     #[must_use]
+    #[allow(clippy::arithmetic_side_effects, clippy::indexing_slicing)]
     pub fn depth_qty(&self, side: BookSide, n: usize) -> Qty {
         if n == 0 {
             return Qty::ZERO;
         }
-
-        // Collect all (price_ticks, qty) pairs from window and far, then sort by price
-        let mut price_qty_pairs = Vec::new();
-
-        match side {
-            BookSide::Bid => {
-                // Collect from window (bids: highest price first = lowest index first)
-                let mut idx = self.bid_best_idx;
-                while let Some(i) = idx {
-                    let level = &self.bid_window[i];
-                    if !level.qty.is_zero() {
-                        price_qty_pairs.push((level.price_ticks, level.qty));
-                    }
-                    idx = self.next_occupied_bid(i);
-                }
-                // Collect from far (BTreeMap is sorted by price ascending, so reverse for descending)
-                for (&price_ticks, &qty) in self.bid_far.iter().rev() {
-                    price_qty_pairs.push((price_ticks, qty));
-                }
-                // Sort by price descending (highest price first for bids)
-                price_qty_pairs.sort_by_key(|a| std::cmp::Reverse(a.0));
-            }
-            BookSide::Ask => {
-                // Collect from window (asks: lowest price first = lowest index first)
-                let mut idx = self.ask_best_idx;
-                while let Some(i) = idx {
-                    let level = &self.ask_window[i];
-                    if !level.qty.is_zero() {
-                        price_qty_pairs.push((level.price_ticks, level.qty));
-                    }
-                    idx = self.next_occupied_ask(i);
-                }
-                // Collect from far (BTreeMap is sorted by price ascending)
-                for (&price_ticks, &qty) in &self.ask_far {
-                    price_qty_pairs.push((price_ticks, qty));
-                }
-                // Sort by price ascending (lowest price first for asks)
-                price_qty_pairs.sort_by_key(|a| a.0);
-            }
+        let cache = match side {
+            BookSide::Bid => &self.bid_depth_cache,
+            BookSide::Ask => &self.ask_depth_cache,
+        };
+        if n <= cache.len() {
+            return cache[n - 1];
         }
-
-        // Now compute cumulative sum for top N levels
-        let mut running_sum = Qty::ZERO;
-        for (i, (_, qty)) in price_qty_pairs.into_iter().enumerate() {
-            if i >= n {
-                break;
-            }
-            running_sum = running_sum.checked_add(qty).unwrap_or_else(|_| Qty::from_units(i64::MAX).unwrap());
+        let mut out = vec![Level::new(Price::ZERO, Qty::ZERO); n];
+        let count = self.levels(side, n, &mut out);
+        let mut total = Qty::ZERO;
+        for level in out.iter().take(count) {
+            total = total
+                .checked_add(level.qty)
+                .unwrap_or_else(|_| Qty::from_units(i64::MAX).unwrap_or(Qty::ZERO));
         }
-
-        running_sum
+        total
     }
 
     /// Walk the market (simulate a market order fill)
-    #[allow(clippy::unwrap_used, clippy::arithmetic_side_effects)]
+    #[allow(
+        clippy::expect_used,
+        clippy::unwrap_used,
+        clippy::arithmetic_side_effects
+    )]
     pub fn walk_market(&self, side: BookSide, qty: Qty) -> FillPlan {
         let mut plan = FillPlan::empty();
         let mut remaining = qty;
@@ -431,14 +405,15 @@ impl Book {
             BookSide::Bid => {
                 // Selling: walk bids from best to worst (highest price first)
                 // Collect all levels from window and far, sort by price descending
-                let mut levels = Vec::new();
+                let mut levels = Vec::with_capacity(64);
 
                 // Collect from window (bids: highest price first)
                 let mut idx = self.bid_best_idx;
                 while let Some(i) = idx {
                     let level = &self.bid_window[i];
                     if !level.qty.is_zero() {
-                        let price = Price::from_ticks(level.price_ticks, &self.spec).unwrap();
+                        let price = Price::from_ticks(level.price_ticks, &self.spec)
+                            .expect("valid price_ticks");
                         levels.push((price, level.qty));
                     }
                     idx = self.prev_occupied_bid(i);
@@ -449,6 +424,7 @@ impl Book {
                     levels.push((price, qty));
                 }
                 // Sort by price descending (highest first for bids)
+                #[allow(clippy::unnecessary_sort_by)]
                 levels.sort_by_key(|a| std::cmp::Reverse(a.0));
 
                 // Fill from best to worst
@@ -464,20 +440,23 @@ impl Book {
                     plan.levels.push(FillLevel::new(price, level_qty, fill_qty));
                     plan.total_notional += sb_core::notional(price, fill_qty);
                     remaining = remaining.checked_sub(fill_qty).unwrap_or(Qty::ZERO);
-                    plan.total_filled = plan.total_filled.checked_add(fill_qty).unwrap_or_else(|_| Qty::from_units(i64::MAX).unwrap());
+                    plan.total_filled = plan
+                        .total_filled
+                        .checked_add(fill_qty)
+                        .unwrap_or_else(|_| Qty::from_units(i64::MAX).unwrap());
                 }
             }
             BookSide::Ask => {
                 // Buying: walk asks from best to worst (lowest price first)
-                // Collect all levels from window and far, sort by price ascending
-                let mut levels = Vec::new();
+                let mut levels = Vec::with_capacity(64);
 
                 // Collect from window (asks: lowest price first)
                 let mut idx = self.ask_best_idx;
                 while let Some(i) = idx {
                     let level = &self.ask_window[i];
                     if !level.qty.is_zero() {
-                        let price = Price::from_ticks(level.price_ticks, &self.spec).unwrap();
+                        let price = Price::from_ticks(level.price_ticks, &self.spec)
+                            .expect("valid price_ticks");
                         levels.push((price, level.qty));
                     }
                     idx = self.next_occupied_ask(i);
@@ -488,6 +467,7 @@ impl Book {
                     levels.push((price, qty));
                 }
                 // Sort by price ascending (lowest first for asks)
+                #[allow(clippy::unnecessary_sort_by)]
                 levels.sort_by_key(|a| a.0);
 
                 // Fill from best to worst
@@ -503,7 +483,10 @@ impl Book {
                     plan.levels.push(FillLevel::new(price, level_qty, fill_qty));
                     plan.total_notional += sb_core::notional(price, fill_qty);
                     remaining = remaining.checked_sub(fill_qty).unwrap_or(Qty::ZERO);
-                    plan.total_filled = plan.total_filled.checked_add(fill_qty).unwrap_or_else(|_| Qty::from_units(i64::MAX).unwrap());
+                    plan.total_filled = plan
+                        .total_filled
+                        .checked_add(fill_qty)
+                        .unwrap_or_else(|_| Qty::from_units(i64::MAX).unwrap());
                 }
             }
         }
@@ -511,7 +494,9 @@ impl Book {
         if !plan.total_filled.is_zero() {
             // Calculate average price: total_notional / total_filled
             let avg_price_units = plan.total_notional / i128::from(plan.total_filled.units());
-            if let Ok(avg_price) = Price::from_units(i64::try_from(avg_price_units).unwrap_or(i64::MAX)) {
+            if let Ok(avg_price) =
+                Price::from_units(i64::try_from(avg_price_units).unwrap_or(i64::MAX))
+            {
                 plan.avg_price = Some(avg_price);
             }
         }
@@ -552,74 +537,121 @@ impl Book {
 
     // Internal methods
 
-    fn compute_reference_price(&self, bids: &[Level], asks: &[Level]) -> i64 {
-        let best_bid = bids.iter()
+    #[allow(clippy::unnecessary_wraps, clippy::arithmetic_side_effects)]
+    fn compute_reference_price(&self, bids: &[Level], asks: &[Level]) -> Result<i64, BookError> {
+        let best_bid = bids
+            .iter()
             .filter(|l| !l.is_removal())
             .max_by_key(|l| l.price.units());
-        let best_ask = asks.iter()
+        let best_ask = asks
+            .iter()
             .filter(|l| !l.is_removal())
             .min_by_key(|l| l.price.units());
 
         match (best_bid, best_ask) {
             (Some(bid), Some(ask)) => {
-                #[allow(clippy::arithmetic_side_effects)]
                 let mid = i64::midpoint(bid.price.units(), ask.price.units());
-                #[allow(clippy::arithmetic_side_effects)]
-                let result = mid / self.spec.tick_size();
-                result
+                Ok(mid / self.spec.tick_size())
             }
-            (Some(bid), None) => bid.price.ticks(&self.spec).unwrap_or(0),
-            (None, Some(ask)) => ask.price.ticks(&self.spec).unwrap_or(0),
-            (None, None) => 0,
+            (Some(bid), None) => Ok(bid.price.ticks(&self.spec).unwrap_or(0)),
+            (None, Some(ask)) => Ok(ask.price.ticks(&self.spec).unwrap_or(0)),
+            (None, None) => Ok(0),
         }
     }
 
     fn initialize_windows(&mut self, ref_price_ticks: i64) {
         let half_window = self.config.window_ticks / 2;
-        #[allow(clippy::arithmetic_side_effects, clippy::cast_possible_wrap, clippy::as_conversions)]
-        let half_i64 = half_window as i64;
-        self.bid_base_ticks = ref_price_ticks + half_i64;
-        self.ask_base_ticks = ref_price_ticks - half_i64;
+        #[allow(
+            clippy::arithmetic_side_effects,
+            clippy::cast_possible_wrap,
+            clippy::as_conversions,
+            clippy::expect_used
+        )]
+        let half_i64 = i64::try_from(half_window).expect("window_ticks fits in i64");
+        #[allow(clippy::arithmetic_side_effects)]
+        let bid_base = ref_price_ticks + half_i64;
+        #[allow(clippy::arithmetic_side_effects)]
+        let ask_base = ref_price_ticks - half_i64;
+        self.bid_base_ticks = bid_base;
+        self.ask_base_ticks = ask_base;
     }
 
+    #[allow(
+        clippy::arithmetic_side_effects,
+        clippy::cast_possible_wrap,
+        clippy::as_conversions,
+        clippy::cast_sign_loss,
+        clippy::cast_possible_truncation
+    )]
     fn bid_price_ticks_to_index(&self, price_ticks: i64) -> Result<usize, BookError> {
         // Bids: higher price = lower index. base_ticks is the highest price in window.
         #[allow(clippy::arithmetic_side_effects)]
         let diff = self.bid_base_ticks - price_ticks;
-        #[allow(clippy::arithmetic_side_effects, clippy::cast_possible_wrap, clippy::as_conversions)]
+        #[allow(clippy::cast_possible_wrap)]
         if diff < 0 || diff >= self.config.window_ticks as i64 {
             return Err(BookError::WindowCapacityExceeded);
         }
-        #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
         Ok(diff as usize)
     }
 
+    #[allow(
+        clippy::arithmetic_side_effects,
+        clippy::cast_possible_wrap,
+        clippy::as_conversions,
+        clippy::cast_sign_loss,
+        clippy::cast_possible_truncation
+    )]
     fn ask_price_ticks_to_index(&self, price_ticks: i64) -> Result<usize, BookError> {
         // Asks: lower price = lower index. base_ticks is the lowest price in window.
         #[allow(clippy::arithmetic_side_effects)]
         let diff = price_ticks - self.ask_base_ticks;
-        #[allow(clippy::arithmetic_side_effects, clippy::cast_possible_wrap, clippy::as_conversions)]
+        #[allow(clippy::cast_possible_wrap)]
         if diff < 0 || diff >= self.config.window_ticks as i64 {
             return Err(BookError::WindowCapacityExceeded);
         }
-        #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
         Ok(diff as usize)
     }
 
-    #[allow(dead_code)]
+    #[allow(
+        dead_code,
+        clippy::arithmetic_side_effects,
+        clippy::cast_possible_wrap,
+        clippy::as_conversions
+    )]
     fn index_to_bid_price_ticks(&self, idx: usize) -> i64 {
-        #[allow(clippy::arithmetic_side_effects, clippy::cast_possible_wrap, clippy::as_conversions)]
+        #[allow(
+            clippy::arithmetic_side_effects,
+            clippy::cast_possible_wrap,
+            clippy::as_conversions
+        )]
         let idx_i64 = idx as i64;
         self.bid_base_ticks - idx_i64
     }
 
-    #[allow(dead_code)]
+    #[allow(
+        dead_code,
+        clippy::arithmetic_side_effects,
+        clippy::cast_possible_wrap,
+        clippy::as_conversions
+    )]
     fn index_to_ask_price_ticks(&self, idx: usize) -> i64 {
-        #[allow(clippy::arithmetic_side_effects, clippy::cast_possible_wrap, clippy::as_conversions)]
+        #[allow(
+            clippy::arithmetic_side_effects,
+            clippy::cast_possible_wrap,
+            clippy::as_conversions
+        )]
         let idx_i64 = idx as i64;
         self.ask_base_ticks + idx_i64
     }
 
+    #[allow(
+        clippy::arithmetic_side_effects,
+        clippy::cast_possible_wrap,
+        clippy::as_conversions,
+        clippy::cast_sign_loss,
+        clippy::cast_possible_truncation,
+        clippy::unwrap_used
+    )]
     fn set_bid_level(&mut self, price: Price, qty: Qty) -> Result<(), BookError> {
         let price_ticks = price.ticks(&self.spec)?;
         if let Ok(idx) = self.bid_price_ticks_to_index(price_ticks) {
@@ -641,6 +673,14 @@ impl Book {
         Ok(())
     }
 
+    #[allow(
+        clippy::arithmetic_side_effects,
+        clippy::cast_possible_wrap,
+        clippy::as_conversions,
+        clippy::cast_sign_loss,
+        clippy::cast_possible_truncation,
+        clippy::unwrap_used
+    )]
     fn set_ask_level(&mut self, price: Price, qty: Qty) -> Result<(), BookError> {
         let price_ticks = price.ticks(&self.spec)?;
         if let Ok(idx) = self.ask_price_ticks_to_index(price_ticks) {
@@ -662,6 +702,13 @@ impl Book {
         Ok(())
     }
 
+    #[allow(
+        clippy::arithmetic_side_effects,
+        clippy::cast_possible_wrap,
+        clippy::as_conversions,
+        clippy::cast_sign_loss,
+        clippy::cast_possible_truncation
+    )]
     fn remove_bid_level(&mut self, price: Price) -> Result<(), BookError> {
         let price_ticks = price.ticks(&self.spec)?;
         if let Ok(idx) = self.bid_price_ticks_to_index(price_ticks) {
@@ -683,6 +730,13 @@ impl Book {
         Ok(())
     }
 
+    #[allow(
+        clippy::arithmetic_side_effects,
+        clippy::cast_possible_wrap,
+        clippy::as_conversions,
+        clippy::cast_sign_loss,
+        clippy::cast_possible_truncation
+    )]
     fn remove_ask_level(&mut self, price: Price) -> Result<(), BookError> {
         let price_ticks = price.ticks(&self.spec)?;
         if let Ok(idx) = self.ask_price_ticks_to_index(price_ticks) {
@@ -723,7 +777,7 @@ impl Book {
         (bitset[word] & (1u64 << bit)) != 0
     }
 
-    /// Find next occupied index for bids (lower index = higher price)
+    #[allow(clippy::arithmetic_side_effects)]
     fn next_occupied_bid(&self, start_idx: usize) -> Option<usize> {
         if start_idx + 1 >= self.config.window_ticks {
             return None;
@@ -731,7 +785,7 @@ impl Book {
         Self::find_next_set_bit(&self.bid_bitset, start_idx + 1)
     }
 
-    /// Find next occupied index for asks (higher index = higher price)
+    #[allow(clippy::arithmetic_side_effects)]
     fn next_occupied_ask(&self, start_idx: usize) -> Option<usize> {
         if start_idx + 1 >= self.config.window_ticks {
             return None;
@@ -739,7 +793,7 @@ impl Book {
         Self::find_next_set_bit(&self.ask_bitset, start_idx + 1)
     }
 
-    /// Find previous occupied index for bids (higher index = lower price)
+    #[allow(clippy::arithmetic_side_effects)]
     fn prev_occupied_bid(&self, start_idx: usize) -> Option<usize> {
         if start_idx == 0 {
             return None;
@@ -747,7 +801,7 @@ impl Book {
         Self::find_prev_set_bit(&self.bid_bitset, start_idx - 1)
     }
 
-    /// Find previous occupied index for asks (lower index = lower price)
+    #[allow(clippy::arithmetic_side_effects)]
     #[allow(dead_code)]
     fn prev_occupied_ask(&self, start_idx: usize) -> Option<usize> {
         if start_idx == 0 {
@@ -756,7 +810,11 @@ impl Book {
         Self::find_prev_set_bit(&self.ask_bitset, start_idx - 1)
     }
 
-    #[allow(clippy::needless_range_loop)]
+    #[allow(
+        clippy::arithmetic_side_effects,
+        clippy::needless_range_loop,
+        clippy::as_conversions
+    )]
     fn find_next_set_bit(bitset: &[u64], start_idx: usize) -> Option<usize> {
         let start_word = start_idx >> 6;
         let start_bit = start_idx & 63;
@@ -776,6 +834,11 @@ impl Book {
         None
     }
 
+    #[allow(
+        clippy::arithmetic_side_effects,
+        clippy::needless_range_loop,
+        clippy::as_conversions
+    )]
     fn find_prev_set_bit(bitset: &[u64], start_idx: usize) -> Option<usize> {
         let start_word = start_idx >> 6;
         let start_bit = start_idx & 63;
@@ -812,6 +875,13 @@ impl Book {
         self.update_depth_cache(BookSide::Ask);
     }
 
+    #[allow(
+        clippy::explicit_iter_loop,
+        clippy::arithmetic_side_effects,
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::as_conversions
+    )]
     fn update_depth_cache(&mut self, side: BookSide) {
         // Collect all (price_ticks, qty) pairs from window and far, then sort by price
         let mut price_qty_pairs = Vec::new();
@@ -863,19 +933,15 @@ impl Book {
         let mut running_sum = Qty::ZERO;
         let mut count = 0;
 
-        // First pass: fill cache with cumulative sums up to cache capacity
         for (_, qty) in &price_qty_pairs {
-            running_sum = running_sum.checked_add(*qty).unwrap_or_else(|_| Qty::from_units(i64::MAX).unwrap());
+            running_sum = running_sum
+                .checked_add(*qty)
+                .unwrap_or_else(|_| Qty::from_units(i64::MAX).unwrap());
             if count < cache.len() {
                 cache[count] = running_sum;
                 count += 1;
-            }
-        }
-
-        // If there are more levels than cache size, continue summing to get total
-        if price_qty_pairs.len() > cache.len() {
-            for (_, qty) in &price_qty_pairs[cache.len()..] {
-                running_sum = running_sum.checked_add(*qty).unwrap_or_else(|_| Qty::from_units(i64::MAX).unwrap());
+            } else {
+                break;
             }
         }
 
@@ -886,14 +952,19 @@ impl Book {
         }
     }
 
-
+    #[allow(
+        clippy::arithmetic_side_effects,
+        clippy::needless_return,
+        clippy::unwrap_used
+    )]
     fn maybe_recenter(&mut self) {
         // Check if bid best is too close to window edge
         if let Some(bid_idx) = self.bid_best_idx {
             let dist_from_top = bid_idx;
             let dist_from_bottom = self.config.window_ticks - 1 - bid_idx;
             if dist_from_top <= self.config.recenter_threshold_ticks
-                || dist_from_bottom <= self.config.recenter_threshold_ticks {
+                || dist_from_bottom <= self.config.recenter_threshold_ticks
+            {
                 self.recenter();
                 return;
             }
@@ -904,13 +975,19 @@ impl Book {
             let dist_from_top = ask_idx;
             let dist_from_bottom = self.config.window_ticks - 1 - ask_idx;
             if dist_from_top <= self.config.recenter_threshold_ticks
-                || dist_from_bottom <= self.config.recenter_threshold_ticks {
+                || dist_from_bottom <= self.config.recenter_threshold_ticks
+            {
                 self.recenter();
             }
         }
     }
 
-    #[allow(clippy::arithmetic_side_effects)]
+    #[allow(
+        clippy::arithmetic_side_effects,
+        clippy::explicit_iter_loop,
+        clippy::unwrap_used,
+        clippy::expect_used
+    )]
     fn recenter(&mut self) {
         // Compute new reference price from current best bid/ask
         let ref_price_ticks = match (self.best_bid(), self.best_ask()) {
@@ -928,11 +1005,11 @@ impl Book {
         let mut all_asks = Vec::new();
 
         // Collect from bid window
-        for (_idx, level) in self.bid_window.iter().enumerate() {
+        for level in self.bid_window.iter() {
             if !level.qty.is_zero() {
                 all_bids.push(Level::new(
                     Price::from_ticks(level.price_ticks, &self.spec).unwrap(),
-                    level.qty
+                    level.qty,
                 ));
             }
         }
@@ -940,16 +1017,16 @@ impl Book {
         for (&price_ticks, &qty) in &self.bid_far {
             all_bids.push(Level::new(
                 Price::from_ticks(price_ticks, &self.spec).unwrap(),
-                qty
+                qty,
             ));
         }
 
         // Collect from ask window
-        for (_idx, level) in self.ask_window.iter().enumerate() {
+        for level in self.ask_window.iter() {
             if !level.qty.is_zero() {
                 all_asks.push(Level::new(
                     Price::from_ticks(level.price_ticks, &self.spec).unwrap(),
-                    level.qty
+                    level.qty,
                 ));
             }
         }
@@ -957,7 +1034,7 @@ impl Book {
         for (&price_ticks, &qty) in &self.ask_far {
             all_asks.push(Level::new(
                 Price::from_ticks(price_ticks, &self.spec).unwrap(),
-                qty
+                qty,
             ));
         }
 
@@ -980,8 +1057,8 @@ impl Book {
             let _ = self.set_ask_level(level.price, level.qty);
         }
 
-        self.recompute_depth_caches();
         self.update_best_indices();
+        self.recompute_depth_caches();
 
         // Increment epoch for re-center
         self.epoch = self.epoch.increment();
@@ -992,7 +1069,7 @@ impl Book {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sb_core::{InstrumentSpec, Price, Qty, BookSide};
+    use sb_core::{BookSide, InstrumentSpec, Price, Qty};
 
     fn spec() -> InstrumentSpec {
         InstrumentSpec::new(2, 5, 10, 100, 0).unwrap()
@@ -1006,8 +1083,14 @@ mod tests {
     fn book_basic() {
         let mut book = Book::new(config(), spec()).unwrap();
 
-        let bid1 = Level::new(Price::from_units(1000).unwrap(), Qty::from_units(100).unwrap());
-        let ask1 = Level::new(Price::from_units(1010).unwrap(), Qty::from_units(200).unwrap());
+        let bid1 = Level::new(
+            Price::from_units(1000).unwrap(),
+            Qty::from_units(100).unwrap(),
+        );
+        let ask1 = Level::new(
+            Price::from_units(1010).unwrap(),
+            Qty::from_units(200).unwrap(),
+        );
 
         book.apply_snapshot(&[bid1], &[ask1]).unwrap();
 
@@ -1021,15 +1104,26 @@ mod tests {
         let mut book = Book::new(config(), spec()).unwrap();
 
         book.apply_snapshot(
-            &[Level::new(Price::from_units(1000).unwrap(), Qty::from_units(100).unwrap())],
-            &[Level::new(Price::from_units(1010).unwrap(), Qty::from_units(200).unwrap())],
-        ).unwrap();
+            &[Level::new(
+                Price::from_units(1000).unwrap(),
+                Qty::from_units(100).unwrap(),
+            )],
+            &[Level::new(
+                Price::from_units(1010).unwrap(),
+                Qty::from_units(200).unwrap(),
+            )],
+        )
+        .unwrap();
 
         // Update bid level
         book.apply_delta(
-            &[Level::new(Price::from_units(1000).unwrap(), Qty::from_units(150).unwrap())],
+            &[Level::new(
+                Price::from_units(1000).unwrap(),
+                Qty::from_units(150).unwrap(),
+            )],
             &[],
-        ).unwrap();
+        )
+        .unwrap();
 
         assert_eq!(book.best_bid().unwrap().qty.units(), 150);
     }
@@ -1039,15 +1133,23 @@ mod tests {
         let mut book = Book::new(config(), spec()).unwrap();
 
         book.apply_snapshot(
-            &[Level::new(Price::from_units(1000).unwrap(), Qty::from_units(100).unwrap())],
-            &[Level::new(Price::from_units(1010).unwrap(), Qty::from_units(200).unwrap())],
-        ).unwrap();
+            &[Level::new(
+                Price::from_units(1000).unwrap(),
+                Qty::from_units(100).unwrap(),
+            )],
+            &[Level::new(
+                Price::from_units(1010).unwrap(),
+                Qty::from_units(200).unwrap(),
+            )],
+        )
+        .unwrap();
 
         // Remove bid level (qty = 0)
         book.apply_delta(
             &[Level::new(Price::from_units(1000).unwrap(), Qty::ZERO)],
             &[],
-        ).unwrap();
+        )
+        .unwrap();
 
         assert!(book.best_bid().is_none());
     }
@@ -1057,13 +1159,23 @@ mod tests {
         let mut book = Book::new(config(), spec()).unwrap();
 
         book.apply_snapshot(
-            &[Level::new(Price::from_units(1000).unwrap(), Qty::from_units(100).unwrap())],
-            &[Level::new(Price::from_units(1010).unwrap(), Qty::from_units(200).unwrap())],
-        ).unwrap();
+            &[Level::new(
+                Price::from_units(1000).unwrap(),
+                Qty::from_units(100).unwrap(),
+            )],
+            &[Level::new(
+                Price::from_units(1010).unwrap(),
+                Qty::from_units(200).unwrap(),
+            )],
+        )
+        .unwrap();
 
         // Cross the book by moving bid above ask
         let result = book.apply_delta(
-            &[Level::new(Price::from_units(1020).unwrap(), Qty::from_units(50).unwrap())],
+            &[Level::new(
+                Price::from_units(1020).unwrap(),
+                Qty::from_units(50).unwrap(),
+            )],
             &[],
         );
 
@@ -1076,15 +1188,31 @@ mod tests {
 
         book.apply_snapshot(
             &[
-                Level::new(Price::from_units(1000).unwrap(), Qty::from_units(100).unwrap()),
-                Level::new(Price::from_units(990).unwrap(), Qty::from_units(200).unwrap()),
-                Level::new(Price::from_units(980).unwrap(), Qty::from_units(300).unwrap()),
+                Level::new(
+                    Price::from_units(1000).unwrap(),
+                    Qty::from_units(100).unwrap(),
+                ),
+                Level::new(
+                    Price::from_units(990).unwrap(),
+                    Qty::from_units(200).unwrap(),
+                ),
+                Level::new(
+                    Price::from_units(980).unwrap(),
+                    Qty::from_units(300).unwrap(),
+                ),
             ],
             &[
-                Level::new(Price::from_units(1010).unwrap(), Qty::from_units(100).unwrap()),
-                Level::new(Price::from_units(1020).unwrap(), Qty::from_units(200).unwrap()),
+                Level::new(
+                    Price::from_units(1010).unwrap(),
+                    Qty::from_units(100).unwrap(),
+                ),
+                Level::new(
+                    Price::from_units(1020).unwrap(),
+                    Qty::from_units(200).unwrap(),
+                ),
             ],
-        ).unwrap();
+        )
+        .unwrap();
 
         let mut out = [Level::new(Price::ZERO, Qty::ZERO); 10];
         let n = book.levels(BookSide::Bid, 2, &mut out);
@@ -1104,14 +1232,27 @@ mod tests {
 
         book.apply_snapshot(
             &[
-                Level::new(Price::from_units(1000).unwrap(), Qty::from_units(100).unwrap()),
-                Level::new(Price::from_units(990).unwrap(), Qty::from_units(200).unwrap()),
+                Level::new(
+                    Price::from_units(1000).unwrap(),
+                    Qty::from_units(100).unwrap(),
+                ),
+                Level::new(
+                    Price::from_units(990).unwrap(),
+                    Qty::from_units(200).unwrap(),
+                ),
             ],
             &[
-                Level::new(Price::from_units(1010).unwrap(), Qty::from_units(100).unwrap()),
-                Level::new(Price::from_units(1020).unwrap(), Qty::from_units(200).unwrap()),
+                Level::new(
+                    Price::from_units(1010).unwrap(),
+                    Qty::from_units(100).unwrap(),
+                ),
+                Level::new(
+                    Price::from_units(1020).unwrap(),
+                    Qty::from_units(200).unwrap(),
+                ),
             ],
-        ).unwrap();
+        )
+        .unwrap();
 
         let depth = book.depth_qty(BookSide::Bid, 2);
         assert_eq!(depth.units(), 300);
@@ -1126,14 +1267,27 @@ mod tests {
 
         book.apply_snapshot(
             &[
-                Level::new(Price::from_units(1000).unwrap(), Qty::from_units(100).unwrap()),
-                Level::new(Price::from_units(990).unwrap(), Qty::from_units(200).unwrap()),
+                Level::new(
+                    Price::from_units(1000).unwrap(),
+                    Qty::from_units(100).unwrap(),
+                ),
+                Level::new(
+                    Price::from_units(990).unwrap(),
+                    Qty::from_units(200).unwrap(),
+                ),
             ],
             &[
-                Level::new(Price::from_units(1010).unwrap(), Qty::from_units(100).unwrap()),
-                Level::new(Price::from_units(1020).unwrap(), Qty::from_units(200).unwrap()),
+                Level::new(
+                    Price::from_units(1010).unwrap(),
+                    Qty::from_units(100).unwrap(),
+                ),
+                Level::new(
+                    Price::from_units(1020).unwrap(),
+                    Qty::from_units(200).unwrap(),
+                ),
             ],
-        ).unwrap();
+        )
+        .unwrap();
 
         // Buy 150 units (walk asks)
         let plan = book.walk_market(BookSide::Ask, Qty::from_units(150).unwrap());
@@ -1150,8 +1304,14 @@ mod tests {
         let mut book = Book::new(BookConfig::new(64, 10, 10).unwrap(), spec()).unwrap();
 
         // Use a price far outside the window
-        let bid_far = Level::new(Price::from_units(5000).unwrap(), Qty::from_units(100).unwrap());
-        let ask_far = Level::new(Price::from_units(15000).unwrap(), Qty::from_units(200).unwrap());
+        let bid_far = Level::new(
+            Price::from_units(5000).unwrap(),
+            Qty::from_units(100).unwrap(),
+        );
+        let ask_far = Level::new(
+            Price::from_units(15000).unwrap(),
+            Qty::from_units(200).unwrap(),
+        );
 
         book.apply_snapshot(&[bid_far], &[ask_far]).unwrap();
 
@@ -1166,18 +1326,32 @@ mod tests {
 
         // Initial snapshot near the middle
         book.apply_snapshot(
-            &[Level::new(Price::from_units(5000).unwrap(), Qty::from_units(100).unwrap())],
-            &[Level::new(Price::from_units(5010).unwrap(), Qty::from_units(200).unwrap())],
-        ).unwrap();
+            &[Level::new(
+                Price::from_units(5000).unwrap(),
+                Qty::from_units(100).unwrap(),
+            )],
+            &[Level::new(
+                Price::from_units(5010).unwrap(),
+                Qty::from_units(200).unwrap(),
+            )],
+        )
+        .unwrap();
 
         // Apply many deltas to move the price toward edge
         for i in 0..30 {
             let new_bid = 5000 + i * 10;
             let new_ask = 5010 + i * 10;
             book.apply_delta(
-                &[Level::new(Price::from_units(new_bid).unwrap(), Qty::from_units(100).unwrap())],
-                &[Level::new(Price::from_units(new_ask).unwrap(), Qty::from_units(200).unwrap())],
-            ).unwrap();
+                &[Level::new(
+                    Price::from_units(new_bid).unwrap(),
+                    Qty::from_units(100).unwrap(),
+                )],
+                &[Level::new(
+                    Price::from_units(new_ask).unwrap(),
+                    Qty::from_units(200).unwrap(),
+                )],
+            )
+            .unwrap();
         }
 
         // Should have re-centered (epoch incremented)
@@ -1189,7 +1363,7 @@ mod tests {
 /// This module provides access to internal Book state for property testing.
 /// It is only intended for use in tests.
 pub mod testing {
-    use super::{Book, WindowLevel, BTreeMap, Qty};
+    use super::{BTreeMap, Book, Qty, WindowLevel};
 
     impl Book {
         /// Get bid window for testing
@@ -1240,6 +1414,16 @@ pub mod testing {
         /// Get next occupied ask for testing
         pub fn test_next_occupied_ask(&self, idx: usize) -> Option<usize> {
             self.next_occupied_ask(idx)
+        }
+
+        /// Get bid depth cache for testing
+        pub fn test_bid_depth_cache(&self) -> &[Qty] {
+            &self.bid_depth_cache
+        }
+
+        /// Get ask depth cache for testing
+        pub fn test_ask_depth_cache(&self) -> &[Qty] {
+            &self.ask_depth_cache
         }
     }
 }

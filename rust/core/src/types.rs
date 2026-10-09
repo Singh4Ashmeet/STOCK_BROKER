@@ -223,7 +223,11 @@ impl fmt::Display for Trade {
         write!(
             f,
             "Trade{{symbol={}, price={}, qty={}, aggressor={}, id={}}}",
-            self.symbol, self.price.units(), self.qty.units(), self.aggressor, self.venue_trade_id
+            self.symbol,
+            self.price.units(),
+            self.qty.units(),
+            self.aggressor,
+            self.venue_trade_id
         )
     }
 }

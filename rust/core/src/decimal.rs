@@ -40,7 +40,7 @@ use crate::error::ParseError;
     clippy::duplicated_attributes,
     clippy::empty_line_after_outer_attr,
     clippy::empty_line_after_doc_comments,
-    clippy::unwrap_used,
+    clippy::unwrap_used
 )]
 
 /// Maximum supported scale (18 decimal places, fits in i64 with max value)
@@ -172,9 +172,7 @@ pub fn parse_scaled(bytes: &[u8], scale: u8) -> Result<i64, ParseError> {
 
     // Pad fraction part if needed
     while fraction_digits < scale {
-        fraction_part = fraction_part
-            .checked_mul(10)
-            .ok_or(ParseError::Overflow)?;
+        fraction_part = fraction_part.checked_mul(10).ok_or(ParseError::Overflow)?;
         fraction_digits += 1;
     }
 
@@ -315,7 +313,8 @@ pub fn write_scaled<W: fmt::Write>(value: i64, scale: u8, out: &mut W) -> fmt::R
 pub fn to_decimal_string(value: i64, scale: u8) -> String {
     let mut w = StackWriter::new();
     // StackWriter write cannot fail with our implementation
-    write_scaled(value, scale, &mut w).unwrap_or_else(|_| unreachable!("StackWriter write cannot fail"));
+    write_scaled(value, scale, &mut w)
+        .unwrap_or_else(|_| unreachable!("StackWriter write cannot fail"));
     w.as_str().unwrap_or_default().to_string()
 }
 
@@ -347,12 +346,30 @@ mod tests {
     fn parse_errors() {
         assert_eq!(parse_scaled(b"", 2), Err(ParseError::Empty));
         assert_eq!(parse_scaled(b"-1", 2), Err(ParseError::Negative));
-        assert_eq!(parse_scaled(b"+1", 2), Err(ParseError::InvalidChar { pos: 0 }));
-        assert_eq!(parse_scaled(b"1e5", 2), Err(ParseError::InvalidChar { pos: 1 }));
-        assert_eq!(parse_scaled(b" 1", 2), Err(ParseError::InvalidChar { pos: 0 }));
-        assert_eq!(parse_scaled(b"1,000", 2), Err(ParseError::InvalidChar { pos: 1 }));
-        assert_eq!(parse_scaled(b".5", 2), Err(ParseError::MissingIntegerDigits));
-        assert_eq!(parse_scaled(b"5.", 2), Err(ParseError::MissingFractionDigits));
+        assert_eq!(
+            parse_scaled(b"+1", 2),
+            Err(ParseError::InvalidChar { pos: 0 })
+        );
+        assert_eq!(
+            parse_scaled(b"1e5", 2),
+            Err(ParseError::InvalidChar { pos: 1 })
+        );
+        assert_eq!(
+            parse_scaled(b" 1", 2),
+            Err(ParseError::InvalidChar { pos: 0 })
+        );
+        assert_eq!(
+            parse_scaled(b"1,000", 2),
+            Err(ParseError::InvalidChar { pos: 1 })
+        );
+        assert_eq!(
+            parse_scaled(b".5", 2),
+            Err(ParseError::MissingIntegerDigits)
+        );
+        assert_eq!(
+            parse_scaled(b"5.", 2),
+            Err(ParseError::MissingFractionDigits)
+        );
         assert_eq!(parse_scaled(b"1.2.3", 2), Err(ParseError::MultipleDots));
         assert_eq!(parse_scaled(b"64321.123", 2), Err(ParseError::TooPrecise));
     }
@@ -364,11 +381,20 @@ mod tests {
             parse_scaled(b"9223372036854775807", 0),
             Ok(9_223_372_036_854_775_807)
         );
-        assert_eq!(parse_scaled(b"9223372036854775808", 0), Err(ParseError::Overflow));
+        assert_eq!(
+            parse_scaled(b"9223372036854775808", 0),
+            Err(ParseError::Overflow)
+        );
 
         // Scale-18 overflow
-        assert_eq!(parse_scaled(b"9223372036854775807", 0), Ok(9_223_372_036_854_775_807));
-        assert_eq!(parse_scaled(b"9223372036854775808", 0), Err(ParseError::Overflow));
+        assert_eq!(
+            parse_scaled(b"9223372036854775807", 0),
+            Ok(9_223_372_036_854_775_807)
+        );
+        assert_eq!(
+            parse_scaled(b"9223372036854775808", 0),
+            Err(ParseError::Overflow)
+        );
     }
 
     #[test]

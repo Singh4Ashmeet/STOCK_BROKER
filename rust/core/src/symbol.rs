@@ -83,11 +83,14 @@ pub fn parse_symbol(s: &str) -> Result<SymbolParts<'_>, CoreError> {
 
     // Validate characters: uppercase ASCII letters and digits only
     fn is_valid(s: &str) -> bool {
-        s.chars().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit())
+        s.chars()
+            .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit())
     }
 
     if !is_valid(venue) || !is_valid(base) || !is_valid(quote) {
-        return Err(CoreError::InvalidSymbol("invalid characters (must be uppercase ASCII alnum)"));
+        return Err(CoreError::InvalidSymbol(
+            "invalid characters (must be uppercase ASCII alnum)",
+        ));
     }
 
     Ok(SymbolParts { venue, base, quote })
@@ -207,7 +210,9 @@ impl FromStr for SymbolId {
         // This is a fallback; in practice use SymbolTable::intern
         parse_symbol(s)?;
         // We can't assign an ID without a table, so this is just for parsing
-        Err(CoreError::InvalidSymbol("use SymbolTable::intern for ID assignment"))
+        Err(CoreError::InvalidSymbol(
+            "use SymbolTable::intern for ID assignment",
+        ))
     }
 }
 

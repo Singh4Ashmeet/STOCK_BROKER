@@ -1,7 +1,7 @@
 //! Benchmarks for decimal parsing and formatting
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use sb_core::{parse_scaled, write_scaled, to_decimal_string, StackWriter};
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
+use sb_core::{StackWriter, parse_scaled, to_decimal_string, write_scaled};
 
 fn parse_scaled_bench(c: &mut Criterion) {
     c.bench_function("parse_scaled_binance", |b| {

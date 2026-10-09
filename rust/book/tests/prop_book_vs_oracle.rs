@@ -7,8 +7,8 @@
 //! Run with PROPTEST_CASES=100000 for CI mode, or default for local runs.
 
 use proptest::prelude::*;
-use sb_book::{Book, BookConfig, OracleBook, ApplyResult, BookError, FillPlan};
-use sb_core::{InstrumentSpec, Level, Price, Qty, BookSide};
+use sb_book::{ApplyResult, Book, BookConfig, BookError, FillPlan, OracleBook};
+use sb_core::{BookSide, InstrumentSpec, Level, Price, Qty};
 
 /// Instrument spec for testing (BTC-USDT like: price_scale=2, qty_scale=5, tick=0.01, lot=0.00001)
 fn test_spec() -> InstrumentSpec {
@@ -33,8 +33,6 @@ fn arb_qty() -> impl Strategy<Value = Qty> {
         .prop_map(|units| Qty::from_units(units * 100).unwrap()) // lot size = 100
         .prop_filter("valid qty", |q| q.units() >= 0)
 }
-
-
 
 /// Generate a non-removal level
 fn arb_regular_level() -> impl Strategy<Value = Level> {
@@ -65,8 +63,10 @@ fn arb_levels() -> impl Strategy<Value = Vec<Level>> {
 
 /// Generate a snapshot (two sides with regular levels only)
 fn arb_snapshot() -> impl Strategy<Value = (Vec<Level>, Vec<Level>)> {
-    (prop::collection::vec(arb_regular_level(), 0..10),
-     prop::collection::vec(arb_regular_level(), 0..10))
+    (
+        prop::collection::vec(arb_regular_level(), 0..10),
+        prop::collection::vec(arb_regular_level(), 0..10),
+    )
 }
 
 /// Generate a delta (two sides with any levels)
@@ -101,12 +101,20 @@ fn assert_books_equal(optimized: &Book, oracle: &OracleBook, step: usize) {
     // best_bid
     let opt_bid = optimized.best_bid();
     let ora_bid = oracle.best_bid();
-    assert_eq!(opt_bid, ora_bid, "step {step}: best_bid mismatch: opt={:?}, ora={:?}", opt_bid, ora_bid);
+    assert_eq!(
+        opt_bid, ora_bid,
+        "step {step}: best_bid mismatch: opt={:?}, ora={:?}",
+        opt_bid, ora_bid
+    );
 
     // best_ask
     let opt_ask = optimized.best_ask();
     let ora_ask = oracle.best_ask();
-    assert_eq!(opt_ask, ora_ask, "step {step}: best_ask mismatch: opt={:?}, ora={:?}", opt_ask, ora_ask);
+    assert_eq!(
+        opt_ask, ora_ask,
+        "step {step}: best_ask mismatch: opt={:?}, ora={:?}",
+        opt_ask, ora_ask
+    );
 
     // is_crossed
     let opt_crossed = optimized.is_crossed();
@@ -121,27 +129,47 @@ fn assert_books_equal(optimized: &Book, oracle: &OracleBook, step: usize) {
         let opt_count = optimized.levels(BookSide::Bid, n, &mut opt_out);
         let ora_count = oracle.levels(BookSide::Bid, n, &mut ora_out);
         assert_eq!(opt_count, ora_count, "step {step}: bid levels count n={n}");
-        assert_eq!(&opt_out[..opt_count], &ora_out[..ora_count], "step {step}: bid levels n={n}");
+        assert_eq!(
+            &opt_out[..opt_count],
+            &ora_out[..ora_count],
+            "step {step}: bid levels n={n}"
+        );
 
         let opt_count = optimized.levels(BookSide::Ask, n, &mut opt_out);
         let ora_count = oracle.levels(BookSide::Ask, n, &mut ora_out);
         assert_eq!(opt_count, ora_count, "step {step}: ask levels count n={n}");
-        assert_eq!(&opt_out[..opt_count], &ora_out[..ora_count], "step {step}: ask levels n={n}");
+        assert_eq!(
+            &opt_out[..opt_count],
+            &ora_out[..ora_count],
+            "step {step}: ask levels n={n}"
+        );
     }
 
     // depth_qty for various n
     for n in [1, 2, 5, 10, 20, 50] {
         let opt_depth_bid = optimized.depth_qty(BookSide::Bid, n);
         let ora_depth_bid = oracle.depth_qty(BookSide::Bid, n);
-        assert_eq!(opt_depth_bid, ora_depth_bid, "step {step}: bid depth_qty n={n}");
+        assert_eq!(
+            opt_depth_bid, ora_depth_bid,
+            "step {step}: bid depth_qty n={n}"
+        );
 
         let opt_depth_ask = optimized.depth_qty(BookSide::Ask, n);
         let ora_depth_ask = oracle.depth_qty(BookSide::Ask, n);
-        assert_eq!(opt_depth_ask, ora_depth_ask, "step {step}: ask depth_qty n={n}");
+        assert_eq!(
+            opt_depth_ask, ora_depth_ask,
+            "step {step}: ask depth_qty n={n}"
+        );
     }
 
     // walk_market for various quantities on both sides
-    for qty in [Qty::ZERO, Qty::from_units(10).unwrap(), Qty::from_units(100).unwrap(), Qty::from_units(1000).unwrap(), Qty::from_units(10000).unwrap()] {
+    for qty in [
+        Qty::ZERO,
+        Qty::from_units(10).unwrap(),
+        Qty::from_units(100).unwrap(),
+        Qty::from_units(1000).unwrap(),
+        Qty::from_units(10000).unwrap(),
+    ] {
         let opt_plan_bid = optimized.walk_market(BookSide::Bid, qty);
         let ora_plan_bid = oracle.walk_market(BookSide::Bid, qty);
         assert_fill_plans_equal(&opt_plan_bid, &ora_plan_bid, BookSide::Bid, qty, step);
@@ -154,15 +182,50 @@ fn assert_books_equal(optimized: &Book, oracle: &OracleBook, step: usize) {
 
 /// Assert two FillPlans are equal
 fn assert_fill_plans_equal(opt: &FillPlan, ora: &FillPlan, side: BookSide, qty: Qty, step: usize) {
-    assert_eq!(opt.levels.len(), ora.levels.len(), "step {step}: fill plan levels len {side:?} qty={}", qty.units());
-    assert_eq!(opt.total_filled, ora.total_filled, "step {step}: total_filled {side:?} qty={}", qty.units());
-    assert_eq!(opt.total_notional, ora.total_notional, "step {step}: total_notional {side:?} qty={}", qty.units());
-    assert_eq!(opt.avg_price, ora.avg_price, "step {step}: avg_price {side:?} qty={}", qty.units());
+    assert_eq!(
+        opt.levels.len(),
+        ora.levels.len(),
+        "step {step}: fill plan levels len {side:?} qty={}",
+        qty.units()
+    );
+    assert_eq!(
+        opt.total_filled,
+        ora.total_filled,
+        "step {step}: total_filled {side:?} qty={}",
+        qty.units()
+    );
+    assert_eq!(
+        opt.total_notional,
+        ora.total_notional,
+        "step {step}: total_notional {side:?} qty={}",
+        qty.units()
+    );
+    assert_eq!(
+        opt.avg_price,
+        ora.avg_price,
+        "step {step}: avg_price {side:?} qty={}",
+        qty.units()
+    );
 
     for (i, (opt_lvl, ora_lvl)) in opt.levels.iter().zip(ora.levels.iter()).enumerate() {
-        assert_eq!(opt_lvl.price, ora_lvl.price, "step {step}: fill level {i} price {side:?} qty={}", qty.units());
-        assert_eq!(opt_lvl.qty, ora_lvl.qty, "step {step}: fill level {i} qty {side:?} qty={}", qty.units());
-        assert_eq!(opt_lvl.filled_qty, ora_lvl.filled_qty, "step {step}: fill level {i} filled_qty {side:?} qty={}", qty.units());
+        assert_eq!(
+            opt_lvl.price,
+            ora_lvl.price,
+            "step {step}: fill level {i} price {side:?} qty={}",
+            qty.units()
+        );
+        assert_eq!(
+            opt_lvl.qty,
+            ora_lvl.qty,
+            "step {step}: fill level {i} qty {side:?} qty={}",
+            qty.units()
+        );
+        assert_eq!(
+            opt_lvl.filled_qty,
+            ora_lvl.filled_qty,
+            "step {step}: fill level {i} filled_qty {side:?} qty={}",
+            qty.units()
+        );
     }
 }
 
@@ -174,7 +237,10 @@ fn assert_invariants(book: &Book, step: usize) {
     while let Some(i) = idx {
         let level = &book.test_bid_window()[i];
         if !level.qty.is_zero() {
-            assert!(level.price_ticks < prev_bid_price, "step {step}: bids not strictly descending at index {i}");
+            assert!(
+                level.price_ticks < prev_bid_price,
+                "step {step}: bids not strictly descending at index {i}"
+            );
             prev_bid_price = level.price_ticks;
         }
         idx = book.test_next_occupied_bid(i);
@@ -185,7 +251,10 @@ fn assert_invariants(book: &Book, step: usize) {
     while let Some(i) = idx {
         let level = &book.test_ask_window()[i];
         if !level.qty.is_zero() {
-            assert!(level.price_ticks > prev_ask_price, "step {step}: asks not strictly ascending at index {i}");
+            assert!(
+                level.price_ticks > prev_ask_price,
+                "step {step}: asks not strictly ascending at index {i}"
+            );
             prev_ask_price = level.price_ticks;
         }
         idx = book.test_next_occupied_ask(i);
@@ -302,22 +371,42 @@ mod regressions {
         let mut oracle = OracleBook::new();
 
         // Setup initial book
-        optimized.apply_snapshot(
-            &[Level::new(Price::from_units(1000).unwrap(), Qty::from_units(100).unwrap())],
-            &[Level::new(Price::from_units(1010).unwrap(), Qty::from_units(200).unwrap())],
-        ).unwrap();
+        optimized
+            .apply_snapshot(
+                &[Level::new(
+                    Price::from_units(1000).unwrap(),
+                    Qty::from_units(100).unwrap(),
+                )],
+                &[Level::new(
+                    Price::from_units(1010).unwrap(),
+                    Qty::from_units(200).unwrap(),
+                )],
+            )
+            .unwrap();
         oracle.apply_snapshot(
-            &[Level::new(Price::from_units(1000).unwrap(), Qty::from_units(100).unwrap())],
-            &[Level::new(Price::from_units(1010).unwrap(), Qty::from_units(200).unwrap())],
+            &[Level::new(
+                Price::from_units(1000).unwrap(),
+                Qty::from_units(100).unwrap(),
+            )],
+            &[Level::new(
+                Price::from_units(1010).unwrap(),
+                Qty::from_units(200).unwrap(),
+            )],
         );
 
         // Apply delta that crosses the book
         let opt_result = optimized.apply_delta(
-            &[Level::new(Price::from_units(1020).unwrap(), Qty::from_units(50).unwrap())],
+            &[Level::new(
+                Price::from_units(1020).unwrap(),
+                Qty::from_units(50).unwrap(),
+            )],
             &[],
         );
         let ora_result = oracle.apply_delta(
-            &[Level::new(Price::from_units(1020).unwrap(), Qty::from_units(50).unwrap())],
+            &[Level::new(
+                Price::from_units(1020).unwrap(),
+                Qty::from_units(50).unwrap(),
+            )],
             &[],
         );
 
@@ -339,13 +428,27 @@ mod regressions {
         let mut oracle = OracleBook::new();
 
         // Initial snapshot near the middle
-        optimized.apply_snapshot(
-            &[Level::new(Price::from_units(5000).unwrap(), Qty::from_units(100).unwrap())],
-            &[Level::new(Price::from_units(5010).unwrap(), Qty::from_units(200).unwrap())],
-        ).unwrap();
+        optimized
+            .apply_snapshot(
+                &[Level::new(
+                    Price::from_units(5000).unwrap(),
+                    Qty::from_units(100).unwrap(),
+                )],
+                &[Level::new(
+                    Price::from_units(5010).unwrap(),
+                    Qty::from_units(200).unwrap(),
+                )],
+            )
+            .unwrap();
         oracle.apply_snapshot(
-            &[Level::new(Price::from_units(5000).unwrap(), Qty::from_units(100).unwrap())],
-            &[Level::new(Price::from_units(5010).unwrap(), Qty::from_units(200).unwrap())],
+            &[Level::new(
+                Price::from_units(5000).unwrap(),
+                Qty::from_units(100).unwrap(),
+            )],
+            &[Level::new(
+                Price::from_units(5010).unwrap(),
+                Qty::from_units(200).unwrap(),
+            )],
         );
 
         assert_books_equal(&optimized, &oracle, 0);
@@ -356,12 +459,24 @@ mod regressions {
             let new_ask = 5010 + i * 10;
 
             let opt_result = optimized.apply_delta(
-                &[Level::new(Price::from_units(new_bid).unwrap(), Qty::from_units(100).unwrap())],
-                &[Level::new(Price::from_units(new_ask).unwrap(), Qty::from_units(200).unwrap())],
+                &[Level::new(
+                    Price::from_units(new_bid).unwrap(),
+                    Qty::from_units(100).unwrap(),
+                )],
+                &[Level::new(
+                    Price::from_units(new_ask).unwrap(),
+                    Qty::from_units(200).unwrap(),
+                )],
             );
             let ora_result = oracle.apply_delta(
-                &[Level::new(Price::from_units(new_bid).unwrap(), Qty::from_units(100).unwrap())],
-                &[Level::new(Price::from_units(new_ask).unwrap(), Qty::from_units(200).unwrap())],
+                &[Level::new(
+                    Price::from_units(new_bid).unwrap(),
+                    Qty::from_units(100).unwrap(),
+                )],
+                &[Level::new(
+                    Price::from_units(new_ask).unwrap(),
+                    Qty::from_units(200).unwrap(),
+                )],
             );
 
             // Compare results
@@ -371,9 +486,14 @@ mod regressions {
                 // Both crossed (different return types but same semantic)
                 (Ok(ApplyResult::Crossed), Err(BookError::Crossed)) => {}
                 // Both errored with same error
-                (Err(opt_err), Err(ora_err)) => assert_eq!(opt_err, ora_err, "step {}: BookError mismatch", i),
+                (Err(opt_err), Err(ora_err)) => {
+                    assert_eq!(opt_err, ora_err, "step {}: BookError mismatch", i)
+                }
                 // Mismatched results
-                (opt_res, ora_res) => panic!("step {}: mismatched results: opt={:?}, ora={:?}", i, opt_res, ora_res),
+                (opt_res, ora_res) => panic!(
+                    "step {}: mismatched results: opt={:?}, ora={:?}",
+                    i, opt_res, ora_res
+                ),
             }
 
             if !optimized.is_crossed() {
@@ -395,8 +515,14 @@ mod regressions {
         let mut oracle = OracleBook::new();
 
         // Use a price far outside the window
-        let bid_far = Level::new(Price::from_units(5000).unwrap(), Qty::from_units(100).unwrap());
-        let ask_far = Level::new(Price::from_units(15000).unwrap(), Qty::from_units(200).unwrap());
+        let bid_far = Level::new(
+            Price::from_units(5000).unwrap(),
+            Qty::from_units(100).unwrap(),
+        );
+        let ask_far = Level::new(
+            Price::from_units(15000).unwrap(),
+            Qty::from_units(200).unwrap(),
+        );
 
         optimized.apply_snapshot(&[bid_far], &[ask_far]).unwrap();
         oracle.apply_snapshot(&[bid_far], &[ask_far]);
@@ -417,24 +543,42 @@ mod regressions {
         let mut optimized = Book::new(config, spec).unwrap();
         let mut oracle = OracleBook::new();
 
-        optimized.apply_snapshot(
-            &[Level::new(Price::from_units(1000).unwrap(), Qty::from_units(100).unwrap())],
-            &[Level::new(Price::from_units(1010).unwrap(), Qty::from_units(200).unwrap())],
-        ).unwrap();
+        optimized
+            .apply_snapshot(
+                &[Level::new(
+                    Price::from_units(1000).unwrap(),
+                    Qty::from_units(100).unwrap(),
+                )],
+                &[Level::new(
+                    Price::from_units(1010).unwrap(),
+                    Qty::from_units(200).unwrap(),
+                )],
+            )
+            .unwrap();
         oracle.apply_snapshot(
-            &[Level::new(Price::from_units(1000).unwrap(), Qty::from_units(100).unwrap())],
-            &[Level::new(Price::from_units(1010).unwrap(), Qty::from_units(200).unwrap())],
+            &[Level::new(
+                Price::from_units(1000).unwrap(),
+                Qty::from_units(100).unwrap(),
+            )],
+            &[Level::new(
+                Price::from_units(1010).unwrap(),
+                Qty::from_units(200).unwrap(),
+            )],
         );
 
         // Remove bid level (qty = 0)
-        optimized.apply_delta(
-            &[Level::new(Price::from_units(1000).unwrap(), Qty::ZERO)],
-            &[],
-        ).unwrap();
-        oracle.apply_delta(
-            &[Level::new(Price::from_units(1000).unwrap(), Qty::ZERO)],
-            &[],
-        ).unwrap();
+        optimized
+            .apply_delta(
+                &[Level::new(Price::from_units(1000).unwrap(), Qty::ZERO)],
+                &[],
+            )
+            .unwrap();
+        oracle
+            .apply_delta(
+                &[Level::new(Price::from_units(1000).unwrap(), Qty::ZERO)],
+                &[],
+            )
+            .unwrap();
 
         assert_eq!(optimized.best_bid(), None);
         assert_eq!(oracle.best_bid(), None);
@@ -449,24 +593,50 @@ mod regressions {
         let mut optimized = Book::new(config, spec).unwrap();
         let mut oracle = OracleBook::new();
 
-        optimized.apply_snapshot(
-            &[
-                Level::new(Price::from_units(1000).unwrap(), Qty::from_units(100).unwrap()),
-                Level::new(Price::from_units(990).unwrap(), Qty::from_units(200).unwrap()),
-            ],
-            &[
-                Level::new(Price::from_units(1010).unwrap(), Qty::from_units(100).unwrap()),
-                Level::new(Price::from_units(1020).unwrap(), Qty::from_units(200).unwrap()),
-            ],
-        ).unwrap();
+        optimized
+            .apply_snapshot(
+                &[
+                    Level::new(
+                        Price::from_units(1000).unwrap(),
+                        Qty::from_units(100).unwrap(),
+                    ),
+                    Level::new(
+                        Price::from_units(990).unwrap(),
+                        Qty::from_units(200).unwrap(),
+                    ),
+                ],
+                &[
+                    Level::new(
+                        Price::from_units(1010).unwrap(),
+                        Qty::from_units(100).unwrap(),
+                    ),
+                    Level::new(
+                        Price::from_units(1020).unwrap(),
+                        Qty::from_units(200).unwrap(),
+                    ),
+                ],
+            )
+            .unwrap();
         oracle.apply_snapshot(
             &[
-                Level::new(Price::from_units(1000).unwrap(), Qty::from_units(100).unwrap()),
-                Level::new(Price::from_units(990).unwrap(), Qty::from_units(200).unwrap()),
+                Level::new(
+                    Price::from_units(1000).unwrap(),
+                    Qty::from_units(100).unwrap(),
+                ),
+                Level::new(
+                    Price::from_units(990).unwrap(),
+                    Qty::from_units(200).unwrap(),
+                ),
             ],
             &[
-                Level::new(Price::from_units(1010).unwrap(), Qty::from_units(100).unwrap()),
-                Level::new(Price::from_units(1020).unwrap(), Qty::from_units(200).unwrap()),
+                Level::new(
+                    Price::from_units(1010).unwrap(),
+                    Qty::from_units(100).unwrap(),
+                ),
+                Level::new(
+                    Price::from_units(1020).unwrap(),
+                    Qty::from_units(200).unwrap(),
+                ),
             ],
         );
 
@@ -474,7 +644,13 @@ mod regressions {
         let opt_plan = optimized.walk_market(BookSide::Ask, Qty::from_units(150).unwrap());
         let ora_plan = oracle.walk_market(BookSide::Ask, Qty::from_units(150).unwrap());
 
-        assert_fill_plans_equal(&opt_plan, &ora_plan, BookSide::Ask, Qty::from_units(150).unwrap(), 0);
+        assert_fill_plans_equal(
+            &opt_plan,
+            &ora_plan,
+            BookSide::Ask,
+            Qty::from_units(150).unwrap(),
+            0,
+        );
 
         // Verify the partial fill
         assert_eq!(opt_plan.total_filled.units(), 150);

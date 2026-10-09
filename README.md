@@ -9,7 +9,7 @@ A stock and crypto **market data platform** built as a portfolio project. It is 
 | Research | **Python** | Honest backtesting on the same Rust order book (via PyO3), strategy research |
 | Frontend | **Next.js** (TypeScript) | Live dashboard, trading ticket, research pages, health page, marketing site |
 
-**Status:** planning complete, implementation not started.
+**Status:** Phase 1 (Rust core) in progress — core types and order book complete, connector next.
 **Scope of v1:** crypto only (Binance), 3 to 5 symbols, **paper trading only**, free to run.
 
 ## The three goals (in priority order)

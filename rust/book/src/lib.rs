@@ -69,4 +69,4 @@ pub mod types;
 /// Re-export commonly used types
 pub use book::{Book, BookConfig};
 pub use oracle::OracleBook;
-pub use types::{FillPlan, FillLevel, ApplyResult, BookError};
+pub use types::{ApplyResult, BookError, FillLevel, FillPlan};

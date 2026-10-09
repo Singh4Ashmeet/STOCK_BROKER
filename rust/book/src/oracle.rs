@@ -10,14 +10,14 @@
     clippy::cast_possible_truncation,
     clippy::explicit_iter_loop,
     clippy::unwrap_used,
-    clippy::doc_markdown,
+    clippy::doc_markdown
 )]
 
 use std::collections::BTreeMap;
 
-use sb_core::{Level, Price, Qty};
-use crate::types::{FillLevel, FillPlan};
 use crate::BookError;
+use crate::types::{FillLevel, FillPlan};
+use sb_core::{Level, Price, Qty};
 
 /// Oracle book using `BTreeMap` per side (reference implementation)
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -141,12 +141,16 @@ impl OracleBook {
         match side {
             sb_core::BookSide::Bid => {
                 for &qty in self.bids.values().rev().take(n) {
-                    total = total.checked_add(qty).unwrap_or_else(|_| Qty::from_units(i64::MAX).unwrap());
+                    total = total
+                        .checked_add(qty)
+                        .unwrap_or_else(|_| Qty::from_units(i64::MAX).unwrap());
                 }
             }
             sb_core::BookSide::Ask => {
                 for &qty in self.asks.values().take(n) {
-                    total = total.checked_add(qty).unwrap_or_else(|_| Qty::from_units(i64::MAX).unwrap());
+                    total = total
+                        .checked_add(qty)
+                        .unwrap_or_else(|_| Qty::from_units(i64::MAX).unwrap());
                 }
             }
         }
@@ -175,7 +179,10 @@ impl OracleBook {
                     plan.levels.push(FillLevel::new(price, level_qty, fill_qty));
                     plan.total_notional += sb_core::notional(price, fill_qty);
                     remaining = remaining.checked_sub(fill_qty).unwrap_or(Qty::ZERO);
-                    plan.total_filled = plan.total_filled.checked_add(fill_qty).unwrap_or_else(|_| Qty::from_units(i64::MAX).unwrap());
+                    plan.total_filled = plan
+                        .total_filled
+                        .checked_add(fill_qty)
+                        .unwrap_or_else(|_| Qty::from_units(i64::MAX).unwrap());
                 }
             }
             sb_core::BookSide::Ask => {
@@ -192,7 +199,10 @@ impl OracleBook {
                     plan.levels.push(FillLevel::new(price, level_qty, fill_qty));
                     plan.total_notional += sb_core::notional(price, fill_qty);
                     remaining = remaining.checked_sub(fill_qty).unwrap_or(Qty::ZERO);
-                    plan.total_filled = plan.total_filled.checked_add(fill_qty).unwrap_or_else(|_| Qty::from_units(i64::MAX).unwrap());
+                    plan.total_filled = plan
+                        .total_filled
+                        .checked_add(fill_qty)
+                        .unwrap_or_else(|_| Qty::from_units(i64::MAX).unwrap());
                 }
             }
         }
@@ -200,7 +210,8 @@ impl OracleBook {
         if !plan.total_filled.is_zero() {
             // Calculate average price
             let avg_price_units = plan.total_notional / i128::from(plan.total_filled.units());
-            plan.avg_price = Price::from_units(i64::try_from(avg_price_units).unwrap_or(i64::MAX)).ok();
+            plan.avg_price =
+                Price::from_units(i64::try_from(avg_price_units).unwrap_or(i64::MAX)).ok();
         }
 
         plan
@@ -244,7 +255,7 @@ impl OracleBook {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sb_core::{InstrumentSpec, Price, Qty, BookSide};
+    use sb_core::{BookSide, InstrumentSpec, Price, Qty};
 
     fn spec() -> InstrumentSpec {
         InstrumentSpec::new(2, 5, 10, 100, 0).unwrap()
@@ -255,8 +266,14 @@ mod tests {
         let mut book = OracleBook::new();
         let _spec = spec();
 
-        let bid1 = Level::new(Price::from_units(1000).unwrap(), Qty::from_units(100).unwrap());
-        let ask1 = Level::new(Price::from_units(1010).unwrap(), Qty::from_units(200).unwrap());
+        let bid1 = Level::new(
+            Price::from_units(1000).unwrap(),
+            Qty::from_units(100).unwrap(),
+        );
+        let ask1 = Level::new(
+            Price::from_units(1010).unwrap(),
+            Qty::from_units(200).unwrap(),
+        );
 
         book.apply_snapshot(&[bid1], &[ask1]);
 
@@ -271,15 +288,25 @@ mod tests {
         let _spec = spec();
 
         book.apply_snapshot(
-            &[Level::new(Price::from_units(1000).unwrap(), Qty::from_units(100).unwrap())],
-            &[Level::new(Price::from_units(1010).unwrap(), Qty::from_units(200).unwrap())],
+            &[Level::new(
+                Price::from_units(1000).unwrap(),
+                Qty::from_units(100).unwrap(),
+            )],
+            &[Level::new(
+                Price::from_units(1010).unwrap(),
+                Qty::from_units(200).unwrap(),
+            )],
         );
 
         // Update bid level
         book.apply_delta(
-            &[Level::new(Price::from_units(1000).unwrap(), Qty::from_units(150).unwrap())],
+            &[Level::new(
+                Price::from_units(1000).unwrap(),
+                Qty::from_units(150).unwrap(),
+            )],
             &[],
-        ).unwrap();
+        )
+        .unwrap();
 
         assert_eq!(book.best_bid().unwrap().qty.units(), 150);
     }
@@ -290,15 +317,22 @@ mod tests {
         let _spec = spec();
 
         book.apply_snapshot(
-            &[Level::new(Price::from_units(1000).unwrap(), Qty::from_units(100).unwrap())],
-            &[Level::new(Price::from_units(1010).unwrap(), Qty::from_units(200).unwrap())],
+            &[Level::new(
+                Price::from_units(1000).unwrap(),
+                Qty::from_units(100).unwrap(),
+            )],
+            &[Level::new(
+                Price::from_units(1010).unwrap(),
+                Qty::from_units(200).unwrap(),
+            )],
         );
 
         // Remove bid level (qty = 0)
         book.apply_delta(
             &[Level::new(Price::from_units(1000).unwrap(), Qty::ZERO)],
             &[],
-        ).unwrap();
+        )
+        .unwrap();
 
         assert_eq!(book.bid_levels(), 0);
         assert!(book.best_bid().is_none());
@@ -310,13 +344,22 @@ mod tests {
         let _spec = spec();
 
         book.apply_snapshot(
-            &[Level::new(Price::from_units(1000).unwrap(), Qty::from_units(100).unwrap())],
-            &[Level::new(Price::from_units(1010).unwrap(), Qty::from_units(200).unwrap())],
+            &[Level::new(
+                Price::from_units(1000).unwrap(),
+                Qty::from_units(100).unwrap(),
+            )],
+            &[Level::new(
+                Price::from_units(1010).unwrap(),
+                Qty::from_units(200).unwrap(),
+            )],
         );
 
         // Cross the book by moving bid above ask
         let result = book.apply_delta(
-            &[Level::new(Price::from_units(1020).unwrap(), Qty::from_units(50).unwrap())],
+            &[Level::new(
+                Price::from_units(1020).unwrap(),
+                Qty::from_units(50).unwrap(),
+            )],
             &[],
         );
 
@@ -330,13 +373,28 @@ mod tests {
 
         book.apply_snapshot(
             &[
-                Level::new(Price::from_units(1000).unwrap(), Qty::from_units(100).unwrap()),
-                Level::new(Price::from_units(990).unwrap(), Qty::from_units(200).unwrap()),
-                Level::new(Price::from_units(980).unwrap(), Qty::from_units(300).unwrap()),
+                Level::new(
+                    Price::from_units(1000).unwrap(),
+                    Qty::from_units(100).unwrap(),
+                ),
+                Level::new(
+                    Price::from_units(990).unwrap(),
+                    Qty::from_units(200).unwrap(),
+                ),
+                Level::new(
+                    Price::from_units(980).unwrap(),
+                    Qty::from_units(300).unwrap(),
+                ),
             ],
             &[
-                Level::new(Price::from_units(1010).unwrap(), Qty::from_units(100).unwrap()),
-                Level::new(Price::from_units(1020).unwrap(), Qty::from_units(200).unwrap()),
+                Level::new(
+                    Price::from_units(1010).unwrap(),
+                    Qty::from_units(100).unwrap(),
+                ),
+                Level::new(
+                    Price::from_units(1020).unwrap(),
+                    Qty::from_units(200).unwrap(),
+                ),
             ],
         );
 
@@ -359,12 +417,24 @@ mod tests {
 
         book.apply_snapshot(
             &[
-                Level::new(Price::from_units(1000).unwrap(), Qty::from_units(100).unwrap()),
-                Level::new(Price::from_units(990).unwrap(), Qty::from_units(200).unwrap()),
+                Level::new(
+                    Price::from_units(1000).unwrap(),
+                    Qty::from_units(100).unwrap(),
+                ),
+                Level::new(
+                    Price::from_units(990).unwrap(),
+                    Qty::from_units(200).unwrap(),
+                ),
             ],
             &[
-                Level::new(Price::from_units(1010).unwrap(), Qty::from_units(100).unwrap()),
-                Level::new(Price::from_units(1020).unwrap(), Qty::from_units(200).unwrap()),
+                Level::new(
+                    Price::from_units(1010).unwrap(),
+                    Qty::from_units(100).unwrap(),
+                ),
+                Level::new(
+                    Price::from_units(1020).unwrap(),
+                    Qty::from_units(200).unwrap(),
+                ),
             ],
         );
 
@@ -382,12 +452,24 @@ mod tests {
 
         book.apply_snapshot(
             &[
-                Level::new(Price::from_units(1000).unwrap(), Qty::from_units(100).unwrap()),
-                Level::new(Price::from_units(990).unwrap(), Qty::from_units(200).unwrap()),
+                Level::new(
+                    Price::from_units(1000).unwrap(),
+                    Qty::from_units(100).unwrap(),
+                ),
+                Level::new(
+                    Price::from_units(990).unwrap(),
+                    Qty::from_units(200).unwrap(),
+                ),
             ],
             &[
-                Level::new(Price::from_units(1010).unwrap(), Qty::from_units(100).unwrap()),
-                Level::new(Price::from_units(1020).unwrap(), Qty::from_units(200).unwrap()),
+                Level::new(
+                    Price::from_units(1010).unwrap(),
+                    Qty::from_units(100).unwrap(),
+                ),
+                Level::new(
+                    Price::from_units(1020).unwrap(),
+                    Qty::from_units(200).unwrap(),
+                ),
             ],
         );
 

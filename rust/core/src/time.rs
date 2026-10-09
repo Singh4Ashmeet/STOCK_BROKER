@@ -162,20 +162,32 @@ impl ManualClock {
 
     /// Set the wall clock to a specific timestamp.
     pub fn set_wall(&self, ts: TsNs) {
-        let mut guard = self.wall.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut guard = self
+            .wall
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         *guard = ts;
     }
 
     /// Advance the monotonic clock by nanoseconds.
     pub fn advance_mono(&self, ns: u64) {
-        let mut guard = self.mono.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut guard = self
+            .mono
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         *guard = guard.checked_add(ns).unwrap_or(u64::MAX);
     }
 
     /// Advance both wall and monotonic clocks.
     pub fn advance(&self, wall_ns: i64, mono_ns: u64) {
-        *self.wall.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = TsNs::from_nanos(wall_ns);
-        let mut guard = self.mono.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        *self
+            .wall
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = TsNs::from_nanos(wall_ns);
+        let mut guard = self
+            .mono
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         *guard = guard.checked_add(mono_ns).unwrap_or(u64::MAX);
     }
 }
@@ -188,11 +200,17 @@ impl Default for ManualClock {
 
 impl Clock for ManualClock {
     fn wall_ns(&self) -> TsNs {
-        *self.wall.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+        *self
+            .wall
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
     fn mono_ns(&self) -> u64 {
-        *self.mono.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+        *self
+            .mono
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 }
 
