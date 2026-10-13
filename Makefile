@@ -4,7 +4,7 @@
 
 .PHONY: help bootstrap up up-core up-bus down ps logs reset-data proto lint test \
         proto-lint proto-format proto-format-check proto-build proto-breaking proto-compile-check \
-        verify-infra ci-lint
+        verify-infra ci-lint java-build java-test java-verify java-docker
 
 # Default target
 help:
@@ -36,6 +36,12 @@ help:
 	@echo "  lint         Run linters (proto-lint + shellcheck)"
 	@echo "  ci-lint      Check GitHub Action pins and run actionlint"
 	@echo "  test         Run tests (no code exists yet)"
+	@echo ""
+	@echo "Java API targets:"
+	@echo "  java-build       Build Java API with Maven (compile + test)"
+	@echo "  java-test        Run Java unit + integration tests"
+	@echo "  java-verify      Full Java verify (build, test, spotbugs, checkstyle, jacoco)"
+	@echo "  java-docker      Build Java Docker image"
 	@echo ""
 	@echo "Examples:"
 	@echo "  make bootstrap       # First-time setup"
@@ -160,3 +166,19 @@ ci-lint:
 
 test:
 	@echo "test target: no application code exists yet"
+
+# ============================================================
+# Java API targets
+# ============================================================
+
+java-build:
+	@cd java && ./mvnw clean compile -B
+
+java-test:
+	@cd java && ./mvnw test -B
+
+java-verify:
+	@cd java && ./mvnw verify -B
+
+java-docker:
+	@docker build -t stockbroker/api:dev -f java/Dockerfile java/

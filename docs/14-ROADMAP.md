@@ -35,7 +35,7 @@ No fixed deadline. Effort is given in rough T-shirt sizes (S about 1 to 3 days, 
 1. `core` types, fixed-point, timestamps, instrument metadata. ✅
 2. Binance connector + normalizer (prints events); recorded-feed capture tool.
 3. Oracle book, optimized book, property tests, sequence/fault tests. ✅
-4. Metrics engine; criterion benchmarks; allocation tests; parser fuzz target.
+4. Metrics engine; allocation tests; property tests (100k cases) ✅ (criterion benchmarks & parser fuzz target pending)
 - **Exit:** property tests pass at 100k+ cases; book equals oracle; benchmarks published (parse, apply, metrics); zero hot-path allocations verified.
 
 ## Phase 2 - Rust service (M to L)

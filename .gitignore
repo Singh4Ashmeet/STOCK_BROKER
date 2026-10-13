@@ -6,9 +6,14 @@ build/
 out/
 .gradle/
 *.class
+.jqwik-database
 # Python
 __pycache__/
 *.pyc
+*.pyd
+*.so
+*.dylib
+*.egg-info/
 .venv/
 .pytest_cache/
 .mypy_cache/

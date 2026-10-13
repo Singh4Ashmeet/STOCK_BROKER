@@ -1,0 +1,60 @@
+# docker-compose.yml for Java API service
+# This file is included in the main docker-compose.yml via profiles
+
+services:
+  api:
+    image: stockbroker/api:dev
+    profiles: ["app"]
+    build:
+      context: ../java
+      dockerfile: ../java/Dockerfile
+    container_name: sb_api
+    restart: unless-stopped
+    environment:
+      - SB_API_BIND=0.0.0.0:8081
+      - SB_API_PROMETHEUS_PORT=8081
+      - SB_POSTGRES_HOST=postgres
+      - SB_POSTGRES_PORT=5432
+      - SB_POSTGRES_DB=stockbroker
+      - SB_POSTGRES_USER=sb_app
+      - SB_POSTGRES_PASSWORD=${SB_POSTGRES_APP_PASSWORD}
+      - SB_REDIS_HOST=redis
+      - SB_REDIS_PORT=6379
+      - SB_REDIS_PASSWORD=${SB_REDIS_PASSWORD}
+      - SB_FEED_HOST=feed
+      - SB_FEED_GRPC_PORT=9000
+      - SB_JWT_PRIVATE_KEY_PATH=/run/secrets/jwt_private_key
+      - SB_JWT_PUBLIC_KEY_PATH=/run/secrets/jwt_public_key
+      - SPRING_PROFILES_ACTIVE=demo
+    ports:
+      - "127.0.0.1:8081:8081"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - sb_internal
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    secrets:
+      - jwt_private_key
+      - jwt_public_key
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8081/api/v1/system/health || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 30s
+
+secrets:
+  jwt_private_key:
+    file: ../infra/secrets/jwt_private.key
+  jwt_public_key:
+    file: ../infra/secrets/jwt_public.key
