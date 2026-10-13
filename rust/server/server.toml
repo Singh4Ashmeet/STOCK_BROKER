@@ -1,0 +1,65 @@
+# sb-server configuration
+# All settings can be overridden via environment variables
+
+# gRPC listen address
+listen_addr = "[::1]:50051"
+
+# HTTP health/metrics listen address
+http_addr = "[::1]:9090"
+
+# Symbols to serve
+symbols = ["BINANCE:BTC-USDT", "BINANCE:ETH-USDT"]
+
+# Subscriber queue capacity (messages). Slow consumer triggers conflation when exceeded.
+subscriber_queue_capacity = 256
+
+# Maximum concurrent subscribers per symbol
+max_subscribers = 1000
+
+# Maximum depth levels allowed in subscribe request
+max_depth_levels = 100
+
+# Metrics engine configuration
+[metrics]
+depth_levels = 10
+vwap_window_secs = 60
+trade_flow_window_secs = 60
+
+# Observability configuration
+[observability]
+# Enable Prometheus metrics exporter on /metrics
+enable_prometheus = true
+prometheus_path = "/metrics"
+
+# Latency reporting interval (seconds) - exports HdrHistogram percentiles to Prometheus
+latency_report_interval_secs = 10
+
+# Cross-check interval (seconds) - 0 to disable
+# Periodically fetches REST snapshot from exchange and compares with local book
+cross_check_interval_secs = 60
+
+# Exchange REST endpoint template (use {symbol} placeholder)
+exchange_endpoint = "https://api.binance.com/api/v3/depth?symbol={symbol}&limit=20"
+
+# Number of top levels to compare in cross-check
+cross_check_depth = 10
+
+# Quantity tolerance for mismatch detection
+cross_check_qty_tolerance = 100
+
+# Instrument specifications (overrides exchange defaults)
+[[instruments]]
+symbol = "BINANCE:BTC-USDT"
+price_scale = 2
+qty_scale = 5
+tick_size = 10
+lot_size = 100
+min_notional = 10
+
+[[instruments]]
+symbol = "BINANCE:ETH-USDT"
+price_scale = 2
+qty_scale = 4
+tick_size = 10
+lot_size = 100
+min_notional = 10

@@ -3,12 +3,11 @@ resolver = "2"
 members = [
     "core",
     "book",       # Optimized order book and the BTreeMap oracle. No I/O, no async.
-    # Future members (Phase 1):
-    # "metrics",   # Incremental metrics (spread, mid, microprice, depth, imbalance, VWAP).
-    # "connectors", # Exchange trait + Binance implementation.
-    # "server",    # gRPC service, writer thread, config, health/metrics endpoint.
-    # "replay",    # Event-log reader and replay driver.
-    # "pybook",    # PyO3 bindings (maturin) for Python.
+    "connectors", # Exchange trait + Binance implementation.
+    "metrics",    # Incremental metrics (spread, mid, microprice, depth, imbalance, VWAP).
+    "replay",     # Event-log writer thread and replay driver.
+    "server",     # gRPC service, config, health/metrics endpoint.
+    "pybook",     # PyO3 bindings (maturin) for Python.
 ]
 
 exclude = [

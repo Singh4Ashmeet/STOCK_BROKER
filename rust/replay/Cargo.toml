@@ -1,0 +1,25 @@
+[package]
+name = "sb-replay"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+publish = false
+description = "Event-log writer thread (ADR-0006) and deterministic replay driver"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+sb-core = { path = "../core" }
+sb-book = { path = "../book" }
+sb-metrics = { path = "../metrics" }
+thiserror = { workspace = true }
+tracing = "0.1"
+crossbeam-channel = "0.5"
+zstd = "0.13"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+prost = "0.13"
+
+[dev-dependencies]
+proptest = { workspace = true }
+tempfile = "3.16"
+walkdir = "2.5"
