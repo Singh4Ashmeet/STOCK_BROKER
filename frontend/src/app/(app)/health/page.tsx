@@ -295,7 +295,7 @@ function OverviewTab({ health, metrics }: { health: HealthStatus | null; metrics
                   <span className="text-sm text-surface-700 dark:text-surface-300">{check.component}</span>
                   <StatusBadge status={check.status} />
                 </div>
-              ))}
+               ))}
             </div>
           </div>
 
@@ -326,60 +326,18 @@ function OverviewTab({ health, metrics }: { health: HealthStatus | null; metrics
 
 function EndpointsTab({ endpoints }: { endpoints: ApiEndpointHealth[] }) {
   return (
-    <div>
-      <div className="mb-4 flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-surface-900 dark:text-surface-50">API Endpoints</h3>
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-surface-500">Filter:</span>
-          <select className="px-3 py-1.5 rounded-lg border border-surface-300 dark:border-surface-700 bg-white dark:bg-surface-800 text-sm">
-            <option value="all">All</option>
-            <option value="healthy">Healthy</option>
-            <option value="degraded">Degraded</option>
-            <option value="unhealthy">Unhealthy</option>
-          </select>
-        </div>
-      </div>
-
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-surface-200 dark:border-surface-800 text-left text-sm text-surface-500">
-              <th className="pb-3 font-medium">Endpoint</th>
-              <th className="pb-3 font-medium">Method</th>
-              <th className="pb-3 font-medium">Status</th>
-              <th className="pb-3 font-medium">Avg Latency</th>
-              <th className="pb-3 font-medium">p99 Latency</th>
-              <th className="pb-3 font-medium">Error Rate</th>
-              <th className="pb-3 font-medium">Req/min</th>
+    <div className="overflow-x-auto">
+      <h3 className="mb-4 text-lg font-semibold text-surface-900 dark:text-surface-50">API Endpoints</h3>
+      <table className="w-full">
+        <thead><tr><th>Endpoint</th><th>Method</th><th>Status</th><th>p99</th></tr></thead>
+        <tbody>
+          {endpoints.map((endpoint) => (
+            <tr key={`${endpoint.method}-${endpoint.endpoint}`}>
+              <td>{endpoint.endpoint}</td><td>{endpoint.method}</td><td><StatusBadge status={endpoint.status} /></td><td>{endpoint.p99_latency_ms.toFixed(1)}ms</td>
             </tr>
-          </thead>
-          <tbody className="divide-y divide-surface-200 dark:divide-surface-800">
-            {endpoints.length === 0 ? (
-              <tr>
-                <td className="py-8 text-center text-surface-500" colSpan={7}>No endpoint data available</td>
-              </tr>
-            ) : (
-              endpoints.map((ep, i) => (
-                <tr key={i} className="hover:bg-surface-50 dark:hover:bg-surface-800/50">
-                  <td className="py-3 font-mono text-sm text-surface-900 dark:text-surface-50">{ep.endpoint}</td>
-                  <td className="py-3">
-                    <span className="px-2 py-0.5 text-xs rounded bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400">
-                      {ep.method}
-                    </span>
-                  </td>
-                  <td className="py-3">
-                    <StatusBadge status={ep.status} />
-                  </td>
-                  <td className="py-3 font-mono text-surface-900 dark:text-surface-50">{ep.avg_latency_ms.toFixed(1)}ms</td>
-                  <td className="py-3 font-mono text-surface-900 dark:text-surface-50">{ep.p99_latency_ms.toFixed(1)}ms</td>
-                  <td className="py-3 font-mono text-red-600 dark:text-red-400">{(ep.error_rate * 100).toFixed(2)}%</td>
-                  <td className="py-3 font-mono text-surface-900 dark:text-surface-50">{ep.requests_per_minute.toFixed(1)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

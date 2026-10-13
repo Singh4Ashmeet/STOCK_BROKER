@@ -187,7 +187,7 @@ export default function WatchlistPage() {
                       onClick={() => { setActiveSymbol(symbol); setShowDetail(true); }}
                       onRemove={() => removeFromWatchlist(symbol)}
                     />
-                  ))}
+                  ))
                 )}
               </div>
             </div>

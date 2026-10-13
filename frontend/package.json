@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "type-check": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
     "generate:api": "openapi-typescript http://localhost:8081/api/api-docs -o src/lib/api/schema.ts",
     "generate:ws": "tsx scripts/generate-ws-types.ts"
   },

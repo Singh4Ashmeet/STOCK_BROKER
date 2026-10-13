@@ -361,7 +361,7 @@ export default function AlertsPage() {
               ) : alerts.length === 0 ? (
                 <tr>
                   <td className="py-8 text-center text-surface-500" colSpan={9}>
-                    No alerts yet. Click "Create Alert" to get started.
+                    No alerts yet. Click &quot;Create Alert&quot; to get started.
                   </td>
                 </tr>
               ) : (

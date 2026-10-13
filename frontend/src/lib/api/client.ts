@@ -192,7 +192,7 @@ export const researchApi = {
     search.set('offset', offset.toString());
     return request<{ jobs: Array<{ job_id: string; type: string; status: string; created_at: string }> }>(
       `/backtests?${search.toString()}`
-    ),
+    );
   },
 };
 

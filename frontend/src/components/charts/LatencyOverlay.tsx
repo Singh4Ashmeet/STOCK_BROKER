@@ -18,6 +18,8 @@ export function LatencyOverlay({
   const performance = useMarketStore(selectPerformanceMetrics);
   const connection = useMarketStore(selectConnectionStatus);
   const [expanded, setExpanded] = useState(false);
+  const sparklineRef = useRef<HTMLCanvasElement>(null);
+  const histogramRef = useRef<HTMLCanvasElement>(null);
 
   const positionClasses = {
     'top-right': 'top-4 right-4',
@@ -26,8 +28,7 @@ export function LatencyOverlay({
     'bottom-left': 'bottom-4 left-4',
   };
 
-  if (compact) {
-    return (
+  const compactContent = compact ? (
       <div className={`fixed ${positionClasses[position]} z-50`}>
         <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-mono ${
           latencyStats.p99 < 50 ? 'bg-green-900/90 text-green-100' :
@@ -54,8 +55,7 @@ export function LatencyOverlay({
           </span>
         </div>
       </div>
-    );
-  }
+  ) : null;
 
   const latencyHistory = useMemo(() => {
     // Generate recent latency samples for sparkline
@@ -76,7 +76,7 @@ export function LatencyOverlay({
     connection.status === 'connecting' ? '◐' :
     connection.status === 'resyncing' ? '⟳' : '○';
 
-  return (
+  const fullContent = (
     <div className={`fixed ${positionClasses[position]} z-50`}>
       <div 
         className="bg-surface-950/95 dark:bg-surface-950/95 backdrop-blur-sm rounded-xl border shadow-xl overflow-hidden"
@@ -203,14 +203,11 @@ export function LatencyOverlay({
                 </div>
               </div>
             </div>
-          }
+          )}
         </div>
       </div>
     </div>
   );
-
-  const sparklineRef = useRef<HTMLCanvasElement>(null);
-  const histogramRef = useRef<HTMLCanvasElement>(null);
 
   // Draw sparkline
   useEffect(() => {
@@ -320,7 +317,7 @@ export function LatencyOverlay({
     });
   }, []);
 
-  return null;
+  return compactContent ?? fullContent;
 }
 
 function StatBox({ label, value, unit, color }: { label: string; value: string; unit?: string; color: 'green' | 'yellow' | 'red' | 'blue' }) {
