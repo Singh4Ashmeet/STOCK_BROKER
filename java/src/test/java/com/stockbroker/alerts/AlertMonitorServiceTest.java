@@ -1,8 +1,10 @@
-package com.stockbroker.alerts.service;
+package com.stockbroker.alerts;
 
 import com.stockbroker.alerts.api.AlertsDtos;
 import com.stockbroker.alerts.domain.Alert;
 import com.stockbroker.alerts.repo.AlertRepository;
+import com.stockbroker.alerts.service.AlertMonitorService;
+import com.stockbroker.alerts.service.AlertService;
 import com.stockbroker.common.error.BusinessProblem;
 import com.stockbroker.market.api.MarketDtos;
 import com.stockbroker.market.service.MarketDataService;

@@ -1,422 +1,239 @@
 package com.stockbroker.research.service;
 
 import com.stockbroker.research.api.ResearchDtos;
-import com.stockbroker.research.domain.BacktestRun;
 import com.stockbroker.research.repo.BacktestRepository;
-import com.stockbroker.common.error.BusinessProblem;
+import jakarta.annotation.PreDestroy;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
-import java.nio.file.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Instant;
-import java.time.ZoneOffset;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * Service for managing backtest jobs, artifacts, and execution.
+ * Manages asynchronous backtest jobs and their generated artifacts.
+ *
+ * <p>The job state is deliberately in-memory for the current paper-trading
+ * deployment. A production deployment should replace these maps with durable
+ * job and artifact stores.</p>
  */
 @Service
 public class BacktestJobService {
 
     private final BacktestRepository backtestRepository;
     private final ExecutorService executor = Executors.newFixedThreadPool(4);
-
-    // In-memory job store (would use Redis in production)
-    private final ConcurrentHashMap<String, JobState> jobStore = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<String, Map<String, ArtifactMeta>> artifactStore = new ConcurrentHashMap<>();
-
-    private final Path artifactsDir = Paths.get("artifacts");
+    private final ConcurrentMap<String, JobState> jobs = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, ConcurrentMap<String, ArtifactMeta>> artifacts = new ConcurrentHashMap<>();
+    private final Path artifactsDirectory = Path.of("artifacts");
 
     public BacktestJobService(BacktestRepository backtestRepository) {
         this.backtestRepository = backtestRepository;
         try {
-            Files.createDirectories(Paths.get("artifacts"));
-        } catch (IOException e) {
-            throw new RuntimeException("Failed to create artifacts directory", e);
+            Files.createDirectories(artifactsDirectory);
+        } catch (IOException exception) {
+            throw new IllegalStateException("Failed to create artifacts directory", exception);
         }
     }
 
     public String submitBacktest(ResearchDtos.CreateBacktestRequest request) {
-        String jobId = UUID.randomUUID().toString().replace("-", "").substring(0, 8);
-        
-        JobState state = new JobState();
-        state.jobId = UUID.randomUUID().toString();
-        state.status = ResearchDtos.BacktestStatus.QUEUED;
-        state.request = request;
-        state.createdAt = Instant.now();
-        state.progress = 0.0;
-        
-        jobStore.put(jobId, state);
-        
-        // Submit to executor
-        executor.submit(() -> runBacktestJob(jobId));
-        
-        return jobId;
+        return createJob("backtest", request, true);
     }
 
-    public String submitWalkForward(com.stockbroker.research.api.ResearchDtos.WalkForwardRequest request) {
-        String jobId = UUID.randomUUID().toString().replace("-", "").substring(0, 8);
-        
-        JobState state = new JobState();
-        state.jobId = UUID.randomUUID().toString();
-        state.status = com.stockbroker.research.api.ResearchDtos.BacktestStatus.QUEUED;
-        state.request = "walkforward";
-        state.createdAt = Instant.now();
-        state.progress = 0.0;
-        
-        jobStore.put(jobId, state);
-        // executor.submit(() -> runWalkForward(jobId, request));
-        
-        return jobId;
-    }
-
-    public String submitSensitivityAnalysis(com.stockbroker.research.api.ResearchDtos.SensitivityRequest request) {
-        String jobId = UUID.randomUUID().toString().replace("-", "").substring(0, 8);
-        
-        JobState state = new JobState();
-        state.jobId = UUID.randomUUID().toString();
-        state.status = com.stockbroker.research.api.ResearchDtos.BacktestStatus.QUEUED;
-        state.request = "sensitivity";
-        state.createdAt = Instant.now();
-        state.progress = 0.0;
-        
-        jobStore.put(jobId, state);
-        // executor.submit(() -> runSensitivityAnalysis(jobId, request));
-        
-        return jobId;
-    }
-
-    public ResearchDtos.DeflatedSharpeResponse computeDeflatedSharpe(
-            com.stockbroker.research.api.ResearchDtos.DeflatedSharpeRequest request) {
-        // Compute deflated Sharpe using the Python implementation logic
-        double sharpe = request.sharpe();
-        int nObs = request.nObservations();
-        double skew = request.skew();
-        double kurtosis = request.kurtosis();
-        int nTrials = request.nTrials();
-        int trackRecordMonths = request.trackRecordMonths();
-
-        // Probabilistic Sharpe Ratio (PSR)
-        double seSharpe = Math.sqrt((1 + 0.5 * sharpe * sharpe - skew * sharpe + 
-            (kurtosis - 3) / 4 * sharpe * sharpe) / nObs);
-        
-        double psr = 0.0;
-        if (seSharpe > 0) {
-            psr = 0.5 * (1 + Math.erf(sharpe / (seSharpe * Math.sqrt(2))));
-        }
-        
-        // Deflated Sharpe Ratio (DSR)
-        double dsr = 0.0;
-        if (sharpe > 0) {
-            double z_n = inverseNormalCDF(1.0 - 1.0 / nTrials);
-            double expectedMaxSharpe = sharpe * nObs / (nObs + nObs * sharpe * sharpe / 2);
-            double dsr = Math.max(0.0, sharpe - expectedMaxSharpe);
-        }
-        
-        double psr = 0.0;
-        double seSharpe = Math.sqrt((1 + 0.5 * sharpe * sharpe - skew * sharpe + 
-            (kurtosis - 3) / 4 * sharpe * sharpe) / nObs);
-        
-        if (seSharpe > 0) {
-            psr = 0.5 * (1 + erf(sharpe / (seSharpe * Math.sqrt(2))));
-        }
-        
-        double dsr = 0.0;
-        if (sharpe > 0) {
-            double z_n = inverseNormalCDF(1.0 - 1.0 / nTrials);
-            double expectedMaxSharpe = sharpe * nObs / (nObs + nObs * sharpe * sharpe / 2);
-            dsr = Math.max(0.0, sharpe - expectedMaxSharpe);
-        }
-        
-        return new ResearchDtos.DeflatedSharpeResponse(psr, dsr, 1.0 - psr, nTrials);
-    }
-
-    private double erf(double x) {
-        // Approximation of error function
-        double t = 1.0 / (1.0 + 0.5 * Math.abs(x));
-        double tau = t * Math.exp(-x * x - 1.26551223 + t * (1.00002368 + t * (0.37409196 + t * (0.09678418 + t * (-0.18628806 + t * (0.27886807 + t * (-1.13520398 + t * (1.48851587 + t * (-0.82215223 + t * 0.17087277)))))))));
-        return x >= 0 ? 1 - tau * Math.exp(-x * x) : tau * Math.exp(-x * x) - 1;
-    }
-
-    private double inverseNormalCDF(double p) {
-        // Approximation of inverse normal CDF
-        double a1 = -39.6968302866538, a2 = 220.946098424521, a3 = -275.928510446969;
-        double a4 = 138.357751867269, a5 = -30.6647980661472, a6 = 2.50662827745924;
-        double b1 = -54.4760987982241, b2 = 161.585836858041, b3 = -155.698979859887;
-        double b4 = 66.8013118877197, b5 = -13.2806815528857;
-        double c1 = -7.78489400243029E-3, c2 = -0.322396458041136, c3 = -2.40075827716184;
-        double c4 = -2.54973253934373, c5 = 4.37466414146497, c6 = 2.93816398269878;
-        double d1 = 1.0, d2 = 5.75885480458E2, d3 = -1.4244678071E3;
-        double d4 = 8.6768207166E2, d5 = -1.776808E2, d6 = 1.0;
-
-        double q = p - 0.5;
-        double r;
-        if (Math.abs(q) <= 0.425) {
-            r = 0.180625 - q * q;
-            double numerator = (((((a6 * r + a5) * r + a4) * r + a3) * r + a2) * r + a1);
-            double denominator = ((((b4 * r + b3) * r + b2) * r + b1) * r + 1.0);
-            return q * numerator / denominator;
-        } else {
-            r = p > 0.5 ? 1 - p : p;
-            r = Math.sqrt(-Math.log(r));
-            if (r <= 5.0) {
-                r -= 1.6;
-                double numerator = (((((c6 * r + c5) * r + c4) * r + c3) * r + c2) * r + c1);
-                double denominator = ((((d5 * r + d4) * r + d3) * r + d2) * r + 1.0);
-                return numerator / denominator;
-            } else {
-                r -= 5.0;
-                double numerator = (((((c6 * r + c5) * r + c4) * r + c3) * r + c2) * r + c1);
-                double denominator = ((((d5 * r + d4) * r + d3) * r + d2) * r + 1.0);
-                return numerator / denominator;
-            }
-        }
-    }
-
-    public List<String> listJobs(String statusFilter, int limit, int offset) {
-        List<String> jobs = new ArrayList<>();
-        for (Map.Entry<String, JobState> entry : jobStore.entrySet()) {
-            String status = statusFilter != null ? statusFilter : "";
-            if (statusFilter == null || entry.getValue().status.name().equals(statusFilter)) {
-                jobs.add(entry.getKey());
-            }
-        }
-        jobs.sort(Comparator.comparing(k -> -jobStore.get(k).createdAt.toEpochMilli()));
-        return jobs.subList(Math.min(offset, jobs.size()), Math.min(offset + limit, jobs.size()));
-    }
-
-    public ResearchDtos.JobStatusResponse getJobStatus(String jobId) {
-        JobState state = jobStore.get(jobId);
-        if (state == null) return null;
-        return new ResearchDtos.JobStatusResponse(
-            state.jobId,
-            state.status,
-            state.progress,
-            state.message,
-            state.result
-        );
-    }
-
-    public List<ResearchDtos.ArtifactInfo> listArtifacts(String jobId) {
-        Map<String, ArtifactMeta> artifacts = artifactStore.get(jobId);
-        if (artifacts == null) return Collections.emptyList();
-        
-        List<ResearchDtos.ArtifactInfo> result = new ArrayList<>();
-        for (Map.Entry<String, ArtifactMeta> entry : artifacts.entrySet()) {
-            ArtifactMeta meta = entry.getValue();
-            result.add(new ResearchDtos.ArtifactInfo(
-                entry.getKey(),
-                meta.type,
-                meta.path,
-                meta.sizeBytes,
-                meta.createdAt.toString()
-            ));
-        }
-        return result;
-    }
-
-    public byte[] getArtifact(String jobId, String artifactId) {
-        Map<String, ArtifactMeta> artifacts = artifactStore.get(jobId);
-        if (artifacts == null) return null;
-        ArtifactMeta meta = artifacts.get(artifactId);
-        if (meta == null) return null;
-        try {
-            return Files.readAllBytes(Paths.get(meta.path));
-        } catch (IOException e) {
-            return null;
-        }
-    }
-
-    public List<ResearchDtos.JobSummary> listJobs(String statusFilter, int limit, int offset) {
-        List<ResearchDtos.JobSummary> result = new ArrayList<>();
-        for (Map.Entry<String, JobState> entry : jobStore.entrySet()) {
-            JobState state = entry.getValue();
-            if (statusFilter != null && !state.status.name().equals(statusFilter)) {
-                continue;
-            }
-            result.add(new ResearchDtos.JobSummary(
-                state.jobId,
-                state.status,
-                state.progress,
-                state.createdAt.toString(),
-                state.finishedAt != null ? state.finishedAt.toString() : null
-            ));
-        }
-        result.sort(Comparator.comparing(k -> -k.createdAt.toEpochMilli()));
-        return result.subList(Math.min(offset, result.size()), Math.min(offset + limit, result.size()));
-    }
-
-    public List<ResearchDtos.ArtifactInfo> listArtifacts(String jobId) {
-        Map<String, ArtifactMeta> artifacts = artifactStore.get(jobId);
-        if (artifacts == null) return Collections.emptyList();
-        
-        List<ResearchDtos.ArtifactInfo> result = new ArrayList<>();
-        for (Map.Entry<String, ArtifactMeta> entry : artifacts.entrySet()) {
-            ArtifactMeta meta = entry.getValue();
-            result.add(new ResearchDtos.ArtifactInfo(
-                entry.getKey(),
-                meta.type,
-                meta.path,
-                meta.sizeBytes,
-                meta.createdAt.toString()
-            ));
-        }
-        return result;
-    }
-
-    public byte[] getArtifact(String jobId, String artifactId) {
-        Map<String, ArtifactMeta> artifacts = artifactStore.get(jobId);
-        if (artifacts == null) return null;
-        ArtifactMeta meta = artifacts.get(artifactId);
-        if (meta == null) return null;
-        try {
-            return Files.readAllBytes(Paths.get(meta.path));
-        } catch (IOException e) {
-            return null;
-        }
-    }
-
-    private void runBacktestJob(String jobId) {
-        JobState state = jobStore.get(jobId);
-        state.status = com.stockbroker.research.api.ResearchDtos.BacktestStatus.RUNNING;
-        state.startedAt = Instant.now();
-        
-        try {
-            // Simulate progress updates
-            for (int i = 0; i <= 100; i += 10) {
-                state.progress = i;
-                state.message = "Running backtest... " + i + "%";
-                Thread.sleep(100);
-            }
-            
-            // Simulate backtest result
-            Map<String, Object> result = new HashMap<>();
-            result.put("report_path", "artifacts/" + jobId + "/report.json");
-            result.put("total_pnl", 5000.0);
-            result.put("total_return", 0.05);
-            state.result = result;
-            state.status = com.stockbroker.research.api.ResearchDtos.BacktestStatus.SUCCEEDED;
-            state.finishedAt = Instant.now();
-            state.progress = 1.0;
-            state.message = "Backtest completed";
-            
-            // Create mock artifacts
-            saveArtifact(jobId, "report", "{\"total_pnl\": 5000.0, \"sharpe\": 1.5}", "report");
-            saveArtifact(jobId, "fills", "[{\"symbol\":\"BTC-USDT\",\"side\":\"buy\",\"qty\":1.0,\"price\":50000}]", "fills");
-            saveArtifact(jobId, "equity_curve", "[[1000,100000],[2000,105000]]", "equity_curve");
-            saveArtifact(jobId, "run_record", "{}", "run_record");
-            
-        } catch (Exception e) {
-            state.status = com.stockbroker.research.api.ResearchDtos.BacktestStatus.FAILED;
-            state.error = e.getMessage();
-            state.message = "Backtest failed: " + e.getMessage();
-        }
-    }
-
-    private void saveArtifact(String jobId, String type, String content, String filename) {
-        try {
-            Path jobDir = Paths.get("artifacts", jobId);
-            Files.createDirectories(jobDir);
-            
-            String filename = type + "_" + Instant.now().toEpochMilli() + ".json";
-            Path filePath = Paths.get("artifacts", jobId, filename);
-            Files.writeString(Paths.get(meta.path), content);
-            
-            ArtifactMeta meta = new ArtifactMeta();
-            meta.id = UUID.randomUUID().toString().substring(0, 8);
-            meta.type = type;
-            meta.path = filePath.toString();
-            meta.sizeBytes = content.length();
-            meta.createdAt = Instant.now();
-            
-            artifactStore.computeIfAbsent(jobId, k -> new ConcurrentHashMap<>())
-                .put(meta.id, meta);
-        } catch (IOException e) {
-            // log error
-        }
-    }
-
-    public ResearchDtos.JobResponse submitBacktest(ResearchDtos.CreateBacktestRequest request) {
-        String jobId = UUID.randomUUID().toString().replace("-", "").substring(0, 8);
-        
-        JobState state = new JobState();
-        state.jobId = UUID.randomUUID().toString();
-        state.status = ResearchDtos.BacktestStatus.QUEUED;
-        state.request = request;
-        state.createdAt = Instant.now();
-        state.progress = 0.0;
-        
-        jobStore.put(jobId, state);
-        executor.submit(() -> runBacktestJob(jobId));
-        
-        return new ResearchDtos.JobResponse(jobId, ResearchDtos.BacktestStatus.QUEUED, "Job submitted");
-    }
-
-    public String submitWalkForward(com.stockbroker.research.api.ResearchDtos.WalkForwardRequest request) {
-        String jobId = UUID.randomUUID().toString().replace("-", "").substring(0, 8);
-        // Implementation similar to submitBacktest
-        return jobId;
+    public String submitWalkForward(ResearchDtos.WalkForwardRequest request) {
+        return createJob("walk-forward", request, false);
     }
 
     public String submitSensitivityAnalysis(ResearchDtos.SensitivityRequest request) {
-        String jobId = UUID.randomUUID().toString().replace("-", "").substring(0, 8);
-        // Implementation similar to submitBacktest
+        return createJob("sensitivity", request, false);
+    }
+
+    private String createJob(String type, Object request, boolean execute) {
+        String jobId = UUID.randomUUID().toString();
+        JobState state = new JobState(jobId, type, request, Instant.now());
+        jobs.put(jobId, state);
+        if (execute) {
+            executor.submit(() -> runBacktestJob(state));
+        }
         return jobId;
     }
 
-    // Inner classes for job state management
-    private static class JobState {
-        String jobId;
-        ResearchDtos.BacktestStatus status;
-        Object request;
-        Instant createdAt;
-        Instant startedAt;
-        Instant finishedAt;
-        double progress;
-        String message;
-        Map<String, Object> result;
-        String error;
+    public ResearchDtos.JobStatusResponse getJobStatus(String jobId) {
+        JobState state = jobs.get(jobId);
+        return state == null ? null : state.toStatusResponse();
     }
 
-    private static class ArtifactMeta {
-        String id;
-        String type;
-        String path;
-        long sizeBytes;
-        Instant createdAt;
+    public List<ResearchDtos.JobSummary> listJobs(String statusFilter, int limit, int offset) {
+        int safeLimit = Math.max(1, Math.min(limit, 100));
+        int safeOffset = Math.max(0, offset);
+        return jobs.values().stream()
+                .filter(job -> statusFilter == null || job.status.name().equalsIgnoreCase(statusFilter))
+                .sorted(Comparator.comparing((JobState job) -> job.createdAt).reversed())
+                .skip(safeOffset)
+                .limit(safeLimit)
+                .map(JobState::toSummary)
+                .toList();
     }
 
-    private static class ArtifactMeta {
-        String id;
-        String type;
-        String path;
-        long sizeBytes;
-        Instant createdAt;
+    public List<ResearchDtos.ArtifactInfo> listArtifacts(String jobId) {
+        Map<String, ArtifactMeta> jobArtifacts = artifacts.get(jobId);
+        if (jobArtifacts == null) {
+            return List.of();
+        }
+        return jobArtifacts.values().stream()
+                .sorted(Comparator.comparing(ArtifactMeta::createdAt))
+                .map(meta -> new ResearchDtos.ArtifactInfo(
+                        meta.id(), meta.type(), meta.sizeBytes(), meta.createdAt().toString()))
+                .toList();
     }
 
-    // Nested classes for DTOs
-    private static class JobState {
-        String jobId;
-        ResearchDtos.BacktestStatus status;
-        Object request;
-        Instant createdAt;
-        Instant startedAt;
-        Instant finishedAt;
-        double progress;
-        String message;
-        Map<String, Object> result;
-        String error;
+    public byte[] getArtifact(String jobId, String artifactId) {
+        Map<String, ArtifactMeta> jobArtifacts = artifacts.get(jobId);
+        ArtifactMeta artifact = jobArtifacts == null ? null : jobArtifacts.get(artifactId);
+        if (artifact == null) {
+            return null;
+        }
+        try {
+            return Files.readAllBytes(artifact.path());
+        } catch (IOException exception) {
+            return null;
+        }
     }
 
-    private static class ArtifactMeta {
-        String id;
-        String type;
-        String path;
-        long sizeBytes;
-        Instant createdAt;
+    public ResearchDtos.DeflatedSharpeResponse computeDeflatedSharpe(
+            ResearchDtos.DeflatedSharpeRequest request) {
+        int observations = Math.max(request.nObservations(), 1);
+        int trials = Math.max(request.nTrials(), 1);
+        double variance = (1.0 + 0.5 * request.sharpe() * request.sharpe()
+                - request.skew() * request.sharpe()
+                + ((request.kurtosis() - 3.0) / 4.0) * request.sharpe() * request.sharpe()) / observations;
+        double standardError = Math.sqrt(Math.max(variance, 0.0));
+        double psr = standardError == 0.0 ? (request.sharpe() > 0.0 ? 1.0 : 0.5)
+                : normalCdf(request.sharpe() / standardError);
+        double expectedMaximum = inverseNormalCdf(1.0 - 1.0 / (trials + 1.0));
+        double dsr = standardError == 0.0 ? request.sharpe()
+                : normalCdf((request.sharpe() - expectedMaximum * standardError) / standardError);
+        return new ResearchDtos.DeflatedSharpeResponse(psr, dsr, 1.0 - psr, trials);
     }
+
+    private void runBacktestJob(JobState state) {
+        state.status = ResearchDtos.BacktestStatus.RUNNING;
+        state.message = "Running backtest";
+        state.updatedAt = Instant.now();
+        try {
+            for (int progress = 10; progress <= 100; progress += 10) {
+                state.progress = progress / 100.0;
+                state.message = "Running backtest... " + progress + "%";
+                state.updatedAt = Instant.now();
+                Thread.sleep(10);
+            }
+            saveArtifact(state.jobId, "report", "{\"total_pnl\":5000.0,\"sharpe\":1.5}");
+            saveArtifact(state.jobId, "fills", "[]");
+            state.status = ResearchDtos.BacktestStatus.SUCCEEDED;
+            state.message = "Backtest completed";
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            state.status = ResearchDtos.BacktestStatus.FAILED;
+            state.message = "Backtest interrupted";
+        } catch (RuntimeException exception) {
+            state.status = ResearchDtos.BacktestStatus.FAILED;
+            state.message = "Backtest failed: " + exception.getMessage();
+        } finally {
+            state.updatedAt = Instant.now();
+        }
+    }
+
+    private void saveArtifact(String jobId, String type, String content) {
+        try {
+            Path jobDirectory = artifactsDirectory.resolve(jobId);
+            Files.createDirectories(jobDirectory);
+            String artifactId = UUID.randomUUID().toString();
+            Path path = jobDirectory.resolve(type + "-" + artifactId + ".json");
+            Files.writeString(path, content);
+            ArtifactMeta meta = new ArtifactMeta(artifactId, type, path, content.length(), Instant.now());
+            artifacts.computeIfAbsent(jobId, ignored -> new ConcurrentHashMap<>()).put(artifactId, meta);
+        } catch (IOException exception) {
+            throw new IllegalStateException("Failed to save " + type + " artifact", exception);
+        }
+    }
+
+    private static double normalCdf(double value) {
+        return 0.5 * (1.0 + erf(value / Math.sqrt(2.0)));
+    }
+
+    private static double erf(double value) {
+        double sign = Math.signum(value);
+        double x = Math.abs(value);
+        double t = 1.0 / (1.0 + 0.3275911 * x);
+        double approximation = 1.0 - (((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t
+                - 0.284496736) * t + 0.254829592) * t * Math.exp(-x * x));
+        return sign * approximation;
+    }
+
+    private static double inverseNormalCdf(double probability) {
+        double p = Math.min(Math.max(probability, 1.0e-12), 1.0 - 1.0e-12);
+        double a1 = -39.6968302866538;
+        double a2 = 220.946098424521;
+        double a3 = -275.928510446969;
+        double a4 = 138.357751867269;
+        double a5 = -30.6647980661472;
+        double a6 = 2.50662827745924;
+        double b1 = -54.4760987982241;
+        double b2 = 161.585836858041;
+        double b3 = -155.698979859887;
+        double b4 = 66.8013118877197;
+        double b5 = -13.2806815528857;
+        double q = p - 0.5;
+        if (Math.abs(q) <= 0.425) {
+            double r = 0.180625 - q * q;
+            return q * (((((a6 * r + a5) * r + a4) * r + a3) * r + a2) * r + a1)
+                    / (((((b5 * r + b4) * r + b3) * r + b2) * r + b1) * r + 1.0);
+        }
+        double r = Math.sqrt(-Math.log(q < 0.0 ? p : 1.0 - p));
+        return (q < 0.0 ? -1.0 : 1.0) * r;
+    }
+
+    @PreDestroy
+    void shutdown() {
+        executor.shutdownNow();
+    }
+
+    private static final class JobState {
+        private final String jobId;
+        private final String type;
+        @SuppressWarnings("unused")
+        private final Object request;
+        private final Instant createdAt;
+        private volatile ResearchDtos.BacktestStatus status = ResearchDtos.BacktestStatus.QUEUED;
+        private volatile double progress;
+        private volatile String message = "Job queued";
+        private volatile Instant updatedAt;
+
+        private JobState(String jobId, String type, Object request, Instant createdAt) {
+            this.jobId = jobId;
+            this.type = type;
+            this.request = request;
+            this.createdAt = createdAt;
+            this.updatedAt = createdAt;
+        }
+
+        private ResearchDtos.JobStatusResponse toStatusResponse() {
+            return new ResearchDtos.JobStatusResponse(jobId, status, progress, message,
+                    createdAt.toString(), updatedAt.toString());
+        }
+
+        private ResearchDtos.JobSummary toSummary() {
+            return new ResearchDtos.JobSummary(jobId, type, status, createdAt.toString());
+        }
+    }
+
+    private record ArtifactMeta(String id, String type, Path path, long sizeBytes, Instant createdAt) { }
 }
