@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FindBugsFilter>
+    <!-- Exclude generated code -->
+    <Match>
+        <Class name="~.*\.jooq\..*"/>
+    </Match>
+    <Match>
+        <Class name="~.*\.protobuf\..*"/>
+    </Match>
+
+    <!-- Exclude test classes -->
+    <Match>
+        <Class name="~.*Test.*"/>
+    </Match>
+    <Match>
+        <Class name="~.*IntegrationTest.*"/>
+    </Match>
+
+    <!-- Exclude specific false positives -->
+    <Match>
+        <Bug code="EI_EXPOSE_REP"/>
+        <Or>
+            <Method name="get.*"/>
+            <Method name="set.*"/>
+        </Or>
+    </Match>
+
+    <Match>
+        <Bug code="EI_EXPOSE_REP2"/>
+        <Or>
+            <Method name="get.*"/>
+            <Method name="set.*"/>
+        </Or>
+    </Match>
+
+    <!-- Allow mutable DTOs for Jackson -->
+    <Match>
+        <Bug code="EI_EXPOSE_REP"/>
+        <Class name="~.*\.api\..*"/>
+    </Match>
+    <Match>
+        <Bug code="EI_EXPOSE_REP2"/>
+        <Class name="~.*\.api\..*"/>
+    </Match>
+
+    <!-- Allow non-final fields in entities -->
+    <Match>
+        <Bug code="MS_SHOULD_BE_FINAL"/>
+        <Class name="~.*\.domain\..*"/>
+    </Match>
+
+    <!-- Allow records (they're immutable) -->
+    <Match>
+        <Bug code="URF_UNREAD_PUBLIC_OR_PROTECTED_FIELD"/>
+    </Match>
+</FindBugsFilter>

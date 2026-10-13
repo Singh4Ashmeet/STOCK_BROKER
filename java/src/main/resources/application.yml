@@ -1,0 +1,175 @@
+# Spring Boot configuration for Stock Broker API
+# Environment-specific overrides should be provided via environment variables or .env files
+
+spring:
+  application:
+    name: stockbroker-api
+
+  # Virtual threads (Java 21+)
+  threads:
+    virtual:
+      enabled: true
+
+  # Jackson configuration
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+    deserialization:
+      fail-on-unknown-properties: true
+    default-property-inclusion: non_null
+
+  # Datasource (PostgreSQL)
+  datasource:
+    url: jdbc:postgresql://${SB_POSTGRES_HOST:localhost}:${SB_POSTGRES_PORT:5432}/${SB_POSTGRES_DB:stockbroker}
+    username: ${SB_POSTGRES_USER:sb_app}
+    password: ${SB_POSTGRES_PASSWORD}
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      leak-detection-threshold: 60000
+
+  # Flyway migrations
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    validate-on-migrate: true
+    out-of-order: false
+
+  # Redis
+  data:
+    redis:
+      host: ${SB_REDIS_HOST:localhost}
+      port: ${SB_REDIS_PORT:6379}
+      password: ${SB_REDIS_PASSWORD}
+      timeout: 5000ms
+      lettuce:
+        pool:
+          max-active: 20
+          max-idle: 10
+          min-idle: 2
+          max-wait: 2000ms
+
+  # RSocket (for WebSocket fan-out if needed)
+  rsocket:
+    server:
+      port: 7000
+      transport: websocket
+      mapping-path: /rsocket
+
+  # SQL logging (disable in production)
+  jpa:
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+
+# Server configuration
+server:
+  port: ${SB_API_PORT:8081}
+  servlet:
+    context-path: /api
+  compression:
+    enabled: true
+    mime-types: application/json,application/problem+json
+  forward-headers-strategy: native
+
+# Management endpoints (Actuator)
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: when-authorized
+      probes:
+        enabled: true
+    prometheus:
+      enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    export:
+      prometheus:
+        enabled: true
+    distribution:
+      percentiles-histogram:
+        "[http.server.requests]": true
+      percentiles:
+        "[http.server.requests]": 0.5, 0.9, 0.95, 0.99
+      sla:
+        "[http.server.requests]": 100ms, 500ms, 1s, 5s
+
+# Logging
+logging:
+  level:
+    com.stockbroker: DEBUG
+    org.springframework.security: DEBUG
+    org.springframework.web: DEBUG
+    org.flywaydb: INFO
+    org.jooq: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+  logback:
+    rollingpolicy:
+      max-file-size: 100MB
+      max-history: 30
+
+# OpenAPI / SpringDoc
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+    tags-sorter: alpha
+  packages-to-scan: com.stockbroker
+  paths-to-match: /api/v1/**
+
+# Stock Broker specific configuration
+sb:
+  # Market Data Gateway (gRPC client to Rust feed)
+  market:
+    gateway:
+      host: ${SB_FEED_HOST:localhost}
+      port: ${SB_FEED_GRPC_PORT:9000}
+      plaintext: true
+      connect-timeout: 5s
+      keepalive:
+        interval-seconds: 20
+        timeout-seconds: 10
+        permit-without-calls: 1
+      subscription-manager:
+        max-symbols-per-connection: 100
+        max-messages-per-symbol: 1024
+        resubscribe-backoff-ms: 1000
+        max-resubscribe-backoff-ms: 30000
+      redis-mirror:
+        enabled: true
+        throttle-ms: 100
+
+  # JWT Authentication
+  auth:
+    jwt:
+      issuer: stockbroker-api
+      audience: stockbroker-client
+      access-token-expiration: 15m
+      refresh-token-expiration: 30d
+      private-key-path: classpath:keys/jwt_private.key
+      public-key-path: classpath:keys/jwt_public.key
+      clock-skew: 60s
+
+  # Rate limiting
+  rate-limit:
+    enabled: true
+    default-requests-per-minute: 300
+    auth-requests-per-minute: 20
+    market-requests-per-minute: 600
+    trading-requests-per-minute: 100
+    key-prefix: rl

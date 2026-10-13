@@ -1,0 +1,46 @@
+# Test profile configuration
+# Enables mock feed for testing
+
+spring:
+  main:
+    allow-bean-definition-overriding: true
+
+# Enable mock feed for tests
+sb:
+  market:
+    gateway:
+      mock: true
+      host: localhost
+      port: 9999
+      plaintext: true
+      connect-timeout: 1s
+      keepalive:
+        interval-seconds: 20
+        timeout-seconds: 10
+      subscription-manager:
+        max-symbols-per-connection: 100
+        max-messages-per-symbol: 1024
+      redis-mirror:
+        enabled: false
+
+# Rate limiting (enabled for tests)
+sb:
+  rate-limit:
+    enabled: true
+    default-requests-per-minute: 1000
+    auth-requests-per-minute: 100
+    market-requests-per-minute: 2000
+    trading-requests-per-minute: 500
+    key-prefix: rl
+
+# Golden vectors output directory
+sb:
+  golden-vectors:
+    dir: testdata/golden_fills
+
+# Disable scheduled tasks in tests
+spring:
+  task:
+    scheduling:
+      pool:
+        size: 1

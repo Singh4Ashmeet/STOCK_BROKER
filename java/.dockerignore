@@ -1,0 +1,63 @@
+# Java .dockerignore
+target/
+!.mvn/
+!mvnw
+!mvnw.cmd
+!pom.xml
+!src/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build
+*.jar
+*.war
+*.ear
+*.class
+
+# Logs
+*.log
+logs/
+
+# Test
+target/surefire-reports/
+target/failsafe-reports/
+target/site/
+
+# Maven
+.mvn/timing.properties
+
+# Protobuf generated (will be regenerated)
+target/generated-sources/protobuf/
+
+# jOOQ generated (will be regenerated)
+target/generated-sources/jooq/
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+*.md
+docs/
+
+# Scripts
+scripts/
+*.sh
+*.bat
+
+# Docker
+Dockerfile*
+docker-compose*
+*.dockerfile
+
+# CI/CD
+.github/
