@@ -1,0 +1,13 @@
+# StockBroker Data Quality - Requirements
+
+polars>=1.0
+duckdb>=1.0
+pyarrow>=12.0
+pydantic>=2.0
+rich>=13.0
+typer>=0.9
+
+# Testing
+pytest>=8.0
+pytest-cov>=4.0
+hypothesis>=6.0

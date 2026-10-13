@@ -68,18 +68,47 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.12'
       - name: Install dependencies
         run: |
-          pip install -q pytest pytest-cov
+          pip install -q pytest pytest-cov maturin
           pip install -e '.[test]'
         working-directory: python
+      - name: Generate recorded day for tests
+        run: cargo run -p sb-pybook --example generate_day -- ../testdata/recorded_day
+        working-directory: rust
       - name: Run tests
         run: pytest --cov=python --cov-report=xml
         working-directory: python
+
+  wheels:
+    needs: detect
+    if: needs.detect.outputs.exists == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      - name: Install maturin
+        run: pip install maturin
+      - name: Build wheel
+        run: maturin build --release
+        working-directory: python
+      - name: Upload wheel artifact
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: wheels
+          path: target/wheels/*.whl
 
   pip-audit:
     needs: detect
@@ -96,3 +125,4 @@ jobs:
         run: pip install pip-audit
       - name: Run pip-audit
         run: pip-audit -r python/requirements.txt
+
