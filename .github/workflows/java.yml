@@ -50,6 +50,13 @@ jobs:
           SB_POSTGRES_DB: stockbroker_test
           SB_POSTGRES_USER: stockbroker_test
           SB_POSTGRES_PASSWORD: stockbroker_test
+      - name: Publish test failure summary
+        if: failure()
+        working-directory: java
+        shell: bash
+        run: |
+          summary="$(grep -R -m 1 '<failure\|<error' target/surefire-reports 2>/dev/null | sed 's/<[^>]*>/ /g' | tr '\n' ' ' | cut -c1-1500)"
+          echo "::error title=Surefire failure::$summary"
       - name: Run static analysis
         run: ./mvnw spotbugs:check checkstyle:check -B
         working-directory: java
