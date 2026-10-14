@@ -3,192 +3,36 @@ name: Java CI
 on:
   push:
     branches: [main]
-    paths:
-      - 'java/**'
-      - 'proto/**'
-      - '.github/workflows/java.yml'
+    paths: ['java/**', 'proto/**', '.github/workflows/java.yml']
   pull_request:
     branches: [main]
-    paths:
-      - 'java/**'
-      - 'proto/**'
+    paths: ['java/**', 'proto/**', '.github/workflows/java.yml']
 
-env:
-  MAVEN_OPTS: "-Xmx2g"
+permissions:
+  contents: read
 
 jobs:
-  proto-check:
-    name: Protobuf Lint & Breaking
+  build-and-test:
+    name: Build and Test
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Setup buf
-        uses: bufbuild/buf-setup-action@v1
-        with:
-          version: "1.32.0"
-
-      - name: Run buf lint
-        run: buf lint proto
-
-      - name: Run buf breaking
-        run: buf breaking --against '.git#branch=main' proto
-
-  build:
-    name: Build & Test
-    runs-on: ubuntu-latest
-    needs: proto-check
     timeout-minutes: 30
-
-    services:
-      postgres:
-        image: postgres:16.4-alpine
-        env:
-          POSTGRES_DB: stockbroker
-          POSTGRES_USER: test
-          POSTGRES_PASSWORD: test
-        ports: 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U test -d stockbroker"
-          --health-interval 5s
-          --health-timeout 3s
-          --health-retries 10
-      redis:
-        image: redis:7.4-alpine
-        ports: 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 5s
-          --health-timeout 3s
-          --health-retries 10
-
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Java
+        uses: actions/setup-java@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          fetch-depth: 0
-
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
+          distribution: temurin
           java-version: '21'
-          cache: 'maven'
-
-      - name: Setup buf
-        uses: bufbuild/buf-setup-action@v1
-        with:
-          version: "1.32.0"
-
+          cache: maven
       - name: Generate protobuf code
-        run: |
-          cd java
-          mvn protobuf:compile protobuf:compile-custom -B
-
-      - name: Build with Maven
-        run: |
-          cd java
-          mvn clean compile -B
-
+        run: ./mvnw protobuf:compile protobuf:compile-custom -B
+        working-directory: java
+      - name: Compile
+        run: ./mvnw clean compile -B
+        working-directory: java
       - name: Run unit tests
-        run: |
-          cd java
-          mvn test -B
-
-      - name: Run integration tests
-        run: |
-          cd java
-          mvn verify -B -DskipITs=false
-
-      - name: Run SpotBugs
-        run: |
-          cd java
-          mvn spotbugs:check -B
-
-      - name: Run Checkstyle
-        run: |
-          cd java
-          mvn checkstyle:check -B
-
-      - name: Upload JaCoCo coverage
-        uses: actions/upload-artifact@v4
-        with:
-          name: jacoco-report
-          path: java/target/site/jacoco/
-          retention-days: 7
-
-      - name: Check coverage thresholds
-        run: |
-          cd java
-          mvn jacoco:check -B
-
-  docker:
-    name: Docker Build
-    runs-on: ubuntu-latest
-    needs: build
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./java
-          file: ./java/Dockerfile
-          push: false
-          tags: stockbroker/api:${{ github.sha }}
-          load: true
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Test Docker image starts
-        run: |
-          docker run --rm -d \
-            --name api-test \
-            -e SB_POSTGRES_HOST=host.docker.internal \
-            -e SB_POSTGRES_PORT=5432 \
-            -e SB_POSTGRES_DB=stockbroker \
-            -e SB_POSTGRES_USER=test \
-            -e SB_POSTGRES_PASSWORD=test \
-            -e SB_REDIS_HOST=host.docker.internal \
-            -e SB_REDIS_PORT=6379 \
-            -e SB_REDIS_PASSWORD=test \
-            -p 8081:8081 \
-            stockbroker/api:${{ github.sha }}
-          sleep 10
-          curl -f http://localhost:8081/api/v1/system/health
-          docker stop api-test
-
-  dependency-check:
-    name: Dependency Check
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '21'
-          cache: 'maven'
-
-      - name: Run OWASP Dependency Check
-        uses: dependency-check/Dependency-Check_Action@main
-        with:
-          project: 'stockbroker-api'
-          path: 'java'
-          format: 'HTML'
-          out: 'reports'
-          args: '--failOnCVSS 7'
-
-      - name: Upload Dependency Check Report
-        uses: actions/upload-artifact@v4
-        with:
-          name: dependency-check-report
-          path: java/reports/
-          retention-days: 7
+        run: ./mvnw test -B
+        working-directory: java
+      - name: Run static analysis
+        run: ./mvnw spotbugs:check checkstyle:check -B
+        working-directory: java

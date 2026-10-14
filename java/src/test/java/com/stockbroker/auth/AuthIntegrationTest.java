@@ -1,6 +1,6 @@
 package com.stockbroker.auth;
 
-import com.stockbroker.common.TestcontainersConfiguration;
+import com.stockbroker.common.LocalTestConfiguration;
 import com.stockbroker.auth.api.AuthDtos;
 import com.stockbroker.auth.repo.UserRepository;
 import org.junit.jupiter.api.Test;
@@ -16,7 +16,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Integration tests for authentication endpoints.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@ContextConfiguration(classes = TestcontainersConfiguration.class)
+@ContextConfiguration(classes = LocalTestConfiguration.class)
 class AuthIntegrationTest {
 
     @Autowired

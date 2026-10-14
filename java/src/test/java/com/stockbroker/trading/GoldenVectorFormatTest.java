@@ -1,7 +1,7 @@
 package com.stockbroker.trading;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stockbroker.common.TestcontainersConfiguration;
+import com.stockbroker.common.LocalTestConfiguration;
 import com.stockbroker.trading.service.GoldenVectorService;
 import com.stockbroker.trading.service.OrderExecutor;
 import com.stockbroker.market.api.MarketDtos;
@@ -27,7 +27,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Tests for golden vector format - ensures Python can parse and replay fills exactly.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@ContextConfiguration(classes = TestcontainersConfiguration.class)
+@ContextConfiguration(classes = LocalTestConfiguration.class)
 @ActiveProfiles("test")
 class GoldenVectorFormatTest {
 

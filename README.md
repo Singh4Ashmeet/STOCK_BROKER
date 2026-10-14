@@ -30,27 +30,27 @@ stock_broker/
   java/            Spring Boot service (Phase 4)
   python/          Research + backtest + job service (Phase 6)
   frontend/        Next.js app (Phase 9)
-  infra/           Prometheus/Grafana config, DB init scripts
-  docker-compose.yml  Root compose file with profiles (core, analytics, obs, bus, app)
+  main.py          Native development launcher
   testdata/        Recorded feeds, golden vectors (small files only)
   benchmarks/      Benchmark results and chart sources
   scripts/         Dev helper scripts (bootstrap, verify)
 ```
 
-## Quickstart (local infrastructure)
+## Quickstart (native development)
 
 ```bash
 # 1. Clone and bootstrap (generates .env, JWT keys)
 git clone <repo> && cd stock_broker
 ./scripts/bootstrap.sh
 
-# 2. Start the full observability stack
-make up
+# 2. Install the project dependencies
+python main.py install
 
-# 3. Verify infrastructure health (Postgres roles, Redis auth, ClickHouse tables, Prometheus rules, Grafana dashboards, port bindings)
-make verify-infra
+# 3. Start the native API and web UI
+# PostgreSQL and Redis must already be installed and running locally.
+python main.py start --with-feed
 
-# 4. Verify CI configuration (action pins, actionlint)
+# 4. Verify CI configuration (action pins)
 make ci-lint
 
 # 5. Check protobuf tooling
@@ -61,7 +61,7 @@ pre-commit install --install-hooks -t pre-commit -t commit-msg
 pre-commit run --all-files
 
 # 7. Stop when done
-make down
+python main.py stop
 ```
 
 ## Where to start

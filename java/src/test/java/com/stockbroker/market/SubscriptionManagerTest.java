@@ -1,6 +1,6 @@
 package com.stockbroker.market;
 
-import com.stockbroker.common.TestcontainersConfiguration;
+import com.stockbroker.common.LocalTestConfiguration;
 import com.stockbroker.auth.api.AuthDtos;
 import com.stockbroker.market.subscription.SubscriptionManager;
 import org.junit.jupiter.api.BeforeEach;
@@ -22,7 +22,7 @@ import static org.awaitility.Awaitility.await;
  * Tests for SubscriptionManager - refcounted subscriptions, gap detection, and resync.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@ContextConfiguration(classes = TestcontainersConfiguration.class)
+@ContextConfiguration(classes = LocalTestConfiguration.class)
 @ActiveProfiles("test")
 class SubscriptionManagerTest {
 

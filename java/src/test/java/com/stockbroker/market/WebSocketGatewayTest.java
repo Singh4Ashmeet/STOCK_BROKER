@@ -3,7 +3,7 @@ package com.stockbroker.market;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stockbroker.auth.api.AuthDtos;
-import com.stockbroker.common.TestcontainersConfiguration;
+import com.stockbroker.common.LocalTestConfiguration;
 import com.stockbroker.market.api.MarketDtos;
 import com.stockbroker.market.api.MarketDtosExtended;
 import org.junit.jupiter.api.AfterEach;
@@ -37,7 +37,7 @@ import static org.awaitility.Awaitility.await;
  * - Slow client test: other clients unaffected by slow consumer
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@ContextConfiguration(classes = TestcontainersConfiguration.class)
+@ContextConfiguration(classes = LocalTestConfiguration.class)
 @ActiveProfiles("test")
 class WebSocketGatewayTest {
 

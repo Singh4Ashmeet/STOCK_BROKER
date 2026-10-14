@@ -24,12 +24,10 @@ com.stockbroker
 - **Spring Boot 3.3** with Spring Security (JWT resource server)
 - **Flyway** migrations for PostgreSQL
 - **jOOQ** for type-safe SQL (ledger/trading code)
-- **Testcontainers** for integration tests (PostgreSQL, Redis)
 - **Protobuf/gRPC** codegen from shared `proto/` via buf
 - **Problem+JSON** (RFC 9457) error responses with stable codes
 - **Micrometer + Prometheus** metrics with percentile histograms
 - **OpenAPI** via springdoc (client generated from it)
-- **Docker** multi-stage build (non-root, healthchecks)
 - **ArchUnit** architecture tests
 
 ## Quick Start
@@ -38,14 +36,12 @@ com.stockbroker
 
 - Java 21+
 - Maven 3.9+ (or use `./mvnw`)
-- Docker & Docker Compose
-- PostgreSQL 16, Redis 7 (via docker-compose)
+- PostgreSQL 16 and Redis 7 installed as native local services
 
 ### Local Development
 
 ```bash
-# Start infrastructure (PostgreSQL, Redis)
-docker compose --profile core up -d
+# Start native PostgreSQL and Redis services before running the API.
 
 # Build and run
 cd java
@@ -53,13 +49,6 @@ cd java
 ```
 
 The API will be available at `http://localhost:8081/api/v1`
-
-### With Docker Compose (full stack)
-
-```bash
-# From project root
-docker compose --profile core --profile app up -d --build
-```
 
 ### Run Tests
 
@@ -69,7 +58,7 @@ cd java
 # Unit tests only
 ./mvnw test
 
-# Integration tests (requires Docker)
+# Integration tests (requires native PostgreSQL and Redis)
 ./mvnw verify
 
 # With coverage report
@@ -218,7 +207,6 @@ Key metrics:
 GitHub Actions workflow (`.github/workflows/java.yml`):
 1. `proto-check` - buf lint & breaking
 2. `build` - compile, unit tests, integration tests, SpotBugs, Checkstyle, JaCoCo
-3. `docker` - build & test Docker image
 4. `dependency-check` - OWASP dependency check
 
 ## Project Structure
@@ -226,8 +214,6 @@ GitHub Actions workflow (`.github/workflows/java.yml`):
 ```
 java/
 ├── pom.xml
-├── Dockerfile
-├── .dockerignore
 ├── checkstyle.xml
 ├── spotbugs-include.xml
 ├── spotbugs-exclude.xml
@@ -252,7 +238,7 @@ java/
     │       └── db/migration/V001__initial_schema.sql
     └── test/
         └── java/com/stockbroker/
-            ├── common/TestcontainersConfiguration.java
+            ├── common/LocalTestConfiguration.java
             └── auth/AuthIntegrationTest.java
 ```
 

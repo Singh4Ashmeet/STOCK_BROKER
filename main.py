@@ -5,13 +5,13 @@ The project is intentionally polyglot.  This script keeps its setup and
 runtime commands in one place:
 
     python main.py install       # install project-managed dependencies
-    python main.py start         # start infrastructure, API, and web UI
-    python main.py status        # show managed process and compose status
-    python main.py stop          # stop managed processes and infrastructure
+    python main.py start         # start the native API and web UI
+    python main.py status        # show managed process status
+    python main.py stop          # stop managed processes
 
 It uses only Python's standard library so it remains runnable before Python
-project dependencies have been installed. Docker Desktop, Node.js, Java 21,
-and Rust must be installed by the developer because they are system runtimes,
+project dependencies have been installed. Node.js, Java 21, Rust, PostgreSQL,
+and Redis must be installed by the developer because they are system runtimes,
 not Python package dependencies.
 """
 
@@ -69,11 +69,6 @@ def run(command: Sequence[str], *, cwd: Path = ROOT, check: bool = True) -> subp
     native = native_command(command)
     print("+", subprocess.list2cmdline(native))
     return subprocess.run(native, cwd=cwd, check=check, text=True)
-
-
-def compose_command(*arguments: str) -> list[str]:
-    executable("docker")
-    return ["docker", "compose", *arguments]
 
 
 def ensure_environment() -> None:
@@ -166,7 +161,6 @@ def is_running(pid: int) -> bool:
 
 def start_services(args: argparse.Namespace) -> None:
     ensure_environment()
-    executable("docker")
     executable("node")
     executable("npm")
     if not MAVEN_WRAPPER.exists():
@@ -178,11 +172,6 @@ def start_services(args: argparse.Namespace) -> None:
     if existing:
         names = ", ".join(f"{name} (PID {pid})" for name, pid in existing.items())
         raise RuntimeError(f"Managed services already running: {names}. Run 'python main.py stop' first.")
-
-    profiles = ["--profile", "core"]
-    if args.full_infra:
-        profiles.extend(["--profile", "analytics", "--profile", "obs", "--profile", "bus"])
-    run(compose_command(*profiles, "up", "-d"))
 
     RUNTIME_DIR.mkdir(exist_ok=True)
     LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -202,7 +191,7 @@ def start_services(args: argparse.Namespace) -> None:
             processes[service.name] = process.pid
         PID_FILE.write_text(json.dumps(processes, indent=2), encoding="utf-8")
     except Exception:
-        stop_services(argparse.Namespace(infrastructure=False))
+        stop_services(argparse.Namespace())
         raise
 
     print("\nStarted local development stack:")
@@ -226,13 +215,6 @@ def stop_services(args: argparse.Namespace) -> None:
         print(f"Stopping {name} (PID {pid}) …")
         stop_process(pid)
     PID_FILE.unlink(missing_ok=True)
-    if args.infrastructure:
-        if shutil.which("docker"):
-            run(compose_command("--profile", "core", "--profile", "analytics", "--profile", "obs", "--profile", "bus", "down"))
-        else:
-            print("Docker is not available; infrastructure was not stopped.", file=sys.stderr)
-
-
 def status(_: argparse.Namespace) -> None:
     processes = read_processes()
     if not processes:
@@ -240,22 +222,16 @@ def status(_: argparse.Namespace) -> None:
     else:
         for name, pid in processes.items():
             print(f"{name:5} {'running' if is_running(pid) else 'stopped'} (PID {pid})")
-    if shutil.which("docker"):
-        run(compose_command("--profile", "core", "--profile", "analytics", "--profile", "obs", "--profile", "bus", "ps"), check=False)
-    else:
-        print("Docker is not installed or not on PATH; compose status unavailable.")
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run the Stock Broker local development stack.")
     subcommands = parser.add_subparsers(dest="command", required=True)
     subcommands.add_parser("install", help="Install frontend, Java, Rust, and Python project dependencies.")
-    start = subcommands.add_parser("start", help="Start infrastructure, Java API, and Next.js web UI.")
+    start = subcommands.add_parser("start", help="Start the Java API and Next.js web UI natively.")
     start.add_argument("--with-feed", action="store_true", help="Also start the Rust market-data gRPC server.")
-    start.add_argument("--full-infra", action="store_true", help="Also start analytics, observability, and Redpanda profiles.")
-    subcommands.add_parser("status", help="Show managed services and Docker Compose status.")
+    subcommands.add_parser("status", help="Show managed service status.")
     stop = subcommands.add_parser("stop", help="Stop managed services.")
-    stop.add_argument("--infrastructure", action="store_true", help="Also stop Docker Compose infrastructure.")
     return parser.parse_args()
 
 

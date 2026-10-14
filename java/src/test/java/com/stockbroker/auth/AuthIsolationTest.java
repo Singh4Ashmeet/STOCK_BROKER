@@ -1,6 +1,6 @@
 package com.stockbroker.auth;
 
-import com.stockbroker.common.TestcontainersConfiguration;
+import com.stockbroker.common.LocalTestConfiguration;
 import com.stockbroker.auth.api.AuthDtos;
 import com.stockbroker.trading.api.TradingDtos;
 import com.stockbroker.trading.api.TradingDtosExtended;
@@ -33,7 +33,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * is filtered by user_id from the security context.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@ContextConfiguration(classes = TestcontainersConfiguration.class)
+@ContextConfiguration(classes = LocalTestConfiguration.class)
 class AuthIsolationTest {
 
     @Autowired

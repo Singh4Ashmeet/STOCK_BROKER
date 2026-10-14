@@ -1,6 +1,6 @@
 package com.stockbroker.trading;
 
-import com.stockbroker.common.TestcontainersConfiguration;
+import com.stockbroker.common.LocalTestConfiguration;
 import com.stockbroker.auth.api.AuthDtos;
 import com.stockbroker.trading.api.TradingDtos;
 import com.stockbroker.trading.service.LedgerService;
@@ -24,7 +24,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Portfolio isolation tests - verifies user_id filtering and P&L calculations match hand-calculated cases.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@ContextConfiguration(classes = TestcontainersConfiguration.class)
+@ContextConfiguration(classes = LocalTestConfiguration.class)
 @ActiveProfiles("test")
 class PortfolioIsolationTest {
 

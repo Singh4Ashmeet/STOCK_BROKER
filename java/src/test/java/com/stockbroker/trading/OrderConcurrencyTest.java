@@ -1,6 +1,6 @@
 package com.stockbroker.trading;
 
-import com.stockbroker.common.TestcontainersConfiguration;
+import com.stockbroker.common.LocalTestConfiguration;
 import com.stockbroker.auth.api.AuthDtos;
 import com.stockbroker.trading.api.TradingDtos;
 import com.stockbroker.trading.domain.Fill;
@@ -30,7 +30,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Concurrency tests for order execution - verifies no overspend under concurrent load.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@ContextConfiguration(classes = TestcontainersConfiguration.class)
+@ContextConfiguration(classes = LocalTestConfiguration.class)
 @ActiveProfiles("test")
 class OrderConcurrencyTest {
 

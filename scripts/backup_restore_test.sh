@@ -214,7 +214,7 @@ backup_redis() {
         sleep 1
     done
     
-    # Copy RDB file (in container, this would be docker cp)
+    # Copy the RDB file into the native Redis data directory.
     # For local testing, we'll use redis-cli --rdb
     local start_time=$(date +%s%N)
     redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" -a "$REDIS_PASS" --rdb "$backup_file" 2>&1 | tee -a "$RESULTS_DIR/redis_backup.log"

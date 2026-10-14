@@ -1,6 +1,6 @@
 package com.stockbroker.trading;
 
-import com.stockbroker.common.TestcontainersConfiguration;
+import com.stockbroker.common.LocalTestConfiguration;
 import com.stockbroker.auth.api.AuthDtos;
 import com.stockbroker.trading.domain.*;
 import com.stockbroker.trading.repo.*;
@@ -23,7 +23,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Integration tests for the ledger service and reconciliation.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@ContextConfiguration(classes = TestcontainersConfiguration.class)
+@ContextConfiguration(classes = LocalTestConfiguration.class)
 @org.springframework.test.context.ActiveProfiles("test")
 class LedgerIntegrationTest {
 

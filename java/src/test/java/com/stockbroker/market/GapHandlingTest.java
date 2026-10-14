@@ -1,6 +1,6 @@
 package com.stockbroker.market;
 
-import com.stockbroker.common.TestcontainersConfiguration;
+import com.stockbroker.common.LocalTestConfiguration;
 import com.stockbroker.auth.api.AuthDtos;
 import com.stockbroker.market.subscription.SubscriptionManager;
 import com.stockbroker.market.state.MarketStateManager;
@@ -20,7 +20,7 @@ import static org.awaitility.Awaitility.await;
  * Tests for gap detection and automatic resync via GetSnapshot.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@ContextConfiguration(classes = TestcontainersConfiguration.class)
+@ContextConfiguration(classes = LocalTestConfiguration.class)
 @ActiveProfiles("test")
 class GapHandlingTest {
 

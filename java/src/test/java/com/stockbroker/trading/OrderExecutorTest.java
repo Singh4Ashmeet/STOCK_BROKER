@@ -1,7 +1,7 @@
 package com.stockbroker.trading;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stockbroker.common.TestcontainersConfiguration;
+import com.stockbroker.common.LocalTestConfiguration;
 import com.stockbroker.auth.api.AuthDtos;
 import com.stockbroker.market.api.MarketDtos;
 import com.stockbroker.trading.api.TradingDtos;
@@ -31,7 +31,7 @@ import static org.awaitility.Awaitility.await;
  * Integration tests for OrderExecutor - state machine, book walking, fees, idempotency, concurrency.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@ContextConfiguration(classes = TestcontainersConfiguration.class)
+@ContextConfiguration(classes = LocalTestConfiguration.class)
 @org.springframework.test.context.ActiveProfiles("test")
 class OrderExecutorTest {
 

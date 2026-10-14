@@ -1,6 +1,6 @@
 package com.stockbroker.market;
 
-import com.stockbroker.common.TestcontainersConfiguration;
+import com.stockbroker.common.LocalTestConfiguration;
 import com.stockbroker.auth.api.AuthDtos;
 import com.stockbroker.market.api.MarketDtos;
 import com.stockbroker.market.state.MarketStateManager;
@@ -22,7 +22,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Tests for Redis state recovery on restart.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@ContextConfiguration(classes = TestcontainersConfiguration.class)
+@ContextConfiguration(classes = LocalTestConfiguration.class)
 @ActiveProfiles("test")
 class RedisRecoveryTest {
 

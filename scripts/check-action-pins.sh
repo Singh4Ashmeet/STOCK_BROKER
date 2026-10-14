@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # scripts/check-action-pins.sh - Verify all GitHub Actions are pinned by commit SHA
-# Fails if any uses: in .github/workflows (excluding local ./ paths and docker:// images) is not @<40 hex>
+# Fails if any uses: in .github/workflows (excluding local ./ paths) is not @<40 hex>
 
 set -euo pipefail
 
@@ -35,12 +35,6 @@ while IFS= read -r line; do
         continue
     fi
 
-    # Skip Docker image references (pinned by tag, not SHA)
-    if echo "$uses_line" | grep -q '^docker://'; then
-        log_pass "$file: $uses_line (Docker image, pinned by tag)"
-        continue
-    fi
-
     # Extract the action and ref (everything after @)
     if echo "$uses_line" | grep -q '@'; then
         ref=$(echo "$uses_line" | sed 's/.*@//' | sed 's/[[:space:]]*#.*//' | sed 's/[[:space:]]*$//')
@@ -60,7 +54,7 @@ while IFS= read -r line; do
 done < <(grep -rn '^[[:space:]]*uses:' "$WORKFLOW_DIR"/*.yml 2>/dev/null || true)
 
 if [[ $FAIL_COUNT -eq 0 ]]; then
-    log_pass "All GitHub Actions are pinned by commit SHA (or Docker tag)"
+    log_pass "All GitHub Actions are pinned by commit SHA"
     exit 0
 else
     log_fail "Found $FAIL_COUNT unpinned action(s)"

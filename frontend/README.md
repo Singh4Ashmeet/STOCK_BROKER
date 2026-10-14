@@ -166,13 +166,6 @@ npm run test:e2e
 
 ## Deployment
 
-### Docker
-
-```bash
-docker build -t stockbroker-web .
-docker run -p 3000:3000 stockbroker-web
-```
-
 ### Vercel (Recommended)
 
 1. Connect repository to Vercel

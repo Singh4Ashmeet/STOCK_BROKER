@@ -126,17 +126,6 @@ check_prerequisites() {
         missing=1
     fi
 
-    # Check for docker
-    if ! check_command "docker"; then
-        missing=1
-    fi
-
-    # Check for docker compose v2
-    if ! docker compose version &> /dev/null; then
-        log_error "Docker Compose v2 not found. Please install Docker Compose v2 (included with Docker Desktop)."
-        missing=1
-    fi
-
     # Check for .env.example
     if [[ ! -f "${ENV_EXAMPLE}" ]]; then
         log_error ".env.example not found at ${ENV_EXAMPLE}"
