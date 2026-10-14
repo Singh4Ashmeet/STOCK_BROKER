@@ -35,9 +35,6 @@ sb:
         max-messages-per-symbol: 1024
       redis-mirror:
         enabled: false
-
-# Test-specific application settings
-sb:
   rate-limit:
     enabled: true
     default-requests-per-minute: 1000
@@ -45,8 +42,5 @@ sb:
     market-requests-per-minute: 2000
     trading-requests-per-minute: 500
     key-prefix: rl
-
-# Golden vectors output directory
-sb:
   golden-vectors:
     dir: testdata/golden_fills
