@@ -43,7 +43,16 @@ jobs:
           SQL
         shell: bash
       - name: Run unit tests
-        run: ./mvnw test -B
+        run: |
+          set +e
+          ./mvnw test -B 2>&1 | tee maven-test.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            summary=$(tail -n 30 maven-test.log | tr '\n' ' ' | cut -c1-3500)
+            echo "::error title=Maven test failure::$summary"
+          fi
+          exit "$status"
+        shell: bash
         working-directory: java
         env:
           SPRING_PROFILES_ACTIVE: test
