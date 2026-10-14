@@ -49,8 +49,6 @@
         <proto.source.dir>${project.basedir}/../proto</proto.source.dir>
         <generated.sources.dir>${project.build.directory}/generated-sources</generated.sources.dir>
 
-        <!-- OS classifier default for m2e compatibility -->
-        <os.detected.classifier>windows-x86_64</os.detected.classifier>
     </properties>
 
     <dependencyManagement>
