@@ -52,7 +52,6 @@ Please fill out the checklist below. For more details, see docs/13-DEVELOPMENT-G
 - [ ] Authz scoping: user_id filtering applied where user-owned data accessed
 - [ ] Input validation: types, sizes, enums, ranges validated at edge
 - [ ] No secrets in code, logs, URLs, or client bundles
-- [ ] No default credentials in compose files or images
 - [ ] Parameterized queries only; no string-built SQL
 - [ ] Rate limits considered for new endpoints
 
