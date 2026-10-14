@@ -25,15 +25,14 @@ This checklist must pass before any release. Each item is verified either automa
 | Check | Tool | Pass Criteria |
 |-------|------|---------------|
 | No secrets in git history | `gitleaks` (pre-commit + CI) | Zero findings |
-| No secrets in Docker images | `trivy fs --security-checks secret` | Zero findings |
+| No secrets in repository files | `trivy fs --security-checks secret` | Zero findings |
 | No hardcoded credentials in code | `semgrep --config=auto` | Zero findings |
 | All secrets in `.env` / Vault | Manual review | All `*_PASSWORD`, `*_KEY`, `*_SECRET` in env/secrets |
 | JWT keys rotated per release | Manual | New EdDSA keypair generated for each release |
 
 **Files to verify clean**:
 - `.env.example` (template only, no real values)
-- `docker-compose.yml` (uses `${VAR}` interpolation only)
-- `infra/` (no plaintext secrets)
+- Native service configuration and `.env` files (no plaintext secrets)
 
 ---
 
@@ -107,18 +106,15 @@ This checklist must pass before any release. Each item is verified either automa
 
 ---
 
-## 8. Container & Infrastructure Security (Automated)
+## 8. Infrastructure Security (Automated)
 
 | Check | Tool |
 |-------|------|
-| Non-root containers (UID 1000+) | `Dockerfile` `USER 1000` + `trivy config` |
-| Read-only root filesystem | `Dockerfile` `readonly: true` + runtime verify |
-| No privileged containers | `docker-compose.yml` no `privileged: true` |
-| Dropped capabilities (ALL, add only NET_BIND_SERVICE) | `Dockerfile` `cap_drop: ["ALL"]` |
-| Resource limits (CPU, memory) | `docker-compose.yml` `deploy.resources.limits` |
-| Network segmentation (internal network only) | `docker-compose.yml` `networks: sb_internal` |
-| Secrets via Docker secrets (not env) | `docker-compose.yml` `secrets:` section |
-| Image signing (cosign) | CI pipeline: `cosign sign` |
+| Least-privilege service accounts | Native service configuration and deployment manifests |
+| Resource limits (CPU, memory) | Host or platform service limits |
+| Network segmentation | Firewall and platform network policy |
+| Secrets externalized from source | Environment variables or a secret manager |
+| Release provenance | CI release attestation or package signatures |
 
 ---
 

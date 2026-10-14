@@ -27,7 +27,7 @@ We will acknowledge receipt within 48 hours and provide a timeline for a fix.
 This policy covers:
 - The core application code (Rust, Java, Python, TypeScript)
 - Protobuf contracts (`proto/`)
-- Infrastructure configuration (`docker-compose.yml`, `infra/`)
+- Native service configuration and deployment manifests
 - CI/CD pipelines (`.github/workflows/`)
 
 Out of scope:

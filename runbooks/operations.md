@@ -53,9 +53,9 @@ Day-to-day operations for the Stock Broker platform. Covers deployments, scaling
 
 #### Java API
 ```bash
-# 1. Build and push image
+# 1. Build release artifact
 cd java
-./mvnw -DskipTests package docker:build docker:push -Ddocker.image.tag=v1.2.3
+./mvnw -DskipTests package
 
 # 2. Update deployment (canary)
 kubectl set image deployment/api api=stockbroker/api:v1.2.3 -n prod
@@ -68,11 +68,9 @@ curl -f https://api.example.com/api/v1/system/health
 
 #### Rust Feed
 ```bash
-# 1. Build and push
+# 1. Build release binary
 cd rust
 cargo build --release -p sb-server
-docker build -t stockbroker/feed:v1.2.3 -f infra/feed/Dockerfile .
-docker push stockbroker/feed:v1.2.3
 
 # 2. Deploy (rolling restart)
 kubectl set image deployment/feed feed=stockbroker/feed:v1.2.3 -n prod
@@ -85,8 +83,7 @@ grpc_health_probe -addr=feed:9000 -rpc-timeout=5s
 #### Python Research
 ```bash
 cd python
-docker build -t stockbroker/research:v1.2.3 -f infra/research/Dockerfile .
-docker push stockbroker/research:v1.2.3
+python -m build
 
 kubectl set image deployment/research research=stockbroker/research:v1.2.3 -n prod
 kubectl rollout status deployment/research -n prod
@@ -351,11 +348,6 @@ kubectl logs -n prod -l app=api --tail=100 -f
 kubectl exec -it -n prod api-xxx -- bash
 kubectl port-forward -n prod svc/api 8081:8081
 
-# Docker (local)
-docker compose --profile core --profile obs up -d
-docker compose logs -f api
-docker exec -it sb_api bash
-
 # Database
 psql "postgresql://sb_app:pass@localhost:5432/stockbroker"
 redis-cli -h localhost -p 6379 -a $REDIS_PASSWORD
@@ -367,7 +359,7 @@ curl -s localhost:8081/actuator/prometheus | grep jvm_memory
 
 # Debug
 kubectl debug -it api-xxx --image=busybox --target=api -n prod
-nsenter -t $(docker inspect -f '{{.State.Pid}}' sb_api) -n netstat -tulpn
+ss -tulpn
 ```
 
 ---

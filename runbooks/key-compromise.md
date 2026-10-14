@@ -13,7 +13,7 @@ Procedure for responding to compromised cryptographic keys (JWT signing keys, TL
 
 | Key Type | Purpose | Rotation Schedule | Storage |
 |----------|---------|-------------------|---------|
-| JWT Access (EdDSA) | Sign access tokens (15 min) | Per release + on compromise | Vault / Docker secrets |
+| JWT Access (EdDSA) | Sign access tokens (15 min) | Per release + on compromise | Vault / managed secret store |
 | JWT Refresh (opaque) | Refresh token validation | On reuse detection | PostgreSQL (SHA-256) |
 | TLS Certificates | HTTPS/WSS termination | 90 days (Let's Encrypt) | Cert-manager / Vault |
 | DB Encryption (AES-256) | Column-level PII encryption | Quarterly | Vault |
@@ -76,9 +76,8 @@ cd infra/secrets
 openssl genpkey -algorithm Ed25519 -out jwt_private.key.new
 openssl pkey -in jwt_private.key.new -pubout -out jwt_public.key.new
 
-# 2. Update Vault/Docker secrets
-docker secret create jwt_private_key_v2 jwt_private.key.new
-docker secret create jwt_public_key_v2 jwt_public.key.new
+# 2. Store the new keys in the configured secret manager
+#    (for example, Vault or your cloud provider's managed secret store)
 
 # 3. Deploy new public key to API service (zero-downtime)
 #    - API reads public key from secret on startup
