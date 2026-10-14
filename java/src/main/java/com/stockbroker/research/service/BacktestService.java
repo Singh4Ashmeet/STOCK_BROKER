@@ -59,13 +59,13 @@ public class BacktestService {
 
         BacktestRun run = new BacktestRun();
         run.setUserId(userId);
-        run.setStrategy(request.strategy());
-        run.setParams(request.params());
+        run.setStrategy(request.strategyName());
+        run.setParams(request.params() == null ? Map.of() : Map.copyOf(request.params()));
         run.setSymbol(request.symbol());
-        run.setDataFrom(Instant.parse(request.from()));
-        run.setDataTo(Instant.parse(request.to()));
-        run.setFeeModel(request.feeModel());
-        run.setLatencyMs(request.latencyMs());
+        run.setDataFrom(Instant.parse(request.startDate()));
+        run.setDataTo(Instant.parse(request.endDate()));
+        run.setFeeModel(Map.of());
+        run.setLatencyMs(0);
         run.setStatus("QUEUED");
         run.setCodeVersion("0.1.0");
         run.setPybookVersion("0.1.0");
@@ -74,7 +74,8 @@ public class BacktestService {
 
         // TODO: Submit to Python worker queue
         // For now, return the run ID
-        return new ResearchDtos.CreateBacktestResponse(run.getId().toString(), ResearchDtos.BacktestStatus.QUEUED);
+        return new ResearchDtos.CreateBacktestResponse(
+                run.getId().toString(), ResearchDtos.BacktestStatus.QUEUED, "Backtest queued");
     }
 
     public ResearchDtos.BacktestListResponse listBacktests(UUID userId, int limit, String cursor) {
@@ -112,25 +113,27 @@ public class BacktestService {
             Map<String, Object> s = run.getSummary();
             summary = new ResearchDtos.BacktestSummary(
                     ((Number) s.getOrDefault("total_return", 0)).doubleValue(),
+                    ((Number) s.getOrDefault("annualized_return", 0)).doubleValue(),
+                    ((Number) s.getOrDefault("volatility", 0)).doubleValue(),
                     ((Number) s.getOrDefault("sharpe_ratio", 0)).doubleValue(),
+                    ((Number) s.getOrDefault("sortino_ratio", 0)).doubleValue(),
                     ((Number) s.getOrDefault("max_drawdown", 0)).doubleValue(),
+                    ((Number) s.getOrDefault("calmar_ratio", 0)).doubleValue(),
                     ((Number) s.getOrDefault("win_rate", 0)).doubleValue(),
+                    ((Number) s.getOrDefault("profit_factor", 0)).doubleValue(),
                     ((Number) s.getOrDefault("total_trades", 0)).intValue(),
-                    ((Number) s.getOrDefault("profit_factor", 0)).doubleValue()
+                    ((Number) s.getOrDefault("avg_trade_pnl", 0)).doubleValue()
             );
         }
 
         return new ResearchDtos.BacktestResult(
                 run.getId().toString(),
-                ResearchDtos.BacktestStatus.valueOf(run.getStatus()),
-                run.getStrategy(),
-                run.getParams(),
                 run.getSymbol(),
+                run.getStrategy(),
                 run.getDataFrom().toString(),
                 run.getDataTo().toString(),
-                run.getFeeModel(),
-                run.getLatencyMs(),
-                run.getError(),
+                null,
+                null,
                 run.getCodeVersion(),
                 run.getPybookVersion(),
                 run.getSeed() != null ? run.getSeed() : 0,
