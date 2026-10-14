@@ -46,6 +46,7 @@ jobs:
         run: ./mvnw test -B
         working-directory: java
         env:
+          SPRING_PROFILES_ACTIVE: test
           SB_POSTGRES_DB: stockbroker_test
           SB_POSTGRES_USER: stockbroker_test
           SB_POSTGRES_PASSWORD: stockbroker_test
