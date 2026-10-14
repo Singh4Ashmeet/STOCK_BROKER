@@ -4,6 +4,19 @@
 spring:
   main:
     allow-bean-definition-overriding: true
+  datasource:
+    url: jdbc:postgresql://${SB_POSTGRES_HOST:localhost}:${SB_POSTGRES_PORT:5432}/${SB_POSTGRES_DB:stockbroker_test}
+    username: ${SB_POSTGRES_USER:stockbroker_test}
+    password: ${SB_POSTGRES_PASSWORD:stockbroker_test}
+  data:
+    redis:
+      host: ${SB_REDIS_HOST:localhost}
+      port: ${SB_REDIS_PORT:6379}
+      password: ${SB_REDIS_PASSWORD:}
+  task:
+    scheduling:
+      pool:
+        size: 1
 
 # Enable mock feed for tests
 sb:
@@ -23,7 +36,7 @@ sb:
       redis-mirror:
         enabled: false
 
-# Rate limiting (enabled for tests)
+# Test-specific application settings
 sb:
   rate-limit:
     enabled: true
@@ -37,10 +50,3 @@ sb:
 sb:
   golden-vectors:
     dir: testdata/golden_fills
-
-# Disable scheduled tasks in tests
-spring:
-  task:
-    scheduling:
-      pool:
-        size: 1

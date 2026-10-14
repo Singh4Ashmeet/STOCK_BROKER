@@ -27,9 +27,26 @@ jobs:
       - name: Compile
         run: ./mvnw clean compile -B
         working-directory: java
+      - name: Start native test services
+        run: |
+          sudo systemctl start postgresql.service
+          sudo systemctl start redis-server.service
+          sudo -u postgres psql --set ON_ERROR_STOP=1 <<'SQL'
+          DO $$ BEGIN
+            CREATE ROLE stockbroker_test LOGIN PASSWORD 'stockbroker_test';
+          EXCEPTION WHEN duplicate_object THEN
+            ALTER ROLE stockbroker_test WITH LOGIN PASSWORD 'stockbroker_test';
+          END $$;
+          CREATE DATABASE stockbroker_test OWNER stockbroker_test;
+          SQL
+        shell: bash
       - name: Run unit tests
         run: ./mvnw test -B
         working-directory: java
+        env:
+          SB_POSTGRES_DB: stockbroker_test
+          SB_POSTGRES_USER: stockbroker_test
+          SB_POSTGRES_PASSWORD: stockbroker_test
       - name: Run static analysis
         run: ./mvnw spotbugs:check checkstyle:check -B
         working-directory: java
