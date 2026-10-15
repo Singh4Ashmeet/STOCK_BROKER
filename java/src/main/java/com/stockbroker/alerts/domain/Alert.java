@@ -46,7 +46,12 @@ public class Alert {
 
     @PrePersist
     protected void onCreate() {
-        createdAt = Instant.now();
+        if (id == null) {
+            id = UUID.randomUUID();
+        }
+        if (createdAt == null) {
+            createdAt = Instant.now();
+        }
     }
 
     // Getters and setters

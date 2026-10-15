@@ -1,0 +1,2 @@
+  AST extraction: 59/59 uncached files (100%)
+AST: 3812 nodes, 10475 edges

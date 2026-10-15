@@ -67,7 +67,12 @@ public class Order {
 
     @PrePersist
     protected void onCreate() {
-        createdAt = Instant.now();
+        if (id == null) {
+            id = UUID.randomUUID();
+        }
+        if (createdAt == null) {
+            createdAt = Instant.now();
+        }
         updatedAt = Instant.now();
     }
 

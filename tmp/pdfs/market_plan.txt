@@ -1,0 +1,891 @@
+Stock and Crypto Market Data Platform - Project Plan
+Page 1
+Stock and Crypto Market Data Platform
+Complete project plan: Rust, Python, Java and Next.js
+Personal portfolio project. Planning document only, no code yet.
+Item
+Decision
+Purpose
+Personal portfolio project that shows the split between low latency, research and product
+Cost
+Free to build and run (public exchange feeds, open-source tools, Docker on a local machine)
+Deadline
+None. Quality over speed
+v1 scope
+Crypto only, one exchange (Binance), 3 to 5 symbols, paper trading only
+Top priority
+Real-time performance
+Languages
+Rust (fast feed), Python (research), Java (product API), TypeScript/Next.js (frontend)
+Planning order
+Rust, then Java, then Python, then frontend
+Contents
+1. Goals and what "better than the market" means
+2. Architecture overview
+3. What each language owns
+4. Shared contracts between services
+5. Data sources and storage
+6. Latency budget
+7. Rust service (live feed, order book, metrics)
+8. Java service (users, portfolios, paper trading, live fan-out)
+9. Python service (backtesting and research)
+10. Frontend (Next.js)
+11. Build order and roadmap
+12. Headline numbers to publish
+13. Risks and early decisions
+14. Free-tier and hosting plan
+15. Decision log
+\n\nStock and Crypto Market Data Platform - Project Plan
+Page 2
+1. Goals and what "better than the market" means
+A portfolio project should be small enough to finish and sharp enough to impress. Commercial platforms such
+as Bloomberg, TradingView and the exchanges' own feeds have large teams behind them, so the project
+does not try to beat them on everything. It aims to be measurably best at three specific things, and to publish
+the numbers that prove it.
+The three goals
+#
+Goal
+What it means in practice
+1
+Real-time latency (top priority)
+Exchange timestamp to your API to the user's screen is measured per stage
+and published as p50, p99 and p99.9 on a live dashboard.
+2
+Order-book correctness
+The local book never silently drifts. Sequence gaps are detected, the book
+resyncs automatically, and it is cross-checked against exchange snapshots
+(target: zero mismatches).
+3
+Honest backtesting
+Fees, slippage and latency are built in. Any recorded day can be replayed
+identically through Rust, Python and Java.
+Replay is not a separate goal. It comes almost for free once raw events are stored, and it supports goal 3.
+Scope rules
+
+Crypto only for v1. Stocks add licensing and market-hours complexity without adding to the architecture
+story. Stocks can come later.
+
+Paper trading only. Handling real money or giving trading advice raises regulatory problems, especially
+in India (SEBI).
+
+Free to run. Public WebSocket feeds need no key; every infrastructure component runs free in Docker.
+
+Finish phases 1 and 2 (Rust) fully before starting anything else, because they carry the most
+important goal.
+\n\nStock and Crypto Market Data Platform - Project Plan
+Page 3
+2. Architecture overview
+Three services with one job each. Rust streams live data directly to Java over gRPC for the fastest live path,
+and the message bus is used only for storage and replay, so it can never slow the live view.
+ Exchange (Binance WebSocket + REST snapshot)
+                      |
+                      v
++------------------------------------------------+
+| RUST: connector, normalizer, order book,       |
+|       metrics, replay, latency timers          |
++------------------------------------------------+
+        |                              |
+        | live gRPC stream             | raw events
+        v                              v
++----------------------------+   +------------------------------+
+| JAVA: auth, portfolios,    |   | Event log (Parquet)          |
+| paper trading, WebSocket   |   | + optional bus -> ClickHouse |
+| fan-out, alerts, API       |   |                              |
++----------------------------+   +------------------------------+
+     |             |                        |
+     v             v                        v
+ Postgres        Redis                +----------------------------+
+ (users,         (latest state,       | PYTHON: backtester via     |
+ ledger)         rate limits)         | PyO3 Rust book, research   |
+                                      +----------------------------+
+                                                    |
+                                                    v
+      Next.js frontend <---- results via Java API
+Why the live path bypasses the bus
+A direct gRPC stream has the fewest hops. The cost is one extra connection to build and monitor, but it gives
+a cleaner latency story for the portfolio. The bus (Redpanda or NATS JetStream) still receives every event for
+ClickHouse ingestion and replay.
+\n\nStock and Crypto Market Data Platform - Project Plan
+Page 4
+3. What each language owns
+Language
+Best at
+Owns
+Rust
+Speed, no garbage-collection pauses,
+safe concurrency
+Goals 1 and 2: feed handling, order book, metrics,
+replay. No users, no accounts, no business logic.
+Python
+Data-science libraries, fast
+experimenting
+Goal 3: research, strategy tests, honest backtesting,
+statistics. Uses the Rust book through PyO3.
+Java
+Mature ecosystem for APIs, auth and
+many concurrent users
+The product layer: accounts, portfolios, paper trading,
+live fan-out to clients. Never recomputes market
+metrics.
+TypeScript / Next.js
+Rich UI, fast iteration
+Dashboard, trading ticket, research pages,
+system-health page, marketing and docs site.
+Golden rule
+Rust computes market metrics and Java never recomputes them. This prevents two implementations drifting
+apart and keeps one source of truth for every number on screen.
+4. Shared contracts between services
+Multi-language projects succeed or fail on their contracts, so these are decided first.
+
+Protobuf schemas live in one shared proto/ folder and generate code for Rust, Java and Python. One
+source of truth for Trade, Quote, BookSnapshot, BookDelta, Metric and so on.
+
+Timestamps: always UTC, integer nanoseconds or microseconds. Every event records both exchange
+time and local receive time, and the live stream adds a publish timestamp.
+
+Prices and quantities: never floats across boundaries. Fixed-point integers (ticks and lots) or decimal
+strings with a defined scale.
+
+Symbol naming: one canonical format such as BINANCE:BTC-USDT, mapped from each venue's quirks
+inside Rust.
+
+Sequence numbers on every streamed message so any consumer can detect gaps and ask for a fresh
+snapshot.
+
+Versioning: schema changes are backward compatible, and every stored event file records its schema
+version.
+\n\nStock and Crypto Market Data Platform - Project Plan
+Page 5
+5. Data sources and storage
+Data sources
+Market
+Source
+Notes
+Crypto (v1)
+Binance public WebSocket and REST
+Free, no API key, full depth. Start here. Coinbase
+and Kraken are the next connectors.
+US stocks (later)
+Alpaca, Polygon, Finnhub free tiers
+Real-time is gated; free tiers are delayed or limited.
+Indian stocks (later)
+Broker APIs: Zerodha Kite Connect,
+Upstox, Angel One SmartAPI
+Official NSE and BSE feeds are expensive. Broker
+APIs need an account and have terms of use.
+Each source is a plugin behind a Rust connector trait, so adding a venue never touches the order book or metrics
+code.
+Storage
+Store
+Purpose
+Raw event files (Parquet or Protobuf-framed,
+compressed)
+Source of truth for replay and backtesting. One file per symbol per
+hour.
+Redpanda or NATS JetStream (optional bus)
+Carries events from Rust to ClickHouse ingestion. Not on the live path.
+ClickHouse (or TimescaleDB)
+Historical ticks, candles and metrics for charts and research queries.
+Redis
+Latest state per symbol (top of book, latest metrics), rate-limit counters,
+shared session data.
+Postgres
+Users, refresh tokens, portfolios, orders, fills and the append-only
+ledger. Migrations with Flyway.
+Parquet archive
+Cheap, fast scans for backtests with Polars and DuckDB.
+6. Latency budget
+Each stage gets its own timer and target, so the project can say where time goes, not just the total. These are
+starting guesses for a laptop setup and will be adjusted after the first measurements.
+Stage
+What it covers
+Target (p99)
+1
+Exchange message arrives, Rust parses it
+under 100 µs
+2
+Book update and metrics computed
+under 50 µs
+3
+Published to the bus / gRPC stream
+under 1 ms
+4
+Java receives and pushes to the client
+under 5 ms
+Latency inside the pipeline (receive to API) is reported separately from network latency to the exchange, because
+the latter depends on the internet connection of the machine running the demo.
+\n\nStock and Crypto Market Data Platform - Project Plan
+Page 6
+7. Rust service
+Goals served: 1 (latency) and 2 (order-book correctness). The service does one thing fast. It has no users, no
+accounts and no business logic.
+7.1 Modules
+Module
+Job
+Connector (one per
+exchange)
+Opens the WebSocket, sends heartbeats, reconnects with backoff, respects rate limits.
+Binance first, behind a trait so other exchanges are plugins.
+Normalizer
+Converts each exchange's format into one internal event type (Trade, BookDelta,
+BookSnapshot). Stamps exchange time and receive time on every event.
+Order book engine
+One book per symbol. Flow: buffer diffs, fetch the REST snapshot, drop stale diffs,
+apply the rest in order. On a sequence gap the book is marked invalid and resynced
+automatically. It never serves a possibly wrong book.
+Metrics engine
+Incremental, never recomputed from scratch: best bid/ask, spread, mid, microprice,
+depth at N levels, order-book imbalance, rolling VWAP, trade-flow imbalance.
+Output layer
+Live gRPC stream to Java, and a separate writer thread for raw events.
+Latency instrumentation
+A timestamp at every stage boundary feeding hdrhistogram and Prometheus.
+7.2 Concurrency design
+
+One async task per connection and one dedicated thread per group of books, communicating over
+bounded channels or lock-free ring buffers.
+
+No shared locks on the hot path. One book is owned by exactly one thread (optionally core-pinned).
+
+Integer prices and quantities everywhere, never floats.
+
+No heap allocation on the hot path: pre-sized arrays, reused buffers, an arena for events, no per-message
+String or Vec.
+7.3 Crate choices
+
+tokio and tokio-tungstenite for async runtime and WebSockets.
+
+simd-json or sonic-rs for parsing, with serde_json as the fallback. Benchmark both early, since parsing is
+often the biggest stage-1 cost.
+
+tonic and prost for gRPC and Protobuf.
+
+crossbeam or rtrb for channels between threads (rtrb is a lock-free ring buffer).
+
+hdrhistogram plus the metrics crate with a Prometheus exporter.
+
+criterion for micro-benchmarks, proptest for book correctness tests, cargo-fuzz for the parser.
+7.4 The optimized order book
+The fully optimized design is built from the start, with a simple BTreeMap book kept only as a test oracle (the
+oracle is not the product; it proves the fast book is correct).
+
+Fixed-point ticks: each price becomes an integer count of tick sizes, so levels are array indices rather
+than map keys.
+
+Dense array window: a flat array of quantities covers a band around the mid price (plus or minus N ticks).
+An update is one indexed write, O(1), cache friendly.
+
+Far levels: prices outside the window live in a small sorted fallback structure. When the mid moves, the
+window re-centers.
+
+Best bid/ask tracking: cache the best index and rescan only when the best level empties, starting from
+there.
+\n\nStock and Crypto Market Data Platform - Project Plan
+Page 7
+
+Bitset of non-empty levels: finding the next occupied level is a hardware bit scan (trailing_zeros)
+instead of walking empty slots.
+
+Incremental metrics: running totals (cumulative depth, imbalance sums) adjusted by each delta, so cost
+is O(changed levels), not O(book).
+
+Memory layout: structure-of-arrays, cache-line alignment on hot structs to avoid false sharing.
+
+Parsing: straight from the byte buffer into integers, skipping the intermediate JSON tree and any float
+conversion.
+The trade-off is more edge cases (re-centering, far levels). That is exactly why the oracle and the property tests
+matter.
+7.5 gRPC output (live path to Java)
+
+Server-streaming RPCs: SubscribeBook(symbol), SubscribeTrades(symbol),
+SubscribeMetrics(symbol).
+
+Late joiners first receive a full snapshot, then deltas, each with a sequence number so Java can detect a
+gap.
+
+Slow-consumer rule: each subscriber has a bounded queue. If it falls behind it is conflated to the latest
+snapshot instead of buffering forever. A slow client must never slow the feed.
+
+Every message carries exchange time, receive time and a Rust publish time, so Java can compute
+end-to-end latency.
+7.6 Storage output and replay
+
+A separate writer thread receives events through its own channel, so disk work never touches the hot
+path.
+
+Raw normalized events are written in batches to compressed append-only files, one per symbol per hour.
+Optionally the same events are published to the bus for ClickHouse ingestion.
+
+Replay mode: the same binary with --replay file feeds recorded events through the normalizer and
+book at original or accelerated speed. It is the identical code path as live, so a replayed day yields identical
+books and metrics. This is the deterministic test harness.
+7.7 Operations
+
+One TOML config file: exchange, symbols, window size, tick sizes, queue sizes.
+
+Health and metrics endpoint: connection state, per-symbol book validity, resync count, latency histograms.
+
+Graceful shutdown flushes the writer.
+7.8 Testing (goal 2)
+
+Property tests (proptest): random update sequences applied to both the optimized book and the
+BTreeMap oracle, which must match after every step. Invariants: sorted levels, no crossed book, no
+zero-quantity levels.
+
+Replay tests: recorded Binance streams, plus synthetic ones with injected sequence gaps, duplicates,
+out-of-order messages and mid-stream disconnects.
+
+Snapshot cross-check: in live mode, periodically fetch the exchange REST snapshot and compare the
+top N levels to the local book. The mismatch count is a published number (target: zero).
+
+Fuzzing (cargo-fuzz): garbage input to the parser must never panic.
+
+Soak test: 24 hours with no memory growth and no missed reconnects.
+7.9 Benchmarks (goal 1)
+
+criterion micro-benchmarks for parse, book update and metrics update, each in isolation.
+
+End-to-end harness: replay at full speed and measure events per second and per-stage p50, p99 and
+p99.9.
+
+README comparisons with a chart each: oracle vs optimized book, and serde_json vs simd-json.
+\n\nStock and Crypto Market Data Platform - Project Plan
+Page 8
+
+Benchmarks run in CI so a regression fails the build.
+7.10 Repository layout (Cargo workspace)
+Crate / folder
+Contents
+core
+Types, fixed-point, timestamps. No I/O.
+book
+Optimized book and the oracle. No async.
+metrics
+Incremental metric calculations.
+connectors
+Exchange trait and the Binance implementation.
+server
+gRPC service, writer thread, config, health endpoint.
+replay
+File reader and replay driver.
+pybook
+PyO3 bindings built with maturin (see section 9).
+proto/
+Shared Protobuf schemas for all languages.
+benches/, tests/
+Workspace-level benchmarks and integration tests.
+7.11 Rust milestones
+
+1. core plus Protobuf schemas.
+
+2. Binance connector and normalizer, printing events.
+
+3. Oracle book, then the optimized book, then property tests.
+
+4. Metrics engine plus benchmarks.
+
+5. Raw event writer and replay mode.
+
+6. gRPC server with slow-consumer handling.
+
+7. Latency instrumentation, health endpoint, soak test, README with charts.
+\n\nStock and Crypto Market Data Platform - Project Plan
+Page 9
+8. Java service
+The product layer. It turns the Rust stream into something many users can use, without ever slowing the
+feed. It is a full multi-user system.
+Stack (free): Java 21 with virtual threads, Spring Boot, Postgres, Redis, Flyway, Micrometer, Docker.
+8.1 Market gateway (real-time part)
+
+Holds one gRPC connection to Rust and subscribes only to symbols that clients currently need.
+
+Keeps the latest book, trades and metrics per symbol in memory, with a shared copy in Redis for restarts.
+
+Fan-out hub: pushes updates to clients over WebSocket (or SSE). Each client has a bounded queue, and
+a slow client is conflated to the latest state. One slow browser can never hurt anyone else.
+
+Shared subscriptions: if 100 users watch BTC, the gateway holds one stream from Rust and fans it out,
+so load grows with users, not with symbols.
+
+Gap handling: a missed sequence number triggers a fresh snapshot request to Rust.
+
+Java never recomputes market metrics. It only forwards them.
+8.2 Authentication and accounts
+
+Register, login, logout and refresh. Short-lived JWT access tokens (about 15 minutes) plus rotating refresh
+tokens stored hashed in Postgres so a stolen token can be revoked.
+
+Passwords hashed with Argon2id. Email verification and password reset can come later.
+
+Roles: USER and ADMIN (admin only for system-health pages).
+
+OAuth providers (such as Google login) can be added later.
+
+WebSocket authentication happens at connect time with the access token; sessions close when the token
+expires or is revoked.
+8.3 Multi-user isolation
+
+Every portfolio, order, fill, watchlist and alert row carries user_id, and every query filters by it, enforced in
+one repository layer.
+
+Tests that prove user A can never read or change user B's data.
+
+Optional second line of defense: Postgres row-level security.
+8.4 Abuse protection
+
+Per-user and per-IP rate limits (Bucket4j with Redis).
+
+Caps on open orders, alerts and WebSocket connections per user, so one account cannot exhaust
+resources.
+
+Login throttling after repeated failures.
+8.5 Portfolio and watchlists
+
+Holdings, positions, cash balance, realized and unrealized P&L, and transaction history.
+
+Watchlists, with P&L computed from live prices.
+8.6 Paper-trading engine (the standout feature)
+
+Market and limit orders fill against the real live order book from Rust. A market order walks the book level
+by level, so there is realistic slippage and partial fills, not a fake fill at mid price.
+
+Fees modeled exactly as in the Python backtester, so live paper results and backtests are comparable.
+
+Orders and fills stored in Postgres with an append-only ledger, so balances can always be reconstructed.
+
+One writer per account (per-account serialization), so two simultaneous orders cannot overspend the
+cash balance.
+
+Idempotency keys on order submission, so a retried request never creates a duplicate order.
+\n\nStock and Crypto Market Data Platform - Project Plan
+Page 10
+8.7 Alerts
+
+Price, spread and imbalance threshold alerts, evaluated against the incoming stream and delivered
+through WebSocket or email.
+8.8 Results and history API
+
+REST endpoints for historical candles and metrics (read from ClickHouse).
+
+Endpoints to trigger a backtest job in Python, poll its status and fetch its results.
+
+OpenAPI spec generated so the frontend client is generated, not hand-written.
+8.9 Observability and load testing
+
+Micrometer metrics to Prometheus. The headline metric is end-to-end latency from exchange timestamp to
+the moment a message leaves the WebSocket.
+
+k6 or Gatling load test with, for example, 1,000 simulated WebSocket users, reporting added fan-out
+latency. This is the Java headline number.
+8.10 Java milestones
+
+1. Spring Boot skeleton, Flyway schema, shared Protobuf.
+
+2. Auth (register, login, refresh) with isolation tests.
+
+3. gRPC client plus in-memory market state.
+
+4. WebSocket fan-out with per-client bounded queues.
+
+5. Portfolio, watchlists, ledger.
+
+6. Paper-trading engine against the live book.
+
+7. Alerts, rate limits, history endpoints.
+
+8. Metrics, load test, README with charts.
+\n\nStock and Crypto Market Data Platform - Project Plan
+Page 11
+9. Python service
+Goal served: 3 (honest backtesting). The aim is results a skeptical reader would trust, not impressive-looking
+equity curves.
+Stack (free): Python 3.12, Polars and DuckDB, PyArrow and Parquet, NumPy and Numba, FastAPI, pytest
+and Hypothesis.
+9.1 Shared Rust book through PyO3
+The backtester reuses the exact production order book through PyO3 bindings, so there is one
+implementation across live trading and research. This removes a whole class of "it worked in research" bugs.
+
+A pybook crate wraps book, metrics and replay and builds with maturin into a normal Python wheel.
+
+book and metrics stay free of I/O and async so they can be called from Python without dragging in tokio.
+
+Exposed: OrderBook (apply snapshot or delta, best bid/ask, depth, metrics) and EventReader (reads
+recorded event files in order).
+
+Keep the boundary coarse. Python asks for "the next 10,000 events and the book state after each"
+rather than calling Rust once per tick. Data returns as NumPy or Arrow arrays, zero-copy where possible.
+
+Parity test: replay one recorded day through the Rust server and through the Python binding and assert
+identical book states and metrics at every event. This is the proof of one implementation.
+
+The wheel is versioned with the Rust workspace, and each backtest result records the wheel version used.
+
+Trade-offs: a more involved build (Rust toolchain plus maturin in CI) and harder cross-boundary
+debugging, so the reader and book get their own pure-Rust tests first.
+9.2 Data layer
+
+Reads raw event files (Parquet) and ClickHouse aggregates.
+
+Validation pass first: finds gaps, duplicates and out-of-order events, and refuses to backtest across a
+broken stretch without flagging it.
+
+Builds datasets such as 1-second bars, trade bars and book-feature tables.
+9.3 Event-driven backtest engine
+
+Replays actual order book events in timestamp order, the same stream live trading sees. There is no
+separate backtest world.
+
+Strategies implement one small interface: on_event(state) -> orders.
+9.4 Realistic execution model (what makes it honest)
+Element
+How it is modeled
+Fills
+Against the historical book, walking levels, with partial fills.
+Latency
+An order sent at time t reaches the market at t plus latency and fills against the book as it
+was then, not as the strategy saw it.
+Fees
+Maker and taker fees from the exchange's real schedule.
+Slippage and impact
+From actual book depth, with an optional impact penalty for larger orders.
+Queue position
+Limit-order queue position is an approximation, since your place in the queue is not visible.
+The assumption is stated in the README.
+Parity with Java
+Same fee and fill rules as the Java paper trader, so live paper runs and backtests of the
+same period are comparable.
+9.5 Anti-lookahead and anti-overfitting
+\n\nStock and Crypto Market Data Platform - Project Plan
+Page 12
+
+Strict no-future-data rule enforced by the engine. Strategies only see events up to the current timestamp.
+Tests deliberately try to cheat and must fail.
+
+Walk-forward testing: tune on one window, test on the next, repeat.
+
+Train, validation and untouched test periods, plus parameter sensitivity maps to show whether a result is a
+lucky spike.
+
+Report the number of parameter combinations tried, and a deflated Sharpe or similar adjustment where
+practical.
+9.6 Strategies (start small)
+
+Baselines first: buy and hold, and random entry. Anything that cannot beat them is not a strategy.
+
+Then order-book imbalance, a microprice-based signal and trade-flow momentum, reusing the metrics
+Rust already computes.
+
+Optional later: a simple ML signal (gradient boosting) with proper time-based splits.
+9.7 Reporting
+
+Return, volatility, Sharpe, Sortino, max drawdown, hit rate, turnover, average trade.
+
+Results with and without costs side by side.
+
+Equity curve, drawdown plot, trade log, and a "where did the edge go" breakdown: gross, minus fees,
+minus slippage, minus latency.
+9.8 Job service and Java integration
+
+FastAPI service: Java submits a backtest (strategy, symbol, period, parameters), polls status and fetches
+results.
+
+Results saved as Parquet or JSON plus a summary row in Postgres via Java, so the frontend can list and
+chart them.
+
+Each run records its code version, parameters and data range, so any result is reproducible.
+9.9 Testing
+
+Hypothesis tests on the engine: money is conserved, positions reconcile with fills, no negative cash
+without leverage.
+
+Golden tests: a tiny hand-calculated scenario with a known expected P&L.
+
+Parity tests: the Rust server vs the Python binding, and the same recorded day through backtest vs the
+Java paper engine yielding matching fills.
+9.10 Python milestones
+
+1. Data loader plus validator.
+
+2. Engine skeleton on the pybook wheel and baseline strategies, with the parity test and golden tests as
+the first things that must pass.
+
+3. Execution model: fees, slippage, latency.
+
+4. Imbalance strategy and the metrics report.
+
+5. Walk-forward and sensitivity analysis.
+
+6. FastAPI job service and Java hookup.
+
+7. Reproducibility, README with the cost-breakdown chart.
+\n\nStock and Crypto Market Data Platform - Project Plan
+Page 13
+10. Frontend (Next.js)
+One rule: the UI must never be the slowest part of the pipeline. Next.js is used with the live parts kept out of
+the server-rendering path.
+Stack (free): TypeScript, Next.js (App Router), Zustand for live market data, TanStack Query for REST data,
+TradingView lightweight-charts for candles and equity curves, a custom canvas component for the order
+book and depth chart, Tailwind, and Playwright for end-to-end tests.
+10.1 Server-rendered vs client-only
+
+Server-rendered or static (marketing and docs): landing page, architecture explainer, benchmark
+charts, docs and write-ups. Fast, good for recruiters who just want to read.
+
+Client-only (the app): everything live sits under /app/* as client components, with live pieces loaded
+through dynamic(..., { ssr: false }). Server-rendering a live order book gives no benefit and
+causes hydration problems.
+10.2 Structure (App Router route groups)
+Group
+Contents
+(marketing)/
+Landing, architecture, benchmarks, docs.
+(app)/
+Market, trade, portfolio, watchlist, research, health. All behind auth.
+(auth)/
+Login and register.
+Route groups keep layouts separate, so the app shell never pulls in marketing code.
+10.3 Authentication
+
+Java remains the single source of truth for auth.
+
+Next.js holds the refresh token in an httpOnly cookie and uses middleware to protect the (app) routes.
+The access token stays in memory on the client.
+
+The WebSocket connects directly to Java, not through Next.js, because proxying a high-rate stream
+through a Node server would add latency.
+10.4 Real-time rendering design
+
+WebSocket handled in a Web Worker, so parsing and message handling never block the UI thread.
+
+Updates are batched and drawn once per animation frame (requestAnimationFrame), so 1,000 messages
+per second still means 60 draws per second.
+
+Order book drawn on canvas, not DOM rows, updating only the visible levels.
+
+Sequence numbers checked on the client: on a gap it requests a fresh snapshot and shows a "resyncing"
+badge.
+
+Reconnect with backoff and a clear connection status indicator.
+
+Latency overlay: each message carries its timestamps, so the UI shows live exchange-to-screen latency.
+This puts the headline number on screen for anyone who opens the demo.
+10.5 Pages
+Page
+Contents
+Market
+Live order book, depth chart, trades tape, candles, and a metrics panel (spread, imbalance,
+microprice, VWAP).
+Trade
+Paper-trading ticket (market and limit), open orders, fills, and a slippage preview that
+walks the live book before submitting.
+Portfolio
+Positions, cash, live P&L, equity history, ledger.
+\n\nStock and Crypto Market Data Platform - Project Plan
+Page 14
+Page
+Contents
+Watchlist and alerts
+Symbols to follow and threshold alerts.
+Research
+Launch a backtest, view results (equity curve, drawdown, cost breakdown: gross, fees,
+slippage, latency) and compare runs.
+System health
+Per-stage latency histograms, resync counts, connection state. A strong portfolio piece.
+Auth
+Register, login, session handling with token refresh.
+Marketing site
+Landing, architecture and benchmark pages fed by real numbers from the benchmark runs.
+10.6 Things to watch with Next.js
+
+Keep heavy client code (charts, canvas, worker) in lazy chunks so marketing pages stay tiny. Set a bundle
+budget per route group.
+
+Do not use server actions or API routes for market data. Browser to Java directly is the fast path.
+
+Vercel's free tier suits the pages, but it is serverless and cannot hold long-lived WebSocket connections,
+which is another reason the socket goes straight to Java.
+
+API client generated from the Java OpenAPI spec.
+10.7 Quality targets
+
+Steady 60 fps during a full-rate book stream.
+
+Main-thread blocking per update of a few milliseconds at most, measured with the browser Performance
+API.
+
+Lighthouse score and bundle-size budget, with chart code lazy loaded.
+10.8 Frontend milestones
+
+1. Next.js app with route groups, auth flow, middleware and the OpenAPI client.
+
+2. WebSocket worker, state store, connection and resync handling.
+
+3. Canvas order book, depth chart, trades tape.
+
+4. Candles and metrics panel, latency overlay.
+
+5. Trade ticket with slippage preview, portfolio page.
+
+6. Watchlist, alerts, research pages.
+
+7. System health page.
+
+8. Marketing site: landing, architecture, benchmark charts.
+
+9. Playwright tests, performance pass, demo video.
+\n\nStock and Crypto Market Data Platform - Project Plan
+Page 15
+11. Build order and roadmap
+Python's engine comes after the Java paper trader so both can share the same fee and fill rules, which
+makes the parity test between them possible.
+Phase
+Work
+Done when
+0
+Monorepo, shared Protobuf schemas, docker-compose
+(Postgres, Redis, ClickHouse, Prometheus, Grafana)
+docker compose up starts everything
+1
+Rust milestones 1 to 4: core, Binance connector, oracle and
+optimized book, metrics, benchmarks
+Book matches the oracle in property tests
+2
+Rust milestones 5 to 7: event writer, replay, gRPC, latency
+instrumentation
+Live and replay produce identical output
+3
+pybook PyO3 wheel plus the parity test
+Python and Rust books match on a
+recorded day
+4
+Java milestones 1 to 4: auth, gRPC client, WebSocket fan-out
+A logged-in client sees a live book
+5
+Java milestones 5 and 6: portfolios, ledger, paper trading against
+the live book
+Orders fill with realistic slippage
+6
+Python milestones 1 to 4: loader, engine, execution model, first
+strategy
+Golden tests pass, cost breakdown works
+7
+Python milestones 5 to 7 plus Java history and backtest APIs
+Backtest runs from the API and is
+reproducible
+8
+Alerts, rate limits, load test, soak test, READMEs
+All headline numbers published
+9
+Frontend (Next.js milestones 1 to 9)
+Dashboard on top of the finished APIs
+12. Headline numbers to publish
+This is the "better than the market" checklist. Every item is a measured number with a chart in a README or
+on the marketing site.
+#
+Number
+How it is shown
+1
+Latency: per-stage and end-to-end p50, p99, p99.9, exchange to client
+Live health page and latency overlay
+2
+Throughput: events per second per core, and book update time in ns
+(oracle vs optimized)
+Benchmark chart
+3
+Book correctness: zero mismatches against exchange snapshots
+over a 24-hour soak, plus resync count
+Soak test report
+4
+Parity: live, replay and Python backtest give identical books
+Automated parity test result
+5
+Fan-out: added latency with 1,000 simulated WebSocket users
+Load test chart
+6
+Backtest honesty: gross vs net-of-costs results, walk-forward and
+baseline comparisons
+Cost-breakdown chart
+\n\nStock and Crypto Market Data Platform - Project Plan
+Page 16
+13. Risks and early decisions
+Risk
+What to do
+Scope creep. The plan is large.
+Finish phases 1 and 2 fully before anything else, since they carry the most
+important goal.
+Exchange terms and limits
+Public feeds are free, but check each exchange's usage terms and rate limits.
+Latency claims
+Report where it was measured (laptop, loopback) and separate internal latency
+from network latency.
+Order-book correctness
+Sequence gaps and reconnects are the hardest part. Plan tests with recorded
+feeds that can be replayed.
+Backtest realism
+Ignoring fees, slippage and latency makes results meaningless. Bake the
+assumptions in from the start.
+Regulation
+Paper trading only. No real money and no trading advice, especially because
+of SEBI rules in India.
+Optimized-book edge cases
+Window re-centering and far levels are error-prone. The oracle and property
+tests are the safety net.
+PyO3 build complexity
+Needs the Rust toolchain plus maturin in CI. Keep the boundary coarse and
+test the Rust pieces on their own first.
+Java vs Rust duplication
+Rust computes market metrics and Java never recomputes them.
+Multi-user security
+Isolation tests, token revocation, rate limits and per-user resource caps from
+the first auth milestone.
+Replayability
+Store raw events so any day can be replayed identically through Rust, Python
+and Java.
+14. Free-tier and hosting plan
+
+Data: Binance, Coinbase and Kraken public WebSocket feeds cost nothing and need no key.
+
+Infrastructure: Redpanda, Redis, Postgres, ClickHouse, Prometheus and Grafana all run free in Docker
+on a local machine.
+
+Frontend hosting: Cloudflare Pages or the Vercel free tier for the Next.js pages.
+
+Backend hosting is the hard part to host free, because Rust and Java need a server. Options: run
+everything locally and record a demo video, use a free-tier VM (Oracle Cloud's always-free tier is the most
+generous), or run a read-only public demo. This can be decided at the end.
+
+A short screen recording plus a good GitHub README may be enough for the portfolio.
+15. Decision log
+Decision
+Choice
+Purpose
+Personal portfolio project
+Cost
+Free to build and run
+Deadline
+None; quality over speed
+Market scope for v1
+Crypto only, Binance, 3 to 5 symbols, paper trading only
+Top 3 goals
+(1) Real-time latency, (2) order-book correctness, (3) honest backtesting with
+replay
+Live data path
+Direct gRPC from Rust to Java; the bus is for storage and replay only
+\n\nStock and Crypto Market Data Platform - Project Plan
+Page 17
+Decision
+Choice
+Order book
+Fully optimized design from the start, with a BTreeMap oracle for tests
+Rust experience
+Already knows Rust, so planning skips basics
+Java layer
+Full multi-user (registration, login, per-user portfolios)
+Python backtester
+Reuses the Rust book via PyO3
+Frontend
+Next.js, with live parts client-only and the WebSocket going straight to Java
+Planning order
+Rust, then Java, then Python, then frontend
+Open items still to design in more detail if wanted: the Protobuf schemas, the docker-compose setup, and the
+repository structure.
