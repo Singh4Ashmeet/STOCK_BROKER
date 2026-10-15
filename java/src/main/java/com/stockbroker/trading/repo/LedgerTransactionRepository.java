@@ -1,8 +1,8 @@
 package com.stockbroker.trading.repo;
 
 import com.stockbroker.trading.domain.LedgerTransaction;
-import org.springframework.data.jdbc.repository.query.Query;
-import org.springframework.data.repository.CrudRepository;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
@@ -14,17 +14,17 @@ import java.util.UUID;
  * Ledger transaction repository.
  */
 @Repository
-public interface LedgerTransactionRepository extends CrudRepository<LedgerTransaction, UUID> {
+public interface LedgerTransactionRepository extends JpaRepository<LedgerTransaction, UUID> {
 
-    @Query("SELECT * FROM ledger_transactions WHERE account_id = :accountId ORDER BY created_at DESC")
+    @Query(value = "SELECT * FROM ledger_transactions WHERE account_id = :accountId ORDER BY created_at DESC", nativeQuery = true)
     List<LedgerTransaction> findByAccountId(@Param("accountId") UUID accountId);
 
-    @Query("SELECT * FROM ledger_transactions WHERE user_id = :userId ORDER BY created_at DESC")
+    @Query(value = "SELECT * FROM ledger_transactions WHERE user_id = :userId ORDER BY created_at DESC", nativeQuery = true)
     List<LedgerTransaction> findByUserId(@Param("userId") UUID userId);
 
-    @Query("SELECT * FROM ledger_transactions WHERE id = :id")
+    @Query(value = "SELECT * FROM ledger_transactions WHERE id = :id", nativeQuery = true)
     Optional<LedgerTransaction> findById(@Param("id") UUID id);
 
-    @Query("SELECT * FROM ledger_transactions WHERE ref_type = :refType AND ref_id = :refId")
+    @Query(value = "SELECT * FROM ledger_transactions WHERE ref_type = :refType AND ref_id = :refId", nativeQuery = true)
     Optional<LedgerTransaction> findByRef(@Param("refType") String refType, @Param("refId") UUID refId);
 }

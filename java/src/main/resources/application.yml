@@ -46,6 +46,8 @@ spring:
       port: ${SB_REDIS_PORT:6379}
       password: ${SB_REDIS_PASSWORD}
       timeout: 5000ms
+      repositories:
+        enabled: false
       lettuce:
         pool:
           max-active: 20
@@ -63,6 +65,9 @@ spring:
   # SQL logging (disable in production)
   jpa:
     show-sql: false
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
     properties:
       hibernate:
         format_sql: true
@@ -161,8 +166,8 @@ sb:
       audience: stockbroker-client
       access-token-expiration: 15m
       refresh-token-expiration: 30d
-      private-key-path: classpath:keys/jwt_private.key
-      public-key-path: classpath:keys/jwt_public.key
+      private-key-path: ${SB_JWT_PRIVATE_KEY_PATH:file:../infra/secrets/jwt_private.key}
+      public-key-path: ${SB_JWT_PUBLIC_KEY_PATH:file:../infra/secrets/jwt_public.key}
       clock-skew: 60s
 
   # Rate limiting
