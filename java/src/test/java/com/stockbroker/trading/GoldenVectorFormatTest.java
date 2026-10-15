@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stockbroker.common.LocalTestConfiguration;
 import com.stockbroker.trading.service.GoldenVectorService;
 import com.stockbroker.trading.service.OrderExecutor;
+import com.stockbroker.trading.domain.Order;
+import com.stockbroker.trading.domain.Fill;
 import com.stockbroker.market.api.MarketDtos;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -66,7 +68,7 @@ class GoldenVectorFormatTest {
         for (String line : lines) {
             if (line.trim().isEmpty()) continue;
             // Should parse as valid JSON
-            Map<?, ?> map = objectMapper.readValue(line, Map.class);
+            Map<String, Object> map = objectMapper.readValue(line, Map.class);
             assertThat(map).containsKey("fillId");
             assertThat(map).containsKey("orderId");
             assertThat(map).containsKey("symbol");
@@ -82,7 +84,7 @@ class GoldenVectorFormatTest {
             assertThat(map).containsKey("bookState");
             
             // Book state should have bids and asks
-            Map<?, ?> bookState = (Map<?, ?>) map.get("bookState");
+            Map<String, Object> bookState = (Map<String, Object>) map.get("bookState");
             assertThat(bookState).containsKey("epoch");
             assertThat(bookState).containsKey("seq");
             assertThat(bookState).containsKey("bids");
@@ -131,7 +133,7 @@ class GoldenVectorFormatTest {
         String[] lines = content.trim().split("\n");
         for (String line : lines) {
             if (line.trim().isEmpty()) continue;
-            Map<?, ?> map = objectMapper.readValue(line, Map.class);
+            Map<String, Object> map = objectMapper.readValue(line, Map.class);
             assertThat(map).containsKey("symbol");
             assertThat(map).containsKey("side");
             assertThat(map).containsKey("type");
@@ -169,7 +171,7 @@ class GoldenVectorFormatTest {
         for (String line : lines) {
             if (line.trim().isEmpty()) continue;
             
-            Map<?, ?> vector = objectMapper.readValue(line, Map.class);
+            Map<String, Object> vector = objectMapper.readValue(line, Map.class);
             
             // Verify all required fields for Python replay
             assertThat(vector.get("fillId")).isInstanceOf(String.class);

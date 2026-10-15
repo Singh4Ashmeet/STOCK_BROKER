@@ -15,9 +15,12 @@ import org.springframework.test.context.ContextConfiguration;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Integration tests for the ledger service and reconciliation.
@@ -247,17 +250,4 @@ class LedgerIntegrationTest {
         assertThat(balances.get("BTC")).isEqualByComparingTo(new BigDecimal("5"));
     }
 
-    private static <T> T assertThatThrownBy(ThrowingCallable callable) {
-        try {
-            callable.call();
-            throw new AssertionError("Expected exception but none was thrown");
-        } catch (Throwable e) {
-            return (T) e;
-        }
-    }
-
-    @FunctionalInterface
-    private interface ThrowingCallable {
-        void call() throws Throwable;
-    }
 }

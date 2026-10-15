@@ -46,7 +46,7 @@ class OrderServiceLimitTest {
     private com.stockbroker.trading.service.AccountService accountService;
 
     @Mock
-    private com.stockbroker.research.service.GoldenVectorService goldenVectorService;
+    private com.stockbroker.trading.service.GoldenVectorService goldenVectorService;
 
     private OrderService orderService;
     private UUID userId;
@@ -75,7 +75,7 @@ class OrderServiceLimitTest {
 
         TradingDtos.CreateOrderRequest request = new TradingDtos.CreateOrderRequest(
                 "AAPL", TradingDtos.OrderSide.BUY, TradingDtos.OrderType.LIMIT,
-                "100", "150.00", TradingDtos.TimeInForce.GTC
+                "100", "150.00", TradingDtos.TimeInForce.GTC, "idem-key"
         );
 
         // When/Then
@@ -104,7 +104,7 @@ class OrderServiceLimitTest {
 
         com.stockbroker.trading.service.OrderExecutor.OrderPreviewResult preview = 
                 new com.stockbroker.trading.service.OrderExecutor.OrderPreviewResult(
-                        new BigDecimal("150.00"), new BigDecimal("1.00"), 0, true, 1
+                        "150.00", "1.00", 0, true, 1
                 );
         when(orderExecutor.previewOrder(any())).thenReturn(preview);
 
@@ -124,7 +124,7 @@ class OrderServiceLimitTest {
 
         TradingDtos.CreateOrderRequest request = new TradingDtos.CreateOrderRequest(
                 "AAPL", TradingDtos.OrderSide.BUY, TradingDtos.OrderType.LIMIT,
-                "100", "150.00", TradingDtos.TimeInForce.GTC
+                "100", "150.00", TradingDtos.TimeInForce.GTC, "idem-key"
         );
 
         // When
@@ -159,7 +159,7 @@ class OrderServiceLimitTest {
 
         TradingDtos.CreateOrderRequest request = new TradingDtos.CreateOrderRequest(
                 "AAPL", TradingDtos.OrderSide.BUY, TradingDtos.OrderType.LIMIT,
-                "100", "150.00", TradingDtos.TimeInForce.GTC
+                "100", "150.00", TradingDtos.TimeInForce.GTC, "idem-key"
         );
 
         // When
