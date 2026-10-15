@@ -65,8 +65,7 @@ class RateLimitFilterTest {
         filter = new RateLimitFilter(
                 rateLimitProperties,
                 authRateLimiter, marketRateLimiter, tradingRateLimiter,
-                userRateLimiter, ipRateLimiter,
-                rateLimitProperties
+                userRateLimiter, ipRateLimiter
         );
     }
 

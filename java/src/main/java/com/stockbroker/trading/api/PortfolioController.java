@@ -3,8 +3,6 @@ package com.stockbroker.trading.api;
 import com.stockbroker.common.error.BusinessProblem;
 import com.stockbroker.common.security.CurrentUser;
 import com.stockbroker.trading.service.PortfolioService;
-import com.stockbroker.portfolio.api.PortfolioDtos;
-import com.stockbroker.portfolio.api.PortfolioDtosExtended;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import org.springframework.http.ResponseEntity;
@@ -14,7 +12,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.UUID;
 
 /**
- * Portfolio REST endpoints.
+ * Portfolio REST endpoints (positions, P&L, transaction history).
  */
 @RestController
 @RequestMapping("/api/v1")
@@ -43,12 +41,5 @@ public class PortfolioController {
 
         UUID userId = CurrentUser.getUserId();
         return ResponseEntity.ok(portfolioService.getLedger(userId, from, to, limit, cursor));
-    }
-
-    @GetMapping("/watchlists")
-    @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<PortfolioDtosExtended.WatchlistListResponse> getWatchlists() {
-        UUID userId = CurrentUser.getUserId();
-        return ResponseEntity.ok(portfolioService.getWatchlistsWithLivePrices(userId));
     }
 }
