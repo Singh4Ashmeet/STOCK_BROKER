@@ -112,7 +112,7 @@ class RedisRecoveryTest {
         String specKey = "mkt:" + spec.symbol() + ":spec";
         Object specState = redisTemplate.opsForValue().get(specKey);
         assertThat(specState).isNotNull();
-        assertThat(specState).isInstanceOf(stockbroker.market.v1.InstrumentSpec.class);
+        assertThat(specState).isInstanceOf(com.stockbroker.market.v1.InstrumentSpec.class);
     }
 
     @Test

@@ -95,7 +95,7 @@ class MarketWebSocketHandlerRateLimitTest {
             WebSocketSession existingSession = mock(WebSocketSession.class);
             when(existingSession.getId()).thenReturn("existing-" + i);
             
-            MarketWebSocketHandler.SessionContext ctx = new MarketWebSocketHandler.SessionContext(existingSession, userId);
+            MarketWebSocketHandler.SessionContext ctx = new MarketWebSocketHandler.SessionContext(handler, existingSession, userId);
             sessions.put("existing-" + i, ctx);
         }
 

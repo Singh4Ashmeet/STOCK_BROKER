@@ -136,18 +136,19 @@ class AuthIsolationTest {
         // Create backtest
         ResearchDtos.CreateBacktestRequest btReq = new ResearchDtos.CreateBacktestRequest(
                 "momentum",
-                java.util.Map.of("lookback", 20, "threshold", 0.5),
                 "BINANCE:BTC-USDT",
                 "2026-01-01T00:00:00Z",
                 "2026-01-31T23:59:59Z",
-                java.util.Map.of("maker", 0.001, "taker", 0.001),
-                10,
-                "idem-" + suffix + "-bt"
+                java.util.Map.of("lookback", "20", "threshold", "0.5"),
+                "idem-" + suffix + "-bt",
+                "config-hash-" + suffix,
+                "data-fingerprint-" + suffix,
+                "git-commit-" + suffix
         );
         ResponseEntity<ResearchDtos.CreateBacktestResponse> btResp = restTemplate.exchange(
                 "/api/v1/backtests", HttpMethod.POST, new HttpEntity<>(btReq, headers), ResearchDtos.CreateBacktestResponse.class);
-        if (suffix.equals("A")) userABacktestId = UUID.fromString(btResp.getBody().runId());
-        else userBBacktestId = UUID.fromString(btResp.getBody().runId());
+        if (suffix.equals("A")) userABacktestId = UUID.fromString(btResp.getBody().backtestId());
+        else userBBacktestId = UUID.fromString(btResp.getBody().backtestId());
     }
 
     @Test
@@ -344,7 +345,7 @@ class AuthIsolationTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isNotNull();
         assertThat(response.getBody().backtests()).hasSize(1);
-        assertThat(response.getBody().backtests().get(0).runId()).isEqualTo(userABacktestId.toString());
+        assertThat(response.getBody().backtests().get(0).backtestId()).isEqualTo(userABacktestId.toString());
     }
 
     @Test
@@ -428,7 +429,7 @@ class AuthIsolationTest {
         ResponseEntity<ResearchDtos.BacktestResult> btResp = restTemplate.exchange(
                 "/api/v1/backtests/" + userABacktestId, HttpMethod.GET, entity, ResearchDtos.BacktestResult.class);
         assertThat(btResp.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(btResp.getBody().runId()).isEqualTo(userABacktestId.toString());
+        assertThat(btResp.getBody().backtestId()).isEqualTo(userABacktestId.toString());
     }
 
     @Test

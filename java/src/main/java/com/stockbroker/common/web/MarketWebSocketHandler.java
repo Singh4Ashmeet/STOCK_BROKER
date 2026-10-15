@@ -139,7 +139,7 @@ public class MarketWebSocketHandler extends TextWebSocketHandler {
 
         // Extract access token from ticket metadata (stored in Redis with ticket)
         // For now, we'll use a placeholder - in production, the ticket would carry the token expiry
-        SessionContext ctx = new SessionContext(session, userId);
+        SessionContext ctx = new SessionContext(this, session, userId);
         sessions.put(session.getId(), ctx);
 
         // Start the outbound writer for this session
@@ -519,7 +519,8 @@ public class MarketWebSocketHandler extends TextWebSocketHandler {
      * Session context with bounded outbound queue and conflation.
      * When queue is full, older delta messages are dropped, keeping only the latest snapshot.
      */
-    class SessionContext {
+    static class SessionContext {
+        final MarketWebSocketHandler handler;
         final WebSocketSession session;
         final UUID userId;
         final Set<String> subscriptions = ConcurrentHashMap.newKeySet();
@@ -541,7 +542,8 @@ public class MarketWebSocketHandler extends TextWebSocketHandler {
         final AtomicLong messagesDropped = new AtomicLong(0);
         final AtomicLong conflations = new AtomicLong(0);
 
-        SessionContext(WebSocketSession session, UUID userId) {
+        SessionContext(MarketWebSocketHandler handler, WebSocketSession session, UUID userId) {
+            this.handler = handler;
             this.session = session;
             this.userId = userId;
             // Access token expiry would be stored with the ticket in Redis
@@ -633,12 +635,12 @@ public class MarketWebSocketHandler extends TextWebSocketHandler {
                 if (!outboundQueue.offer(m)) {
                     // Still full - drop oldest (should be rare)
                     messagesDropped.incrementAndGet();
-                    totalMessagesDropped.incrementAndGet();
+                    handler.totalMessagesDropped.incrementAndGet();
                 }
             }
 
             conflations.incrementAndGet();
-            totalConflations.incrementAndGet();
+            handler.totalConflations.incrementAndGet();
 
             log.debug("Conflated queue for session {}: kept {} messages, dropped {}",
                     session.getId(), toRequeue.size(), outboundQueue.size() - toRequeue.size());
@@ -661,9 +663,9 @@ public class MarketWebSocketHandler extends TextWebSocketHandler {
                 while (writerRunning.get() && session.isOpen()) {
                     OutboundMessage msg = outboundQueue.poll(100, TimeUnit.MILLISECONDS);
                     if (msg != null) {
-                        sendMessage(session, msg.message());
+                        handler.sendMessage(session, msg.message());
                         messagesSent.incrementAndGet();
-                        totalMessagesSent.incrementAndGet();
+                        handler.totalMessagesSent.incrementAndGet();
                     }
                 }
             } catch (InterruptedException e) {

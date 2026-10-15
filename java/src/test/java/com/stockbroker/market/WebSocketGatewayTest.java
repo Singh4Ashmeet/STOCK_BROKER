@@ -18,11 +18,13 @@ import org.springframework.test.context.ContextConfiguration;
 import org.springframework.web.socket.*;
 import org.springframework.web.socket.client.standard.StandardWebSocketClient;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
+import org.springframework.web.socket.WebSocketHttpHeaders;
 
 import java.net.URI;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -79,7 +81,8 @@ class WebSocketGatewayTest {
     @AfterEach
     void teardown() {
         if (wsClient != null) {
-            wsClient.destroy();
+            // StandardWebSocketClient doesn't have destroy(); just nullify
+            wsClient = null;
         }
     }
 
@@ -87,7 +90,7 @@ class WebSocketGatewayTest {
     void loggedInClientReceivesLiveBook() throws Exception {
         // Connect WebSocket
         TestWebSocketHandler handler = new TestWebSocketHandler();
-        WebSocketSession session = wsClient.doHandshake(handler, new HttpHeaders(), URI.create(baseWsUrl)).get(5, TimeUnit.SECONDS);
+        WebSocketSession session = wsClient.doHandshake(handler, new WebSocketHttpHeaders(), URI.create(baseWsUrl)).get(5, TimeUnit.SECONDS);
 
         assertThat(session.isOpen()).isTrue();
 
@@ -113,8 +116,8 @@ class WebSocketGatewayTest {
 
         // Verify snapshot has bids and asks
         JsonNode data = snapshot.get("d");
-        assertThat(data.get("b")).isArray();
-        assertThat(data.get("a")).isArray();
+        assertThat(data.get("b").isArray()).isTrue();
+        assertThat(data.get("a").isArray()).isTrue();
 
         // Wait for at least one delta
         JsonNode delta = await().atMost(Duration.ofSeconds(10))
@@ -151,8 +154,8 @@ class WebSocketGatewayTest {
         String wsUrl1 = baseWsUrl.replace("ticket=" + getWsTicket(), "ticket=" + ticket1);
         String wsUrl2 = baseWsUrl.replace("ticket=" + getWsTicket(), "ticket=" + ticket2);
 
-        WebSocketSession session1 = wsClient.doHandshake(handler1, new HttpHeaders(), URI.create(wsUrl1)).get(5, TimeUnit.SECONDS);
-        WebSocketSession session2 = wsClient.doHandshake(handler2, new HttpHeaders(), URI.create(wsUrl2)).get(5, TimeUnit.SECONDS);
+        WebSocketSession session1 = wsClient.doHandshake(handler1, new WebSocketHttpHeaders(), URI.create(wsUrl1)).get(5, TimeUnit.SECONDS);
+        WebSocketSession session2 = wsClient.doHandshake(handler2, new WebSocketHttpHeaders(), URI.create(wsUrl2)).get(5, TimeUnit.SECONDS);
 
         assertThat(session1.isOpen()).isTrue();
         assertThat(session2.isOpen()).isTrue();
@@ -201,8 +204,8 @@ class WebSocketGatewayTest {
         String wsUrlFast = baseWsUrl.replace("ticket=" + getWsTicket(), "ticket=" + ticketFast);
         String wsUrlSlow = baseWsUrl.replace("ticket=" + getWsTicket(), "ticket=" + ticketSlow);
 
-        WebSocketSession fastSession = wsClient.doHandshake(fastHandler, new HttpHeaders(), URI.create(wsUrlFast)).get(5, TimeUnit.SECONDS);
-        WebSocketSession slowSession = wsClient.doHandshake(slowHandler, new HttpHeaders(), URI.create(wsUrlSlow)).get(5, TimeUnit.SECONDS);
+        WebSocketSession fastSession = wsClient.doHandshake(fastHandler, new WebSocketHttpHeaders(), URI.create(wsUrlFast)).get(5, TimeUnit.SECONDS);
+        WebSocketSession slowSession = wsClient.doHandshake(slowHandler, new WebSocketHttpHeaders(), URI.create(wsUrlSlow)).get(5, TimeUnit.SECONDS);
 
         assertThat(fastSession.isOpen()).isTrue();
         assertThat(slowSession.isOpen()).isTrue();
@@ -252,7 +255,7 @@ class WebSocketGatewayTest {
     @Test
     void snapshotThenDeltaOrdering() throws Exception {
         TestWebSocketHandler handler = new TestWebSocketHandler();
-        WebSocketSession session = wsClient.doHandshake(handler, new HttpHeaders(), URI.create(baseWsUrl)).get(5, TimeUnit.SECONDS);
+        WebSocketSession session = wsClient.doHandshake(handler, new WebSocketHttpHeaders(), URI.create(baseWsUrl)).get(5, TimeUnit.SECONDS);
 
         String subscribeMsg = objectMapper.writeValueAsString(Map.of(
                 "op", "subscribe",
@@ -309,7 +312,7 @@ class WebSocketGatewayTest {
         // and verify the session gets closed
 
         TestWebSocketHandler handler = new TestWebSocketHandler();
-        WebSocketSession session = wsClient.doHandshake(handler, new HttpHeaders(), URI.create(baseWsUrl)).get(5, TimeUnit.SECONDS);
+        WebSocketSession session = wsClient.doHandshake(handler, new WebSocketHttpHeaders(), URI.create(baseWsUrl)).get(5, TimeUnit.SECONDS);
 
         assertThat(session.isOpen()).isTrue();
 

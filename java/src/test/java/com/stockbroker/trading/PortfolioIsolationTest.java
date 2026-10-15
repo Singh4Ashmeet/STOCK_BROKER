@@ -153,10 +153,6 @@ class PortfolioIsolationTest {
                 UUID.randomUUID()
         );
 
-        HttpHeaders headersA = new HttpHeaders();
-        headersA.setBearerAuth(userAAccessToken);
-        HttpEntity<?> entityA = new HttpEntity<>(headersA);
-
         ResponseEntity<TradingDtos.PortfolioResponse> response = restTemplate.exchange(
                 "/api/v1/portfolio", HttpMethod.GET, entityA, TradingDtos.PortfolioResponse.class);
 
@@ -200,10 +196,6 @@ class PortfolioIsolationTest {
                 "USDT", new BigDecimal("300"),
                 UUID.randomUUID()
         );
-
-        HttpHeaders headersA = new HttpHeaders();
-        headersA.setBearerAuth(userAAccessToken);
-        HttpEntity<?> entityA = new HttpEntity<>(headersA);
 
         ResponseEntity<TradingDtos.PortfolioResponse> response = restTemplate.exchange(
                 "/api/v1/portfolio", HttpMethod.GET, entityA, TradingDtos.PortfolioResponse.class);

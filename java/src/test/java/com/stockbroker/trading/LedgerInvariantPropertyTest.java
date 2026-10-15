@@ -98,16 +98,21 @@ class LedgerInvariantPropertyTest {
 
     @Provide
     Arbitrary<List<LedgerEntry>> transactions() {
-        return Arbitraries.lists(ledgerEntry())
+        return ledgerEntry().list()
                 .ofMinSize(2)
                 .ofMaxSize(10)
                 .filter(this::isBalanced);
     }
 
     private Arbitrary<LedgerEntry> ledgerEntry() {
+        Arbitrary<UUID> uuids = Combinators.combine(
+                Arbitraries.longs(),
+                Arbitraries.longs()
+        ).as(UUID::new);
+
         return Combinators.combine(
-                Arbitraries.uuids(),
-                Arbitraries.uuids(),
+                uuids,
+                uuids,
                 Arbitraries.strings().alpha().ofMinLength(3).ofMaxLength(10),
                 Arbitraries.integers().between(-1000000, 1000000).filter(i -> i != 0)
                         .map(BigDecimal::valueOf)

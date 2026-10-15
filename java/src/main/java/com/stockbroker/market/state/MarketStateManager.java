@@ -471,7 +471,7 @@ public class MarketStateManager {
     }
 
     // State records
-    record BookState(
+    public record BookState(
             String symbol,
             long epoch,
             long seq,
@@ -481,7 +481,7 @@ public class MarketStateManager {
             boolean bookValid
     ) {}
 
-    record TradesState(
+    public record TradesState(
             Deque<MarketDtos.Trade> recentTrades
     ) {
         TradesState() {
@@ -519,7 +519,7 @@ public class MarketStateManager {
         }
     }
 
-    record MetricsState(
+    public record MetricsState(
             String symbol,
             long epoch,
             long seq,
