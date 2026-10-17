@@ -45,8 +45,9 @@ public class AlertService {
         alert.setThreshold(new BigDecimal(request.threshold()));
         alert.setStatus("ACTIVE");
         alert.setCooldownSeconds(request.cooldownSeconds());
+        alert.setCreatedAt(Instant.now());
 
-        alertRepository.save(alert);
+        alert = alertRepository.save(alert);
 
         return toAlertResponse(alert);
     }

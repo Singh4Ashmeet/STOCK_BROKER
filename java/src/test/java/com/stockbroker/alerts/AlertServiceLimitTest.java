@@ -12,6 +12,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -66,6 +67,7 @@ class AlertServiceLimitTest {
         savedAlert.setThreshold(new BigDecimal("150.00"));
         savedAlert.setStatus("ACTIVE");
         savedAlert.setCooldownSeconds(60);
+        savedAlert.setCreatedAt(Instant.now());
 
         when(alertRepository.save(any(Alert.class))).thenReturn(savedAlert);
 

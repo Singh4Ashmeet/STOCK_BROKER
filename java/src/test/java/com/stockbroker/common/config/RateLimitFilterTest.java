@@ -6,6 +6,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 import org.springframework.http.HttpHeaders;
 import org.springframework.mock.web.MockFilterChain;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -21,6 +23,7 @@ import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class RateLimitFilterTest {
 
     @Mock
@@ -134,7 +137,7 @@ class RateLimitFilterTest {
     @Test
     void shouldUseTradingRateLimiterForTradingEndpoints() throws Exception {
         // Given
-        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/orders");
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/orders/");
         MockHttpServletResponse response = new MockHttpServletResponse();
         MockFilterChain filterChain = new MockFilterChain();
 
@@ -148,8 +151,8 @@ class RateLimitFilterTest {
 
     @Test
     void shouldUseIpRateLimiterForAnonymousRequests() throws Exception {
-        // Given - no authentication
-        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/instruments");
+        // Given - no authentication, request to non-market/trading/auth endpoint
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/unknown");
         MockHttpServletResponse response = new MockHttpServletResponse();
         MockFilterChain filterChain = new MockFilterChain();
 

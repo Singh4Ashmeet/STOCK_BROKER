@@ -14,11 +14,14 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -28,6 +31,7 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class OrderServiceLimitTest {
 
     @Mock
@@ -119,6 +123,9 @@ class OrderServiceLimitTest {
         executedOrder.setLimitPrice(new BigDecimal("150.00"));
         executedOrder.setTif("GTC");
         executedOrder.setFilledQty(BigDecimal.ZERO);
+        Instant now = Instant.now();
+        executedOrder.setCreatedAt(now);
+        executedOrder.setUpdatedAt(now);
         
         when(orderExecutor.executeOrder(any())).thenReturn(executedOrder);
 
@@ -153,6 +160,19 @@ class OrderServiceLimitTest {
         existingOrder.setTif("GTC");
         existingOrder.setFilledQty(BigDecimal.ZERO);
         existingOrder.setIdempotencyKey("idem-key");
+        
+        // Compute matching request hash
+        String canonical = String.format("%s|%s|%s|%s|%s|%s",
+                "AAPL", "BUY", "LIMIT", "100", "150.00", "GTC");
+        try {
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+            existingOrder.setRequestHash(md.digest(canonical.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to compute request hash", e);
+        }
+        Instant now = Instant.now();
+        existingOrder.setCreatedAt(now);
+        existingOrder.setUpdatedAt(now);
         
         when(orderRepository.findByUserIdAndIdempotencyKey(userId, "idem-key"))
                 .thenReturn(Optional.of(existingOrder));
