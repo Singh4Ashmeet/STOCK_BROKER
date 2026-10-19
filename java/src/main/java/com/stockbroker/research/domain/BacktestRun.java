@@ -1,6 +1,8 @@
 package com.stockbroker.research.domain;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
@@ -23,6 +25,7 @@ public class BacktestRun {
     @Column(name = "strategy", nullable = false)
     private String strategy;
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "params", nullable = false, columnDefinition = "jsonb")
     private Map<String, Object> params;
 
@@ -35,6 +38,7 @@ public class BacktestRun {
     @Column(name = "data_to", nullable = false)
     private Instant dataTo;
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "fee_model", nullable = false, columnDefinition = "jsonb")
     private Map<String, Object> feeModel;
 
@@ -56,6 +60,7 @@ public class BacktestRun {
     @Column(name = "seed")
     private Long seed;
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "summary", columnDefinition = "jsonb")
     private Map<String, Object> summary;
 

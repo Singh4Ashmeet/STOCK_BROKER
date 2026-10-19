@@ -4,8 +4,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stockbroker.auth.api.AuthDtos;
 import com.stockbroker.common.LocalTestConfiguration;
-import com.stockbroker.market.api.MarketDtos;
-import com.stockbroker.market.api.MarketDtosExtended;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -41,6 +39,7 @@ import static org.awaitility.Awaitility.await;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ContextConfiguration(classes = LocalTestConfiguration.class)
 @ActiveProfiles("test")
+@SuppressWarnings("deprecation") // StandardWebSocketClient.doHandshake(handler, headers, uri) is deprecated but replacement API not yet available
 class WebSocketGatewayTest {
 
     @Autowired

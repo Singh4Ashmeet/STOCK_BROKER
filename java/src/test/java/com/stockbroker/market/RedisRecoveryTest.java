@@ -14,8 +14,6 @@ import org.springframework.http.*;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.ContextConfiguration;
 
-import java.util.UUID;
-
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**

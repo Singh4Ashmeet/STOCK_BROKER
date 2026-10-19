@@ -1,7 +1,6 @@
 package com.stockbroker.auth.api;
 
 import com.stockbroker.auth.service.AuthService;
-import com.stockbroker.common.error.BusinessProblem;
 import com.stockbroker.common.security.CurrentUser;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;

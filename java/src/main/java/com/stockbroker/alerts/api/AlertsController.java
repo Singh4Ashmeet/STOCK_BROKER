@@ -1,6 +1,5 @@
 package com.stockbroker.alerts.api;
 
-import com.stockbroker.common.error.BusinessProblem;
 import com.stockbroker.common.security.CurrentUser;
 import com.stockbroker.alerts.service.AlertService;
 import jakarta.validation.Valid;
@@ -10,7 +9,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
 import java.util.UUID;
 
 /**

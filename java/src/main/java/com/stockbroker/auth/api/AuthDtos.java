@@ -1,5 +1,6 @@
 package com.stockbroker.auth.api;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -22,6 +23,7 @@ public final class AuthDtos {
             String password
     ) {}
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record RegisterResponse(
             @JsonProperty("user_id") String userId,
             String email,
@@ -34,6 +36,7 @@ public final class AuthDtos {
             @NotBlank String password
     ) {}
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record LoginResponse(
             @JsonProperty("access_token") String accessToken,
             @JsonProperty("expires_in") int expiresIn,

@@ -1,6 +1,5 @@
 package com.stockbroker.common.config;
 
-import io.micrometer.common.lang.NonNull;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.validation.annotation.Validated;

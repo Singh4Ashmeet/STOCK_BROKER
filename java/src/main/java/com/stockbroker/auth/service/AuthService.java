@@ -5,7 +5,6 @@ import com.stockbroker.auth.domain.RefreshToken;
 import com.stockbroker.auth.repo.UserRepository;
 import com.stockbroker.auth.repo.RefreshTokenRepository;
 import com.stockbroker.common.config.JwtProperties;
-import com.stockbroker.common.config.RateLimitProperties;
 import com.stockbroker.common.error.BusinessProblem;
 import com.nimbusds.jose.JWSAlgorithm;
 import com.nimbusds.jose.JWSHeader;
@@ -21,13 +20,15 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.security.KeyFactory;
 import java.security.interfaces.RSAPrivateKey;
+import java.security.spec.PKCS8EncodedKeySpec;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Base64;
 import java.util.Date;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Authentication service handling registration, login, token management.
@@ -48,8 +49,6 @@ public class AuthService {
     private final RefreshTokenRepository refreshTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtProperties jwtProperties;
-    private final RateLimitProperties rateLimitProperties;
-    private final ResourceLoader resourceLoader;
     private final RedisTemplate<String, String> redisTemplate;
     private final RSASSASigner signer;
 
@@ -57,15 +56,12 @@ public class AuthService {
                        RefreshTokenRepository refreshTokenRepository,
                        PasswordEncoder passwordEncoder,
                        JwtProperties jwtProperties,
-                       RateLimitProperties rateLimitProperties,
                        ResourceLoader resourceLoader,
                        RedisTemplate<String, String> redisTemplate) {
         this.userRepository = userRepository;
         this.refreshTokenRepository = refreshTokenRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtProperties = jwtProperties;
-        this.rateLimitProperties = rateLimitProperties;
-        this.resourceLoader = resourceLoader;
         this.redisTemplate = redisTemplate;
 
         try {
@@ -77,8 +73,15 @@ public class AuthService {
                 while ((len = reader.read(buf)) != -1) {
                     sb.append(buf, 0, len);
                 }
-                com.nimbusds.jose.jwk.RSAKey rsaKey = com.nimbusds.jose.jwk.RSAKey.parse(sb.toString());
-                RSAPrivateKey privateKey = rsaKey.toRSAPrivateKey();
+                // Strip PEM headers/footers and decode Base64
+                String pem = sb.toString()
+                        .replace("-----BEGIN PRIVATE KEY-----", "")
+                        .replace("-----END PRIVATE KEY-----", "")
+                        .replaceAll("\\s", "");
+                byte[] decoded = Base64.getDecoder().decode(pem);
+                PKCS8EncodedKeySpec spec = new PKCS8EncodedKeySpec(decoded);
+                KeyFactory kf = KeyFactory.getInstance("RSA");
+                RSAPrivateKey privateKey = (RSAPrivateKey) kf.generatePrivate(spec);
                 this.signer = new RSASSASigner(privateKey);
             }
         } catch (Exception e) {

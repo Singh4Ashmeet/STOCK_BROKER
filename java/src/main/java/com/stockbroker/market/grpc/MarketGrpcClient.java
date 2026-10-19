@@ -9,12 +9,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
-import jakarta.annotation.PreDestroy;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;
-import java.time.Duration;
 
 /**
  * gRPC client for the Rust market data feed service.
@@ -80,7 +77,7 @@ public class MarketGrpcClient {
         com.stockbroker.market.v1.ListInstrumentsResponse response = blockingStub.listInstruments(
                 com.stockbroker.market.v1.ListInstrumentsRequest.getDefaultInstance());
         return response.getInstrumentsList().stream()
-                .map(com.stockbroker.market.v1.InstrumentSpec::getSymbol)
+                .map(spec -> spec.getSymbol())
                 .toList();
     }
 

@@ -1,11 +1,9 @@
 package com.stockbroker.alerts;
 
-import com.stockbroker.alerts.api.AlertsDtos;
 import com.stockbroker.alerts.domain.Alert;
 import com.stockbroker.alerts.repo.AlertRepository;
 import com.stockbroker.alerts.service.AlertMonitorService;
 import com.stockbroker.alerts.service.AlertService;
-import com.stockbroker.common.error.BusinessProblem;
 import com.stockbroker.market.api.MarketDtos;
 import com.stockbroker.market.service.MarketDataService;
 import org.junit.jupiter.api.BeforeEach;
@@ -15,11 +13,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
-import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
-import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 

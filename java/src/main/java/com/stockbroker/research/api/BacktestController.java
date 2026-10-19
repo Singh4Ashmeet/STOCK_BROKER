@@ -1,21 +1,18 @@
 package com.stockbroker.research.api;
 
 import com.stockbroker.research.service.BacktestJobService;
-import com.stockbroker.research.api.ResearchDtos;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotNull;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.UUID;
 
 /**
  * Backtest job management endpoints.
  * Provides submit, poll, fetch and artifact download for backtest jobs.
  */
 @RestController
-@RequestMapping("/api/v1/backtests")
+@RequestMapping("/api/v1/backtest-jobs")
 public class BacktestController {
 
     private final BacktestJobService jobService;

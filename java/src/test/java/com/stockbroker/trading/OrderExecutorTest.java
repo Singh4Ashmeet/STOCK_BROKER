@@ -3,10 +3,8 @@ package com.stockbroker.trading;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.stockbroker.common.LocalTestConfiguration;
 import com.stockbroker.auth.api.AuthDtos;
-import com.stockbroker.market.api.MarketDtos;
 import com.stockbroker.trading.api.TradingDtos;
 import com.stockbroker.trading.domain.Fill;
-import com.stockbroker.trading.domain.Order;
 import com.stockbroker.trading.repo.FillRepository;
 import com.stockbroker.trading.repo.OrderRepository;
 import com.stockbroker.trading.service.OrderExecutor;
@@ -25,7 +23,6 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.awaitility.Awaitility.await;
 
 /**
  * Integration tests for OrderExecutor - state machine, book walking, fees, idempotency, concurrency.
@@ -51,8 +48,6 @@ class OrderExecutorTest {
     ObjectMapper objectMapper;
 
     private String accessToken;
-    private UUID userId;
-    private UUID accountId;
 
     @BeforeEach
     void setup() {
@@ -63,11 +58,6 @@ class OrderExecutorTest {
         AuthDtos.LoginRequest login = new AuthDtos.LoginRequest("orderexec@test.com", "SecurePass123!");
         ResponseEntity<AuthDtos.LoginResponse> loginResp = restTemplate.postForEntity("/api/v1/auth/login", login, AuthDtos.LoginResponse.class);
         String accessToken = loginResp.getBody().accessToken();
-
-        // Get user ID from orders
-        HttpHeaders headers = new HttpHeaders();
-        headers.setBearerAuth(accessToken);
-        HttpEntity<?> entity = new HttpEntity<>(headers);
         
         this.accessToken = accessToken;
     }

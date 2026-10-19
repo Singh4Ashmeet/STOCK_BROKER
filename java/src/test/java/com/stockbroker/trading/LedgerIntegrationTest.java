@@ -28,6 +28,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ContextConfiguration(classes = LocalTestConfiguration.class)
 @org.springframework.test.context.ActiveProfiles("test")
+@SuppressWarnings("null")
 class LedgerIntegrationTest {
 
     @Autowired
@@ -66,7 +67,7 @@ class LedgerIntegrationTest {
         HttpHeaders headers = new HttpHeaders();
         headers.setBearerAuth(accessToken);
         HttpEntity<?> entity = new HttpEntity<>(headers);
-        ResponseEntity<com.stockbroker.trading.api.TradingDtos.PortfolioResponse> pfResp = restTemplate.exchange(
+        restTemplate.exchange(
                 "/api/v1/portfolio", HttpMethod.GET, entity, com.stockbroker.trading.api.TradingDtos.PortfolioResponse.class);
         
         // Get account from repository
@@ -131,7 +132,6 @@ class LedgerIntegrationTest {
 
         // Verify balances
         BigDecimal btcBalance = ledgerService.getBalance(accountId, "BTC");
-        BigDecimal usdtBalance = ledgerService.getBalance(accountId, "USDT");
         
         assertThat(btcBalance).isEqualByComparingTo(new BigDecimal("1.0"));
         // USDT: deposited 50000 - spent 50000 - fee 50 = -50 (wait, let me check)

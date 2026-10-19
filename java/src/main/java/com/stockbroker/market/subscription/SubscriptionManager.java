@@ -7,16 +7,14 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
-import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.Consumer;
 
 /**
  * Manages refcounted symbol subscriptions to the Rust feed service.
@@ -53,8 +51,8 @@ public class SubscriptionManager {
     private final AtomicLong totalResyncs = new AtomicLong(0);
     private final AtomicLong totalGapsDetected = new AtomicLong(0);
 
-    public SubscriptionManager(MarketGrpcClient grpcClient,
-                               MarketStateManager stateManager,
+    public SubscriptionManager(@Lazy MarketGrpcClient grpcClient,
+                               @Lazy MarketStateManager stateManager,
                                MeterRegistry meterRegistry,
                                MarketGatewayProperties properties) {
         this.grpcClient = grpcClient;
@@ -66,10 +64,10 @@ public class SubscriptionManager {
                 .description("Resync via GetSnapshot latency")
                 .register(meterRegistry);
 
-        meterRegistry.gauge("gateway.subscriptions.book", bookSubscriptions, Map::size);
-        meterRegistry.gauge("gateway.subscriptions.trades", tradesSubscriptions, Map::size);
-        meterRegistry.gauge("gateway.subscriptions.metrics", metricsSubscriptions, Map::size);
-        meterRegistry.gauge("gateway.resync.pending", pendingResyncs, Map::size);
+        meterRegistry.gauge("gateway.subscriptions.book", bookSubscriptions, map -> map.size());
+        meterRegistry.gauge("gateway.subscriptions.trades", tradesSubscriptions, map -> map.size());
+        meterRegistry.gauge("gateway.subscriptions.metrics", metricsSubscriptions, map -> map.size());
+        meterRegistry.gauge("gateway.resync.pending", pendingResyncs, map -> map.size());
     }
 
     @PostConstruct

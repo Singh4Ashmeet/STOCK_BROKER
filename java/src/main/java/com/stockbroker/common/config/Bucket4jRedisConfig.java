@@ -2,7 +2,6 @@ package com.stockbroker.common.config;
 
 import io.github.bucket4j.Bandwidth;
 import io.github.bucket4j.Bucket;
-import io.github.bucket4j.Refill;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -10,7 +9,6 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Primary;
 import org.springframework.context.annotation.Profile;
 
 import java.time.Duration;
@@ -39,12 +37,12 @@ public class Bucket4jRedisConfig {
     @Bean
     @Qualifier("userRateLimiter")
     @ConditionalOnMissingBean(name = "redisProxyManager")
-    @Profile({"test", "default"})
-    public Supplier<Bucket> userRateLimiter(RateLimitProperties properties) {
-        Bandwidth limit = Bandwidth.classic(
-                properties.getDefaultRequestsPerMinute(),
-                Refill.greedy(properties.getDefaultRequestsPerMinute(), Duration.ofMinutes(1))
-        );
+    @Profile({"test", "default", "dev"})
+    public Supplier<Bucket> userRateLimiter() {
+        Bandwidth limit = Bandwidth.builder()
+                .capacity(rateLimitProperties.getDefaultRequestsPerMinute())
+                .refillGreedy(rateLimitProperties.getDefaultRequestsPerMinute(), Duration.ofMinutes(1))
+                .build();
         return () -> Bucket.builder().addLimit(limit).build();
     }
 
@@ -55,12 +53,12 @@ public class Bucket4jRedisConfig {
     @Bean
     @Qualifier("ipRateLimiter")
     @ConditionalOnMissingBean(name = "redisProxyManager")
-    @Profile({"test", "default"})
-    public Supplier<Bucket> ipRateLimiter(RateLimitProperties properties) {
-        Bandwidth limit = Bandwidth.classic(
-                properties.getDefaultRequestsPerMinute(),
-                Refill.greedy(properties.getDefaultRequestsPerMinute(), Duration.ofMinutes(1))
-        );
+    @Profile({"test", "default", "dev"})
+    public Supplier<Bucket> ipRateLimiter() {
+        Bandwidth limit = Bandwidth.builder()
+                .capacity(rateLimitProperties.getDefaultRequestsPerMinute())
+                .refillGreedy(rateLimitProperties.getDefaultRequestsPerMinute(), Duration.ofMinutes(1))
+                .build();
         return () -> Bucket.builder().addLimit(limit).build();
     }
 
@@ -71,12 +69,12 @@ public class Bucket4jRedisConfig {
     @Bean
     @Qualifier("authRateLimiter")
     @ConditionalOnMissingBean(name = "redisProxyManager")
-    @Profile({"test", "default"})
-    public Supplier<Bucket> authRateLimiter(RateLimitProperties properties) {
-        Bandwidth limit = Bandwidth.classic(
-                properties.getAuthRequestsPerMinute(),
-                Refill.greedy(properties.getAuthRequestsPerMinute(), Duration.ofMinutes(1))
-        );
+    @Profile({"test", "default", "dev"})
+    public Supplier<Bucket> authRateLimiter() {
+        Bandwidth limit = Bandwidth.builder()
+                .capacity(rateLimitProperties.getAuthRequestsPerMinute())
+                .refillGreedy(rateLimitProperties.getAuthRequestsPerMinute(), Duration.ofMinutes(1))
+                .build();
         return () -> Bucket.builder().addLimit(limit).build();
     }
 
@@ -87,12 +85,12 @@ public class Bucket4jRedisConfig {
     @Bean
     @Qualifier("marketRateLimiter")
     @ConditionalOnMissingBean(name = "redisProxyManager")
-    @Profile({"test", "default"})
-    public Supplier<Bucket> marketRateLimiter(RateLimitProperties properties) {
-        Bandwidth limit = Bandwidth.classic(
-                properties.getMarketRequestsPerMinute(),
-                Refill.greedy(properties.getMarketRequestsPerMinute(), Duration.ofMinutes(1))
-        );
+    @Profile({"test", "default", "dev"})
+    public Supplier<Bucket> marketRateLimiter() {
+        Bandwidth limit = Bandwidth.builder()
+                .capacity(rateLimitProperties.getMarketRequestsPerMinute())
+                .refillGreedy(rateLimitProperties.getMarketRequestsPerMinute(), Duration.ofMinutes(1))
+                .build();
         return () -> Bucket.builder().addLimit(limit).build();
     }
 
@@ -103,12 +101,12 @@ public class Bucket4jRedisConfig {
     @Bean
     @Qualifier("tradingRateLimiter")
     @ConditionalOnMissingBean(name = "redisProxyManager")
-    @Profile({"test", "default"})
-    public Supplier<Bucket> tradingRateLimiter(RateLimitProperties properties) {
-        Bandwidth limit = Bandwidth.classic(
-                properties.getTradingRequestsPerMinute(),
-                Refill.greedy(properties.getTradingRequestsPerMinute(), Duration.ofMinutes(1))
-        );
+    @Profile({"test", "default", "dev"})
+    public Supplier<Bucket> tradingRateLimiter() {
+        Bandwidth limit = Bandwidth.builder()
+                .capacity(rateLimitProperties.getTradingRequestsPerMinute())
+                .refillGreedy(rateLimitProperties.getTradingRequestsPerMinute(), Duration.ofMinutes(1))
+                .build();
         return () -> Bucket.builder().addLimit(limit).build();
     }
 

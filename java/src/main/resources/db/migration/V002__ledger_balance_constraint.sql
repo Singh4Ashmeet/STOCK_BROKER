@@ -24,7 +24,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Trigger on ledger_entries - deferred to end of transaction
-CREATE TRIGGER enforce_ledger_balance
+CREATE CONSTRAINT TRIGGER enforce_ledger_balance
     AFTER INSERT OR UPDATE ON ledger_entries
     DEFERRABLE INITIALLY DEFERRED
     FOR EACH ROW EXECUTE FUNCTION check_ledger_balance();
@@ -47,7 +47,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER enforce_entry_count
+CREATE CONSTRAINT TRIGGER enforce_entry_count
     AFTER INSERT ON ledger_transactions
     DEFERRABLE INITIALLY DEFERRED
     FOR EACH ROW EXECUTE FUNCTION check_transaction_entry_count();

@@ -9,6 +9,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Component;
 import jakarta.annotation.PostConstruct;
@@ -65,7 +66,7 @@ public class MarketStateManager {
     public MarketStateManager(MarketGatewayProperties properties,
                               RedisTemplate<String, Object> redisTemplate,
                               MeterRegistry meterRegistry,
-                              MarketWebSocketHandler webSocketHandler,
+                              @Lazy MarketWebSocketHandler webSocketHandler,
                               SubscriptionManager subscriptionManager) {
         this.redisMirrorConfig = properties.getRedisMirror();
         this.redisTemplate = redisTemplate;
@@ -89,7 +90,7 @@ public class MarketStateManager {
 
     @PostConstruct
     public void init() {
-        meterRegistry.gauge("gateway.subscriptions.active", this, MarketStateManager::countActiveSubscriptions);
+        meterRegistry.gauge("gateway.subscriptions.active", this, mgr -> mgr.countActiveSubscriptions());
     }
 
     /**
@@ -108,7 +109,6 @@ public class MarketStateManager {
             Set<String> keys = redisTemplate.keys("mkt:*:spec");
             if (keys != null) {
                 for (String key : keys) {
-                    @SuppressWarnings("unchecked")
                     com.stockbroker.market.v1.InstrumentSpec spec = (com.stockbroker.market.v1.InstrumentSpec) redisTemplate.opsForValue().get(key);
                     if (spec != null) {
                         instrumentSpecs.put(spec.getSymbol(), spec);
@@ -121,7 +121,6 @@ public class MarketStateManager {
             if (keys != null) {
                 for (String key : keys) {
                     String symbol = key.substring(5, key.length() - 5); // "mkt:" + ":book"
-                    @SuppressWarnings("unchecked")
                     BookState state = (BookState) redisTemplate.opsForValue().get(key);
                     if (state != null) {
                         books.computeIfAbsent(symbol, k -> new AtomicReference<>()).set(state);
@@ -135,7 +134,6 @@ public class MarketStateManager {
             if (keys != null) {
                 for (String key : keys) {
                     String symbol = key.substring(5, key.length() - 7); // "mkt:" + ":trades"
-                    @SuppressWarnings("unchecked")
                     TradesState state = (TradesState) redisTemplate.opsForValue().get(key);
                     if (state != null) {
                         trades.computeIfAbsent(symbol, k -> new AtomicReference<>()).set(state);
@@ -149,7 +147,6 @@ public class MarketStateManager {
             if (keys != null) {
                 for (String key : keys) {
                     String symbol = key.substring(5, key.length() - 8); // "mkt:" + ":metrics"
-                    @SuppressWarnings("unchecked")
                     MetricsState state = (MetricsState) redisTemplate.opsForValue().get(key);
                     if (state != null) {
                         metrics.computeIfAbsent(symbol, k -> new AtomicReference<>()).set(state);

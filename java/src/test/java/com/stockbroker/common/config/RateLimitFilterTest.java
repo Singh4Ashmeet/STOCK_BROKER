@@ -1,6 +1,5 @@
 package com.stockbroker.common.config;
 
-import com.stockbroker.common.security.CurrentUser;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -8,15 +7,10 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
-import org.springframework.http.HttpHeaders;
 import org.springframework.mock.web.MockFilterChain;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.oauth2.jwt.Jwt;
-import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 
-import java.util.UUID;
 import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.*;
@@ -48,11 +42,9 @@ class RateLimitFilterTest {
     private io.github.bucket4j.Bucket bucket;
 
     private RateLimitFilter filter;
-    private UUID userId;
 
     @BeforeEach
     void setUp() {
-        userId = UUID.randomUUID();
         
         when(rateLimitProperties.isEnabled()).thenReturn(true);
         when(rateLimitProperties.getDefaultRequestsPerMinute()).thenReturn(300);

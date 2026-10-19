@@ -8,7 +8,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.time.Instant;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -383,7 +382,7 @@ public class LedgerService {
         // In a real implementation, this would come from the account
         // For now, we'll need to fetch it from the account
         return accountRepository.findById(accountId)
-                .map(Account::getUserId)
+                .map(account -> account.getUserId())
                 .orElseThrow(() -> new BusinessProblem.ValidationFailed("Account not found"));
     }
 

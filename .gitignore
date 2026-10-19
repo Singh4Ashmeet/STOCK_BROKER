@@ -37,6 +37,9 @@ data/
 # IDE / OS
 .idea/
 .vscode/
+.settings/
+.project
+.classpath
 .DS_Store
 # IDE extensions / agent temp folders
 .postqode/

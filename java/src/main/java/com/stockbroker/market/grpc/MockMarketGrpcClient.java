@@ -2,8 +2,6 @@ package com.stockbroker.market.grpc;
 
 import com.stockbroker.common.config.MarketGatewayProperties;
 import com.stockbroker.market.state.MarketStateManager;
-import io.grpc.*;
-import io.grpc.stub.StreamObserver;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Primary;
@@ -11,12 +9,10 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import jakarta.annotation.PostConstruct;
-import jakarta.annotation.PreDestroy;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
-import java.time.Duration;
 import java.time.Instant;
 
 /**

@@ -1,7 +1,6 @@
 package com.stockbroker.portfolio.service;
 
 import com.stockbroker.common.error.BusinessProblem;
-import com.stockbroker.market.api.MarketDtos;
 import com.stockbroker.market.service.MarketDataService;
 import com.stockbroker.portfolio.api.PortfolioDtos;
 import com.stockbroker.portfolio.api.PortfolioDtosExtended;
@@ -67,7 +66,7 @@ public class WatchlistService {
     }
 
     public PortfolioDtos.WatchlistItemResponse addItem(UUID userId, UUID watchlistId, PortfolioDtos.WatchlistItemRequest request) {
-        Watchlist watchlist = watchlistRepository.findByIdAndUserId(watchlistId, userId)
+        watchlistRepository.findByIdAndUserId(watchlistId, userId)
                 .orElseThrow(() -> new BusinessProblem.ValidationFailed("Watchlist not found",
                         java.util.Map.of("code", "WATCHLIST_NOT_FOUND")));
 

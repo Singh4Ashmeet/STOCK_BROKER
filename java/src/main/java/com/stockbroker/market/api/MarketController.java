@@ -1,9 +1,7 @@
 package com.stockbroker.market.api;
 
 import com.stockbroker.common.error.BusinessProblem;
-import com.stockbroker.common.security.CurrentUser;
 import com.stockbroker.market.service.MarketDataService;
-import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import org.springframework.http.ResponseEntity;

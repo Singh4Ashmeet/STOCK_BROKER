@@ -1,7 +1,6 @@
 package com.stockbroker.trading.service;
 
 import com.stockbroker.common.error.BusinessProblem;
-import com.stockbroker.common.security.CurrentUser;
 import com.stockbroker.market.service.MarketDataService;
 import com.stockbroker.trading.api.TradingDtos;
 import com.stockbroker.trading.api.TradingDtosExtended;
@@ -17,7 +16,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
-import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;

@@ -1,5 +1,6 @@
 package com.stockbroker.common.config;
 
+import com.stockbroker.common.security.CurrentUser;
 import io.github.bucket4j.Bucket;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -11,12 +12,7 @@ import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
-import jakarta.servlet.FilterChain;
-import jakarta.servlet.ServletException;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
-import java.time.Duration;
 import java.util.UUID;
 import java.util.function.Supplier;
 
@@ -33,11 +29,11 @@ public class RateLimitFilter extends OncePerRequestFilter {
     @Autowired
     public RateLimitFilter(
             RateLimitProperties rateLimitProperties,
-            @Qualifier("authRateLimiter") Supplier<io.github.bucket4j.Bucket> authRateLimiter,
-            @Qualifier("marketRateLimiter") Supplier<io.github.bucket4j.Bucket> marketRateLimiter,
-            @Qualifier("tradingRateLimiter") Supplier<io.github.bucket4j.Bucket> tradingRateLimiter,
-            @Qualifier("userRateLimiter") Supplier<io.github.bucket4j.Bucket> userRateLimiter,
-            @Qualifier("ipRateLimiter") Supplier<io.github.bucket4j.Bucket> ipRateLimiter) {
+            @Qualifier("authRateLimiter") Supplier<Bucket> authRateLimiter,
+            @Qualifier("marketRateLimiter") Supplier<Bucket> marketRateLimiter,
+            @Qualifier("tradingRateLimiter") Supplier<Bucket> tradingRateLimiter,
+            @Qualifier("userRateLimiter") Supplier<Bucket> userRateLimiter,
+            @Qualifier("ipRateLimiter") Supplier<Bucket> ipRateLimiter) {
         this.rateLimitProperties = rateLimitProperties;
         this.authRateLimiter = authRateLimiter;
         this.marketRateLimiter = marketRateLimiter;
@@ -46,15 +42,17 @@ public class RateLimitFilter extends OncePerRequestFilter {
         this.ipRateLimiter = ipRateLimiter;
     }
 
-    private final Supplier<io.github.bucket4j.Bucket> authRateLimiter;
-    private final Supplier<io.github.bucket4j.Bucket> marketRateLimiter;
-    private final Supplier<io.github.bucket4j.Bucket> tradingRateLimiter;
-    private final Supplier<io.github.bucket4j.Bucket> userRateLimiter;
-    private final Supplier<io.github.bucket4j.Bucket> ipRateLimiter;
+    private final Supplier<Bucket> authRateLimiter;
+    private final Supplier<Bucket> marketRateLimiter;
+    private final Supplier<Bucket> tradingRateLimiter;
+    private final Supplier<Bucket> userRateLimiter;
+    private final Supplier<Bucket> ipRateLimiter;
 
     @Override
-    protected void doFilterInternal(jakarta.servlet.http.HttpServletRequest request, jakarta.servlet.http.HttpServletResponse response, jakarta.servlet.FilterChain filterChain)
-            throws jakarta.servlet.ServletException, IOException {
+    protected void doFilterInternal(HttpServletRequest request,
+                                    HttpServletResponse response,
+                                    FilterChain filterChain)
+            throws ServletException, IOException {
         
         if (!rateLimitProperties.isEnabled()) {
             filterChain.doFilter(request, response);
@@ -93,7 +91,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
         }
     }
 
-    private Bucket selectRateLimiter(jakarta.servlet.http.HttpServletRequest request, String path, String method) {
+    private Bucket selectRateLimiter(HttpServletRequest request, String path, String method) {
         String pathLower = path.toLowerCase();
         
         // Check if user is authenticated
@@ -145,22 +143,20 @@ public class RateLimitFilter extends OncePerRequestFilter {
     
     private UUID getCurrentUserId() {
         try {
-            return com.stockbroker.common.security.CurrentUser.getUserIdOrNull();
+            return CurrentUser.getUserIdOrNull();
         } catch (Exception e) {
             return null;
         }
     }
     
     private Bucket getUserBucket(UUID userId, String endpointType) {
-        String key = "user:" + userId + ":" + endpointType;
-        return userRateLimiter.get(); // In production, this should be per-user per-endpoint bucket
+        // In production, this can resolve a bucket per-user per-endpoint ("user:" + userId + ":" + endpointType)
+        return userRateLimiter.get();
     }
 
-    private void addRateLimitHeaders(jakarta.servlet.http.HttpServletResponse response, io.github.bucket4j.Bucket bucket) {
-        // Bucket4j doesn't expose remaining tokens directly in older versions
-        // We'll add standard headers
+    private void addRateLimitHeaders(HttpServletResponse response, Bucket bucket) {
+        // Standard rate limit headers
         response.setHeader("X-RateLimit-Limit", String.valueOf(rateLimitProperties.getDefaultRequestsPerMinute()));
-        // Note: Bucket4j 8+ has getAvailableTokens() but we'll use a simpler approach
-        response.setHeader("X-RateLimit-Limit", String.valueOf(rateLimitProperties.getDefaultRequestsPerMinute()));
+        response.setHeader("X-RateLimit-Remaining", String.valueOf(bucket.getAvailableTokens()));
     }
 }

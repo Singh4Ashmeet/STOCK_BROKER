@@ -1,12 +1,9 @@
 package com.stockbroker.alerts.service;
 
-import com.stockbroker.alerts.api.AlertsDtos;
 import com.stockbroker.alerts.domain.Alert;
 import com.stockbroker.alerts.repo.AlertRepository;
-import com.stockbroker.common.error.BusinessProblem;
 import com.stockbroker.market.api.MarketDtos;
 import com.stockbroker.market.service.MarketDataService;
-import com.stockbroker.common.security.CurrentUser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -15,11 +12,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import jakarta.annotation.PostConstruct;
 import java.math.BigDecimal;
-import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 
 /**
  * Monitors price, spread, and imbalance alerts.
@@ -33,6 +28,9 @@ public class AlertMonitorService {
     private final AlertRepository alertRepository;
     private final MarketDataService marketDataService;
     private final AlertService alertService;
+
+    private static final BigDecimal BPS_FACTOR = new BigDecimal("10000");
+    private static final long MILLIS_PER_SECOND = 1000L;
 
     // Track last check time per alert to respect cooldown
     private final ConcurrentHashMap<UUID, Long> lastCheckTime = new ConcurrentHashMap<>();
@@ -67,11 +65,11 @@ public class AlertMonitorService {
 
     private void checkAlert(Alert alert) {
         UUID alertId = alert.getId();
-        Long lastCheck = lastCheckTime.get(alert.getId());
+        Long lastCheck = lastCheckTime.get(alertId);
         long now = System.currentTimeMillis();
 
         // Respect cooldown period
-        if (lastCheck != null && (now - lastCheck) < alert.getCooldownSeconds() * 1000L) {
+        if (lastCheck != null && (now - lastCheck) < alert.getCooldownSeconds() * MILLIS_PER_SECOND) {
             return;
         }
 
@@ -93,9 +91,12 @@ public class AlertMonitorService {
                         midPrice.toPlainString(), alert.getOp(), alert.getThreshold().toPlainString());
             }
             case "SPREAD" -> {
-                // Check spread in basis points
-                if (metrics.spread() != null) {
-                    BigDecimal spreadBps = new BigDecimal(metrics.spread());
+                // Check spread in basis points: (spread / mid) * 10,000
+                if (metrics.spread() != null && metrics.mid() > 0) {
+                    BigDecimal spread = new BigDecimal(metrics.spread());
+                    BigDecimal mid = BigDecimal.valueOf(metrics.mid());
+                    BigDecimal spreadBps = spread.divide(mid, 8, java.math.RoundingMode.HALF_UP)
+                            .multiply(BPS_FACTOR);
                     triggered = checkThreshold(spreadBps, alert.getThreshold(), alert.getOp());
                     message = String.format("Spread %s %s (threshold: %s bps)",
                             spreadBps.toPlainString(), alert.getOp(), alert.getThreshold().toPlainString());
@@ -108,18 +109,17 @@ public class AlertMonitorService {
                 message = String.format("Imbalance %s %s (threshold: %s)",
                         metrics.imbalanceTopN(), alert.getOp(), alert.getThreshold().toPlainString());
             }
+            default -> {
+            }
         }
 
         if (triggered) {
-            log.info("Alert {} triggered for user {}: {}", alert.getId(), alert.getUserId(), message);
-            alertService.triggerAlert(alert.getId());
-
-            // Update last check time
-            lastCheckTime.put(alert.getId(), System.currentTimeMillis());
-        } else {
-            // Update last check time even if not triggered (to respect cooldown)
-            lastCheckTime.put(alert.getId(), System.currentTimeMillis());
+            log.info("Alert {} triggered for user {}: {}", alertId, alert.getUserId(), message);
+            alertService.triggerAlert(alertId);
         }
+
+        // Update last check time
+        lastCheckTime.put(alertId, System.currentTimeMillis());
     }
 
     private boolean checkThreshold(BigDecimal value, BigDecimal threshold, String op) {
@@ -133,10 +133,15 @@ public class AlertMonitorService {
 
     /**
      * Manually trigger alert check for a specific symbol (e.g., on new market data).
+     *
+     * @param symbol the market symbol to check alerts for
      */
     public void checkAlertsForSymbol(String symbol) {
-        List<Alert> alerts = alertRepository.findActiveBySymbolAndMetric(symbol, "PRICE");
-        // Also check spread and imbalance alerts
-        // ...
+        for (String metric : List.of("PRICE", "SPREAD", "IMBALANCE")) {
+            List<Alert> alerts = alertRepository.findActiveBySymbolAndMetric(symbol, metric);
+            for (Alert alert : alerts) {
+                checkAlert(alert);
+            }
+        }
     }
 }

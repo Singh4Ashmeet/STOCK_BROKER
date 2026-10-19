@@ -1,6 +1,5 @@
 package com.stockbroker.trading.api;
 
-import com.stockbroker.common.error.BusinessProblem;
 import com.stockbroker.common.security.CurrentUser;
 import com.stockbroker.trading.service.PortfolioService;
 import jakarta.validation.constraints.Max;

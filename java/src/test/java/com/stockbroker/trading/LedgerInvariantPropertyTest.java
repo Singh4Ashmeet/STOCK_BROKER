@@ -1,8 +1,6 @@
 package com.stockbroker.trading;
 
-import com.stockbroker.trading.domain.LedgerEntry;
 import net.jqwik.api.*;
-import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -21,6 +19,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 3. Amounts are never zero
  * 4. Positive = debit, negative = credit
  */
+@SuppressWarnings("null")
 class LedgerInvariantPropertyTest {
 
     @Property
@@ -136,30 +135,6 @@ class LedgerInvariantPropertyTest {
                         });
                     });
                 });
-    }
-
-    private Arbitrary<LedgerEntry> ledgerEntry() {
-        Arbitrary<UUID> uuids = Combinators.combine(
-                Arbitraries.longs(),
-                Arbitraries.longs()
-        ).as(UUID::new);
-
-        return Combinators.combine(
-                uuids,
-                uuids,
-                Arbitraries.strings().alpha().ofMinLength(3).ofMaxLength(10),
-                Arbitraries.integers().between(-1000000, 1000000).filter(i -> i != 0)
-                        .map(BigDecimal::valueOf)
-        ).as(LedgerEntry::new);
-    }
-
-    private boolean isBalanced(List<LedgerEntry> entries) {
-        Map<String, BigDecimal> sums = entries.stream()
-                .collect(Collectors.groupingBy(
-                        e -> e.transactionId() + ":" + e.asset(),
-                        Collectors.reducing(BigDecimal.ZERO, LedgerEntry::amount, BigDecimal::add)
-                ));
-        return sums.values().stream().allMatch(sum -> sum.compareTo(BigDecimal.ZERO) == 0);
     }
 
     // Simple LedgerEntry record for property tests

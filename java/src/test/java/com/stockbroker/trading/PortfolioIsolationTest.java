@@ -42,10 +42,6 @@ class PortfolioIsolationTest {
 
     private String userAAccessToken;
     private String userBAccessToken;
-    private UUID userAId;
-    private UUID userBId;
-    private UUID accountAId;
-    private UUID accountBId;
 
     @BeforeEach
     void setup() {
@@ -138,9 +134,6 @@ class PortfolioIsolationTest {
         headersA.setBearerAuth(userAAccessToken);
         HttpEntity<?> entityA = new HttpEntity<>(headersA);
 
-        // Get user A's account ID by making a deposit (creates account)
-        UUID tempAccountId = UUID.randomUUID(); // In test, we'll use a known UUID
-        
         // Deposit 10,000 USDT
         ledgerService.createDeposit(UUID.randomUUID(), UUID.randomUUID(), "USDT", new BigDecimal("10000"));
 

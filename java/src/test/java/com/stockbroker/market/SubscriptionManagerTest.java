@@ -1,22 +1,14 @@
 package com.stockbroker.market;
 
 import com.stockbroker.common.LocalTestConfiguration;
-import com.stockbroker.auth.api.AuthDtos;
 import com.stockbroker.market.subscription.SubscriptionManager;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.client.TestRestTemplate;
-import org.springframework.http.*;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.ContextConfiguration;
 
-import java.util.UUID;
-import java.util.concurrent.TimeUnit;
-
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.awaitility.Awaitility.await;
 
 /**
  * Tests for SubscriptionManager - refcounted subscriptions, gap detection, and resync.
@@ -27,32 +19,7 @@ import static org.awaitility.Awaitility.await;
 class SubscriptionManagerTest {
 
     @Autowired
-    TestRestTemplate restTemplate;
-
-    @Autowired
     SubscriptionManager subscriptionManager;
-
-    private String accessToken;
-    private String ticket;
-
-    @BeforeEach
-    void setup() {
-        // Register and login
-        AuthDtos.RegisterRequest reg = new AuthDtos.RegisterRequest("subtest@test.com", "SecurePass123!");
-        restTemplate.postForEntity("/api/v1/auth/register", reg, AuthDtos.RegisterResponse.class);
-
-        AuthDtos.LoginRequest login = new AuthDtos.LoginRequest("subtest@test.com", "SecurePass123!");
-        ResponseEntity<AuthDtos.LoginResponse> loginResp = restTemplate.postForEntity("/api/v1/auth/login", login, AuthDtos.LoginResponse.class);
-        accessToken = loginResp.getBody().accessToken();
-
-        // Get WebSocket ticket
-        HttpHeaders headers = new HttpHeaders();
-        headers.setBearerAuth(accessToken);
-        HttpEntity<?> entity = new HttpEntity<>(headers);
-        ResponseEntity<AuthDtos.WsTicketResponse> ticketResp = restTemplate.exchange(
-                "/api/v1/auth/ws/ticket", HttpMethod.POST, entity, AuthDtos.WsTicketResponse.class);
-        ticket = ticketResp.getBody().ticket();
-    }
 
     @Test
     void subscriptionManagerTracksRefCounts() {

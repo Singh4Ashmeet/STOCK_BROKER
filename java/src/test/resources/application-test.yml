@@ -5,28 +5,34 @@ spring:
   main:
     allow-bean-definition-overriding: true
   datasource:
-    url: jdbc:postgresql://${SB_POSTGRES_HOST:localhost}:${SB_POSTGRES_PORT:5432}/${SB_POSTGRES_DB:stockbroker_test}
-    username: ${SB_POSTGRES_USER:stockbroker_test}
-    password: ${SB_POSTGRES_PASSWORD:stockbroker_test}
+    url: jdbc:postgresql://${SB_POSTGRES_HOST:localhost}:${SB_POSTGRES_PORT:5432}/${SB_POSTGRES_DB:stockbroker}
+    username: ${SB_POSTGRES_USER:sb_app}
+    password: ${SB_POSTGRES_PASSWORD:${SB_POSTGRES_APP_PASSWORD:Bu59j3pD2y3GXnY3aHsxa5jFPjgPt3i1}}
   data:
     redis:
       host: ${SB_REDIS_HOST:localhost}
       port: ${SB_REDIS_PORT:6379}
       password: ${SB_REDIS_PASSWORD:}
+  jpa:
+    hibernate:
+      ddl-auto: none
+    show-sql: false
   task:
     scheduling:
       pool:
         size: 1
+  rsocket:
+    server:
+      port: 0
 
 # Enable mock feed for tests
 sb:
   market:
     gateway:
-      mock: true
-      host: localhost
-      port: 9999
+      host: ${SB_FEED_HOST:localhost}
+      port: ${SB_FEED_GRPC_PORT:9000}
       plaintext: true
-      connect-timeout: 1s
+      connect-timeout: 5s
       keepalive:
         interval-seconds: 20
         timeout-seconds: 10

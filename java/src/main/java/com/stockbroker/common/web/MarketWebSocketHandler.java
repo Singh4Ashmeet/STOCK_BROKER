@@ -8,7 +8,6 @@ import com.stockbroker.market.state.MarketStateManager;
 import com.stockbroker.market.subscription.SubscriptionManager;
 import io.github.bucket4j.Bucket;
 import io.github.bucket4j.Bandwidth;
-import io.github.bucket4j.Refill;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.TaskScheduler;
@@ -51,7 +50,6 @@ public class MarketWebSocketHandler extends TextWebSocketHandler {
     private final MarketStateManager marketStateManager;
     private final SubscriptionManager subscriptionManager;
     private final ObjectMapper objectMapper;
-    private final TaskScheduler taskScheduler;
     private final RateLimitProperties rateLimitProperties;
 
     // Session management
@@ -89,7 +87,6 @@ public class MarketWebSocketHandler extends TextWebSocketHandler {
         this.marketStateManager = marketStateManager;
         this.subscriptionManager = subscriptionManager;
         this.objectMapper = objectMapper;
-        this.taskScheduler = taskScheduler;
         this.rateLimitProperties = rateLimitProperties;
 
         // Schedule token expiry checker
@@ -152,7 +149,7 @@ public class MarketWebSocketHandler extends TextWebSocketHandler {
         // 10 connections per minute per user/IP
         int limit = rateLimitProperties != null ? rateLimitProperties.getDefaultRequestsPerMinute() / 3 : 10;
         return Bucket.builder()
-                .addLimit(Bandwidth.classic(limit, Refill.greedy(limit, Duration.ofMinutes(1))))
+                .addLimit(Bandwidth.builder().capacity(limit).refillGreedy(limit, Duration.ofMinutes(1)).build())
                 .build();
     }
 

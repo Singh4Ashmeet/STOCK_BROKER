@@ -36,6 +36,7 @@
         <archunit.version>1.4.0</archunit.version>
 
         <!-- Build plugins -->
+        <os-maven-plugin.version>1.7.1</os-maven-plugin.version>
         <maven-compiler-plugin.version>3.13.0</maven-compiler-plugin.version>
         <protobuf-maven-plugin.version>0.6.1</protobuf-maven-plugin.version>
         <flyway-maven-plugin.version>10.21.0</flyway-maven-plugin.version>
@@ -315,10 +316,23 @@
             <extension>
                 <groupId>kr.motd.maven</groupId>
                 <artifactId>os-maven-plugin</artifactId>
-                <version>1.7.1</version>
+                <version>${os-maven-plugin.version}</version>
             </extension>
         </extensions>
         <plugins>
+            <plugin>
+                <groupId>kr.motd.maven</groupId>
+                <artifactId>os-maven-plugin</artifactId>
+                <version>${os-maven-plugin.version}</version>
+                <executions>
+                    <execution>
+                        <phase>initialize</phase>
+                        <goals>
+                            <goal>detect</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
             <!-- Enforce Java version and Maven version -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -565,6 +579,54 @@
     </build>
 
     <profiles>
+        <!-- OS detection fallback profiles for IDE environments (e.g. Eclipse m2e) where build extensions are not executed -->
+        <profile>
+            <id>os-windows</id>
+            <activation>
+                <os>
+                    <family>windows</family>
+                </os>
+            </activation>
+            <properties>
+                <os.detected.classifier>windows-x86_64</os.detected.classifier>
+            </properties>
+        </profile>
+        <profile>
+            <id>os-unix</id>
+            <activation>
+                <os>
+                    <family>unix</family>
+                    <name>Linux</name>
+                </os>
+            </activation>
+            <properties>
+                <os.detected.classifier>linux-x86_64</os.detected.classifier>
+            </properties>
+        </profile>
+        <profile>
+            <id>os-mac-x86</id>
+            <activation>
+                <os>
+                    <family>mac</family>
+                    <arch>x86_64</arch>
+                </os>
+            </activation>
+            <properties>
+                <os.detected.classifier>osx-x86_64</os.detected.classifier>
+            </properties>
+        </profile>
+        <profile>
+            <id>os-mac-arm</id>
+            <activation>
+                <os>
+                    <family>mac</family>
+                    <arch>aarch64</arch>
+                </os>
+            </activation>
+            <properties>
+                <os.detected.classifier>osx-aarch_64</os.detected.classifier>
+            </properties>
+        </profile>
         <profile>
             <id>jooq-codegen</id>
             <build>

@@ -3,7 +3,6 @@ package com.stockbroker.common.security.jwt;
 import com.nimbusds.jose.JWSAlgorithm;
 import com.nimbusds.jose.JWSHeader;
 import com.nimbusds.jose.crypto.RSASSAVerifier;
-import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
 import com.stockbroker.common.config.JwtProperties;
@@ -16,8 +15,11 @@ import org.springframework.stereotype.Component;
 import jakarta.annotation.PostConstruct;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.security.KeyFactory;
 import java.security.interfaces.RSAPublicKey;
+import java.security.spec.X509EncodedKeySpec;
 import java.time.Instant;
+import java.util.Base64;
 import java.util.Date;
 
 /**
@@ -58,8 +60,15 @@ public class JwtTokenValidator {
                 while ((len = reader.read(buf)) != -1) {
                     sb.append(buf, 0, len);
                 }
-                RSAKey rsaKey = RSAKey.parse(sb.toString());
-                this.publicKey = rsaKey.toRSAPublicKey();
+                // Strip PEM headers/footers and decode Base64
+                String pem = sb.toString()
+                        .replace("-----BEGIN PUBLIC KEY-----", "")
+                        .replace("-----END PUBLIC KEY-----", "")
+                        .replaceAll("\\s", "");
+                byte[] decoded = Base64.getDecoder().decode(pem);
+                X509EncodedKeySpec spec = new X509EncodedKeySpec(decoded);
+                KeyFactory kf = KeyFactory.getInstance("RSA");
+                this.publicKey = (RSAPublicKey) kf.generatePublic(spec);
                 this.verifier = new RSASSAVerifier(this.publicKey);
                 log.info("JWT public key loaded successfully from {}", jwtProperties.getPublicKeyPath());
             }

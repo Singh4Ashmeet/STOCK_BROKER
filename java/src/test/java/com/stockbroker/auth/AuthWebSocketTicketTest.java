@@ -45,8 +45,6 @@ class AuthWebSocketTicketTest {
         assertThat(ticketResp.getBody().ticket()).isNotBlank();
         assertThat(ticketResp.getBody().expiresIn()).isEqualTo(30);
 
-        String ticket = ticketResp.getBody().ticket();
-
         // Verify ticket can be validated (through AuthService)
         // We can't directly test WebSocket connection here, but we can verify
         // the ticket was stored by trying to use it again (should fail - single use)

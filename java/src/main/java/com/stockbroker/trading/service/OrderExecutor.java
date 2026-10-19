@@ -4,7 +4,6 @@ import com.stockbroker.common.error.BusinessProblem;
 import com.stockbroker.market.api.MarketDtos;
 import com.stockbroker.market.service.MarketDataService;
 import com.stockbroker.trading.api.TradingDtos;
-import com.stockbroker.trading.service.GoldenVectorService;
 import com.stockbroker.trading.domain.Fill;
 import com.stockbroker.trading.domain.Order;
 import com.stockbroker.trading.repo.FillRepository;
@@ -50,7 +49,6 @@ public class OrderExecutor {
     private final OrderRepository orderRepository;
     private final FillRepository fillRepository;
     private final LedgerService ledgerService;
-    private final AccountService accountService;
     private final GoldenVectorService goldenVectorService;
 
     // Per-account serialization lock
@@ -60,13 +58,11 @@ public class OrderExecutor {
                          OrderRepository orderRepository,
                          FillRepository fillRepository,
                          LedgerService ledgerService,
-                         AccountService accountService,
                          GoldenVectorService goldenVectorService) {
         this.marketDataService = marketDataService;
         this.orderRepository = orderRepository;
         this.fillRepository = fillRepository;
         this.ledgerService = ledgerService;
-        this.accountService = accountService;
         this.goldenVectorService = goldenVectorService;
     }
 
@@ -373,7 +369,6 @@ public class OrderExecutor {
         BigDecimal totalCost = BigDecimal.ZERO;
         BigDecimal totalFees = BigDecimal.ZERO;
         int levelsConsumed = 0;
-        boolean anyFill = false;
 
         for (MarketDtos.Level level : bookSide) {
             if (remainingQty.compareTo(BigDecimal.ZERO) <= 0) break;
@@ -401,7 +396,6 @@ public class OrderExecutor {
             totalFees = totalFees.add(fillFee);
             remainingQty = remainingQty.subtract(fillQty);
             levelsConsumed++;
-            anyFill = true;
         }
 
         boolean fullyFilled = remainingQty.compareTo(BigDecimal.ZERO) <= 0;

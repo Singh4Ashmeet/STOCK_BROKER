@@ -1,7 +1,6 @@
 package com.stockbroker.research.service;
 
 import com.stockbroker.research.api.ResearchDtos;
-import com.stockbroker.research.repo.BacktestRepository;
 import jakarta.annotation.PreDestroy;
 import org.springframework.stereotype.Service;
 
@@ -9,7 +8,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -29,14 +27,12 @@ import java.util.concurrent.Executors;
 @Service
 public class BacktestJobService {
 
-    private final BacktestRepository backtestRepository;
     private final ExecutorService executor = Executors.newFixedThreadPool(4);
     private final ConcurrentMap<String, JobState> jobs = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, ConcurrentMap<String, ArtifactMeta>> artifacts = new ConcurrentHashMap<>();
     private final Path artifactsDirectory = Path.of("artifacts");
 
-    public BacktestJobService(BacktestRepository backtestRepository) {
-        this.backtestRepository = backtestRepository;
+    public BacktestJobService() {
         try {
             Files.createDirectories(artifactsDirectory);
         } catch (IOException exception) {
@@ -79,7 +75,7 @@ public class BacktestJobService {
                 .sorted(Comparator.comparing((JobState job) -> job.createdAt).reversed())
                 .skip(safeOffset)
                 .limit(safeLimit)
-                .map(JobState::toSummary)
+                .map(job -> job.toSummary())
                 .toList();
     }
 
@@ -89,7 +85,7 @@ public class BacktestJobService {
             return List.of();
         }
         return jobArtifacts.values().stream()
-                .sorted(Comparator.comparing(ArtifactMeta::createdAt))
+                .sorted(Comparator.comparing(meta -> meta.createdAt()))
                 .map(meta -> new ResearchDtos.ArtifactInfo(
                         meta.id(), meta.type(), meta.sizeBytes(), meta.createdAt().toString()))
                 .toList();

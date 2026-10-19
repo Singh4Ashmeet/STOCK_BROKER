@@ -22,7 +22,6 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -32,6 +31,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ContextConfiguration(classes = LocalTestConfiguration.class)
 @ActiveProfiles("test")
+@SuppressWarnings("null")
 class OrderConcurrencyTest {
 
     @Autowired
@@ -47,7 +47,6 @@ class OrderConcurrencyTest {
     LedgerService ledgerService;
 
     private String accessToken;
-    private UUID accountId;
 
     @BeforeEach
     void setup() {
@@ -63,8 +62,6 @@ class OrderConcurrencyTest {
     @Test
     void concurrentMarketOrdersNoOverspend() throws Exception {
         int threadCount = 20;
-        BigDecimal orderQty = new BigDecimal("0.01"); // Small qty per order
-        int totalOrders = threadCount;
 
         ExecutorService executor = Executors.newFixedThreadPool(threadCount);
         CountDownLatch startLatch = new CountDownLatch(1);
@@ -153,8 +150,6 @@ class OrderConcurrencyTest {
     @Test
     void concurrentLimitOrdersSamePriceLevel() throws Exception {
         int threadCount = 10;
-        BigDecimal limitPrice = new BigDecimal("50000");
-        BigDecimal orderQty = new BigDecimal("0.01");
 
         ExecutorService executor = Executors.newFixedThreadPool(threadCount);
         CountDownLatch startLatch = new CountDownLatch(1);

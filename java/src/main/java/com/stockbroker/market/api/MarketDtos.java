@@ -1,5 +1,6 @@
 package com.stockbroker.market.api;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -15,6 +16,7 @@ public final class MarketDtos {
 
     private MarketDtos() {}
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record InstrumentSpec(
             @JsonProperty("symbol") @NotBlank String symbol,
             @JsonProperty("venue") @NotBlank String venue,
@@ -28,25 +30,30 @@ public final class MarketDtos {
             @JsonProperty("ws_numeric_safe") boolean wsNumericSafe
     ) {}
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record ListInstrumentsResponse(
             @JsonProperty("instruments") List<InstrumentSpec> instruments
     ) {}
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record Level(
             @JsonProperty("price") @NotNull String price,
             @JsonProperty("qty") @NotNull String qty
     ) {}
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record BookSnapshot(
             @JsonProperty("bids") List<Level> bids,
             @JsonProperty("asks") List<Level> asks
     ) {}
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record BookDelta(
             @JsonProperty("bids") List<Level> bids,
             @JsonProperty("asks") List<Level> asks
     ) {}
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record Timing(
             @JsonProperty("exchange_ts_ns") @NotNull String exchangeTsNs,
             @JsonProperty("recv_ts_ns") @NotNull String recvTsNs,
@@ -54,6 +61,7 @@ public final class MarketDtos {
             @JsonProperty("gateway_send_ts_ns") String gatewaySendTsNs
     ) {}
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record BookUpdate(
             @JsonProperty("symbol") @NotBlank String symbol,
             @JsonProperty("epoch") @NotNull long epoch,
@@ -64,6 +72,7 @@ public final class MarketDtos {
             @JsonProperty("book_valid") boolean bookValid
     ) {}
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record Trade(
             @JsonProperty("symbol") @NotBlank String symbol,
             @JsonProperty("epoch") @NotNull long epoch,
@@ -75,12 +84,14 @@ public final class MarketDtos {
             @JsonProperty("venue_trade_id") @NotBlank String venueTradeId
     ) {}
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record DepthPoint(
             @JsonProperty("levels") int levels,
             @JsonProperty("bid_qty") String bidQty,
             @JsonProperty("ask_qty") String askQty
     ) {}
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record Metrics(
             @JsonProperty("symbol") @NotBlank String symbol,
             @JsonProperty("epoch") @NotNull long epoch,

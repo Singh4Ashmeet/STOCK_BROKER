@@ -6,7 +6,6 @@ import org.springframework.validation.annotation.Validated;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
-import java.time.Duration;
 
 /**
  * Configuration properties for rate limiting.

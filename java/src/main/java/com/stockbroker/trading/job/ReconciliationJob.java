@@ -1,7 +1,6 @@
 package com.stockbroker.trading.job;
 
 import com.stockbroker.trading.domain.Account;
-import com.stockbroker.trading.repo.AccountRepository;
 import com.stockbroker.trading.service.LedgerService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -10,7 +9,6 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
-import java.util.List;
 import java.util.UUID;
 
 /**
@@ -23,14 +21,11 @@ public class ReconciliationJob {
     private static final Logger log = LoggerFactory.getLogger(ReconciliationJob.class);
 
     private final LedgerService ledgerService;
-    private final AccountRepository accountRepository;
     private final JdbcTemplate jdbcTemplate;
 
     public ReconciliationJob(LedgerService ledgerService, 
-                             AccountRepository accountRepository,
                              JdbcTemplate jdbcTemplate) {
         this.ledgerService = ledgerService;
-        this.accountRepository = accountRepository;
         this.jdbcTemplate = jdbcTemplate;
     }
 

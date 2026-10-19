@@ -2,7 +2,6 @@ package com.stockbroker.common.error;
 
 import org.zalando.problem.AbstractThrowableProblem;
 import org.zalando.problem.Status;
-import org.zalando.problem.ThrowableProblem;
 
 import java.net.URI;
 import java.util.Map;

@@ -68,6 +68,7 @@ class GoldenVectorFormatTest {
         for (String line : lines) {
             if (line.trim().isEmpty()) continue;
             // Should parse as valid JSON
+            @SuppressWarnings("unchecked")
             Map<String, Object> map = objectMapper.readValue(line, Map.class);
             assertThat(map).containsKey("fillId");
             assertThat(map).containsKey("orderId");
@@ -84,6 +85,7 @@ class GoldenVectorFormatTest {
             assertThat(map).containsKey("bookState");
             
             // Book state should have bids and asks
+            @SuppressWarnings("unchecked")
             Map<String, Object> bookState = (Map<String, Object>) map.get("bookState");
             assertThat(bookState).containsKey("epoch");
             assertThat(bookState).containsKey("seq");
@@ -133,6 +135,7 @@ class GoldenVectorFormatTest {
         String[] lines = content.trim().split("\n");
         for (String line : lines) {
             if (line.trim().isEmpty()) continue;
+            @SuppressWarnings("unchecked")
             Map<String, Object> map = objectMapper.readValue(line, Map.class);
             assertThat(map).containsKey("symbol");
             assertThat(map).containsKey("side");
@@ -171,6 +174,7 @@ class GoldenVectorFormatTest {
         for (String line : lines) {
             if (line.trim().isEmpty()) continue;
             
+            @SuppressWarnings("unchecked")
             Map<String, Object> vector = objectMapper.readValue(line, Map.class);
             
             // Verify all required fields for Python replay

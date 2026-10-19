@@ -1,7 +1,6 @@
 package com.stockbroker.admin.api;
 
 import com.stockbroker.admin.service.AdminService;
-import com.stockbroker.common.security.CurrentUser;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;

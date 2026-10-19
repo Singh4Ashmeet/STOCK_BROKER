@@ -1,7 +1,6 @@
 package com.stockbroker.trading;
 
 import com.stockbroker.common.error.BusinessProblem;
-import com.stockbroker.common.security.CurrentUser;
 import com.stockbroker.market.api.MarketDtos;
 import com.stockbroker.market.service.MarketDataService;
 import com.stockbroker.trading.api.TradingDtos;
@@ -22,7 +21,6 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtAut
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 

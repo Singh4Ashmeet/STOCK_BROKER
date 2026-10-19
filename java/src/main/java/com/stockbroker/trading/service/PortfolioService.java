@@ -1,10 +1,8 @@
 package com.stockbroker.trading.service;
 
 import com.stockbroker.common.error.BusinessProblem;
-import com.stockbroker.market.api.MarketDtos;
 import com.stockbroker.market.service.MarketDataService;
 import com.stockbroker.trading.api.TradingDtos;
-import com.stockbroker.trading.api.TradingDtosExtended;
 import com.stockbroker.trading.domain.Account;
 import com.stockbroker.trading.domain.Position;
 import com.stockbroker.trading.repo.AccountRepository;
@@ -20,7 +18,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -132,7 +129,7 @@ public class PortfolioService {
                                                  String to,
                                                  int limit,
                                                  String cursor) {
-        Account account = accountService.getOrCreateDefaultAccount(userId);
+        accountService.getOrCreateDefaultAccount(userId);
         
         // Parse cursor for pagination
         Instant cursorTime = null;

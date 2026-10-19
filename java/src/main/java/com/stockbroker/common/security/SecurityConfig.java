@@ -1,6 +1,5 @@
 package com.stockbroker.common.security;
 
-import com.stockbroker.common.config.JwtProperties;
 import com.stockbroker.common.security.jwt.JwtAccessDeniedHandler;
 import com.stockbroker.common.security.jwt.JwtAuthenticationConverter;
 import com.stockbroker.common.security.jwt.JwtAuthenticationEntryPoint;
@@ -14,7 +13,6 @@ import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
-import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.argon2.Argon2PasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -24,6 +22,9 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import org.springframework.security.oauth2.jwt.BadJwtException;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import com.stockbroker.common.security.jwt.JwtValidationException;
 import java.util.List;
 
 /**
@@ -43,15 +44,12 @@ import java.util.List;
 @EnableMethodSecurity(prePostEnabled = true, securedEnabled = true)
 public class SecurityConfig {
 
-    private final JwtProperties jwtProperties;
     private final JwtTokenValidator jwtTokenValidator;
     private final JwtAuthenticationConverter jwtAuthenticationConverter;
 
     @Autowired
-    public SecurityConfig(JwtProperties jwtProperties,
-                          JwtTokenValidator jwtTokenValidator,
+    public SecurityConfig(JwtTokenValidator jwtTokenValidator,
                           JwtAuthenticationConverter jwtAuthenticationConverter) {
-        this.jwtProperties = jwtProperties;
         this.jwtTokenValidator = jwtTokenValidator;
         this.jwtAuthenticationConverter = jwtAuthenticationConverter;
     }
@@ -61,7 +59,7 @@ public class SecurityConfig {
     public SecurityFilterChain publicApiFilterChain(HttpSecurity http) throws Exception {
         http
                 .securityMatcher("/api/v1/auth/**", "/api/v1/system/health", "/actuator/health", "/actuator/info")
-                .csrf(AbstractHttpConfigurer::disable)
+                .csrf(csrf -> csrf.disable())
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth.anyRequest().permitAll());
@@ -74,7 +72,7 @@ public class SecurityConfig {
     public SecurityFilterChain protectedApiFilterChain(HttpSecurity http) throws Exception {
         http
                 .securityMatcher("/api/v1/**")
-                .csrf(AbstractHttpConfigurer::disable)
+                .csrf(csrf -> csrf.disable())
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
@@ -110,7 +108,7 @@ public class SecurityConfig {
     public SecurityFilterChain actuatorFilterChain(HttpSecurity http) throws Exception {
         http
                 .securityMatcher("/actuator/**")
-                .csrf(AbstractHttpConfigurer::disable)
+                .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/actuator/health", "/actuator/info").permitAll()
@@ -134,6 +132,18 @@ public class SecurityConfig {
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);
         return source;
+    }
+
+    @Bean
+    public JwtDecoder jwtDecoder() {
+        return token -> {
+            try {
+                var claims = jwtTokenValidator.validate(token);
+                return JwtAuthenticationConverter.createJwt(claims, token);
+            } catch (JwtValidationException e) {
+                throw new BadJwtException(e.getMessage(), e);
+            }
+        };
     }
 
     @Bean

@@ -98,7 +98,7 @@ public class BacktestService {
     }
 
     public ResearchDtos.BacktestTradeLogResponse getTradeLog(UUID userId, UUID runId, int limit, String cursor) {
-        BacktestRun run = backtestRepository.findByIdAndUserId(runId, userId)
+        backtestRepository.findByIdAndUserId(runId, userId)
                 .orElseThrow(() -> new BusinessProblem.ValidationFailed("Backtest not found",
                         java.util.Map.of("code", "BACKTEST_NOT_FOUND")));
 
