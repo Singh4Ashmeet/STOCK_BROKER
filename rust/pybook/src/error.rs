@@ -12,26 +12,22 @@ create_exception!(pybook, SchemaVersionError, PyBookError);
 /// Convert an `sb-replay::ReplayError` into the corresponding PyO3 `PyErr`.
 pub fn replay_err_to_py(err: ReplayError) -> PyErr {
     match err {
-        ReplayError::UnsupportedSchemaVersion { version, max_supported } => {
-            SchemaVersionError::new_err(format!(
-                "Unsupported schema version: {version} (maximum supported is {max_supported})"
-            ))
-        }
+        ReplayError::UnsupportedSchemaVersion {
+            version,
+            max_supported,
+        } => SchemaVersionError::new_err(format!(
+            "Unsupported schema version: {version} (maximum supported is {max_supported})"
+        )),
         ReplayError::InvalidMagic(magic) => {
             PyBookError::new_err(format!("Invalid file magic header: {magic:?}"))
         }
-        ReplayError::Io(e) => {
-            PyBookError::new_err(format!("I/O error reading event log: {e}"))
-        }
-        ReplayError::CorruptedFile { path, reason } => {
-            PyBookError::new_err(format!("Corrupted event log file {}: {reason}", path.display()))
-        }
-        ReplayError::Book(reason) => {
-            PyBookError::new_err(format!("Order book error: {reason}"))
-        }
-        ReplayError::Protobuf(e) => {
-            PyBookError::new_err(format!("Protobuf decoding error: {e}"))
-        }
+        ReplayError::Io(e) => PyBookError::new_err(format!("I/O error reading event log: {e}")),
+        ReplayError::CorruptedFile { path, reason } => PyBookError::new_err(format!(
+            "Corrupted event log file {}: {reason}",
+            path.display()
+        )),
+        ReplayError::Book(reason) => PyBookError::new_err(format!("Order book error: {reason}")),
+        ReplayError::Protobuf(e) => PyBookError::new_err(format!("Protobuf decoding error: {e}")),
         _ => PyBookError::new_err(format!("{err}")),
     }
 }

@@ -65,6 +65,11 @@ def test_replay_parity_across_full_day() -> None:
                 if ap2 > 0:
                     assert ap1 <= ap2, f"Ask levels not monotonically ascending at event {i}"
 
+            # Timestamp monotonicity enforcement
+            if i > 0:
+                assert batch.recv_ts[i] >= batch.recv_ts[i - 1], f"recv_ts non-monotonic at event {i}"
+                assert batch.exchange_ts[i] >= batch.exchange_ts[i - 1], f"exchange_ts non-monotonic at event {i}"
+
     # Day summary parity
     summary = reader.summary()
     assert summary["records_processed"] == total_events

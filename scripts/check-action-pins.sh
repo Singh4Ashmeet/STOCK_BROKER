@@ -13,7 +13,7 @@ log_pass() { echo -e "${GREEN}[PASS]${NC} $*"; }
 log_fail() { echo -e "${RED}[FAIL]${NC} $*"; }
 log_info() { echo -e "${YELLOW}[INFO]${NC} $*"; }
 
-WORKFLOW_DIR=".github/workflows"
+WORKFLOW_DIR="${WORKFLOW_DIR:-.github/workflows}"
 FAIL_COUNT=0
 
 if [[ ! -d "$WORKFLOW_DIR" ]]; then
@@ -27,8 +27,12 @@ log_info "Checking GitHub Action pins in $WORKFLOW_DIR..."
 # Exclude local actions (starting with ./)
 # Check that each uses: has @ followed by 40 hex characters
 while IFS= read -r line; do
-    file=$(echo "$line" | cut -d: -f1)
-    uses_line=$(echo "$line" | cut -d: -f3- | sed 's/^[[:space:]]*uses:[[:space:]]*//' | sed 's/^[[:space:]]*//')
+    # grep -Hn emits FILE:LINE:CONTENT. Workflow filenames cannot contain a
+    # colon on the Linux runners used by this check.
+    file=${line%%:*}
+    remainder=${line#*:}
+    uses_line=${remainder#*:}
+    uses_line=$(printf '%s\n' "$uses_line" | sed -E 's/^[[:space:]]*(-[[:space:]]*)?uses:[[:space:]]*//; s/[[:space:]]*#.*$//; s/[[:space:]]*$//')
 
     # Skip local actions
     if echo "$uses_line" | grep -q '^\./'; then
@@ -45,13 +49,14 @@ while IFS= read -r line; do
             log_pass "$file: $action@$ref (pinned by SHA)"
         else
             log_fail "$file: $action@$ref (NOT pinned by 40-char SHA)"
-            ((FAIL_COUNT++))
+            ((++FAIL_COUNT))
         fi
     else
         log_fail "$file: $uses_line (no @ ref at all)"
-        ((FAIL_COUNT++))
+        ((++FAIL_COUNT))
     fi
-done < <(grep -rn '^[[:space:]]*uses:' "$WORKFLOW_DIR"/*.yml 2>/dev/null || true)
+done < <(grep -rEHn --include='*.yml' --include='*.yaml' \
+    '^[[:space:]]*(-[[:space:]]*)?uses:' "$WORKFLOW_DIR" 2>/dev/null || true)
 
 if [[ $FAIL_COUNT -eq 0 ]]; then
     log_pass "All GitHub Actions are pinned by commit SHA"

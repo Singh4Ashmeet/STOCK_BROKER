@@ -58,7 +58,15 @@ public class SecurityConfig {
     @Order(1)
     public SecurityFilterChain publicApiFilterChain(HttpSecurity http) throws Exception {
         http
-                .securityMatcher("/api/v1/auth/**", "/api/v1/system/health", "/actuator/health", "/actuator/info")
+                .securityMatcher(
+                        "/api/v1/auth/register",
+                        "/api/v1/auth/login",
+                        "/api/v1/auth/refresh",
+                        "/api/v1/auth/logout",
+                        "/api/v1/system/health",
+                        "/actuator/health",
+                        "/actuator/info"
+                )
                 .csrf(csrf -> csrf.disable())
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -77,6 +85,8 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.GET, "/api/v1/instruments").authenticated()
+                        .requestMatchers("/api/v1/auth/me").authenticated()
+                        .requestMatchers("/api/v1/auth/ws/ticket").authenticated()
                         .requestMatchers("/api/v1/market/**").authenticated()
                         .requestMatchers("/api/v1/orders/**").authenticated()
                         .requestMatchers("/api/v1/fills/**").authenticated()
@@ -85,6 +95,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/watchlists/**").authenticated()
                         .requestMatchers("/api/v1/alerts/**").authenticated()
                         .requestMatchers("/api/v1/backtests/**").authenticated()
+                        .requestMatchers("/api/v1/backtest-jobs/**").authenticated()
                         .requestMatchers("/api/v1/strategies/**").authenticated()
                         .requestMatchers("/api/v1/me").authenticated()
                         .requestMatchers("/api/v1/ws/ticket").authenticated()

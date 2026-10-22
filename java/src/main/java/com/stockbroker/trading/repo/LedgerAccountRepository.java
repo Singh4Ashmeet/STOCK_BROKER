@@ -24,4 +24,7 @@ public interface LedgerAccountRepository extends JpaRepository<LedgerAccount, UU
 
     @Query(value = "SELECT * FROM ledger_accounts WHERE account_id = :accountId AND code = :code", nativeQuery = true)
     Optional<LedgerAccount> findByAccountIdAndCode(@Param("accountId") UUID accountId, @Param("code") String code);
+
+    @Query(value = "SELECT * FROM ledger_accounts WHERE account_id IS NULL AND code = :code", nativeQuery = true)
+    Optional<LedgerAccount> findSystemAccountByCode(@Param("code") String code);
 }

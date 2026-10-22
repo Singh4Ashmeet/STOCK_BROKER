@@ -72,7 +72,7 @@ class WebSocketGatewayTest {
 
         // Build WebSocket URL
         int port = restTemplate.getRestTemplate().getUriTemplateHandler().expand("/").getPort();
-        baseWsUrl = "ws://localhost:" + port + "/ws/v1?ticket=" + ticket;
+        baseWsUrl = "ws://localhost:" + port + "/api/ws/v1?ticket=" + ticket;
 
         wsClient = new StandardWebSocketClient();
     }
@@ -256,6 +256,10 @@ class WebSocketGatewayTest {
         TestWebSocketHandler handler = new TestWebSocketHandler();
         WebSocketSession session = wsClient.doHandshake(handler, new WebSocketHttpHeaders(), URI.create(baseWsUrl)).get(5, TimeUnit.SECONDS);
 
+        // Collect all messages in order using a thread-safe list
+        List<JsonNode> messages = new java.util.concurrent.CopyOnWriteArrayList<>();
+        handler.setMessageCollector(messages::add);
+
         String subscribeMsg = objectMapper.writeValueAsString(Map.of(
                 "op", "subscribe",
                 "channel", "book",
@@ -263,10 +267,6 @@ class WebSocketGatewayTest {
                 "depth", 5
         ));
         session.sendMessage(new TextMessage(subscribeMsg));
-
-        // Collect all messages in order
-        List<JsonNode> messages = new ArrayList<>();
-        handler.setMessageCollector(messages::add);
 
         // Wait for snapshot + several deltas
         await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {

@@ -64,6 +64,8 @@ pub struct WriterStats {
     pub bytes_written: AtomicU64,
     /// Total completed hour files cleanly closed and renamed
     pub files_completed: AtomicU64,
+    /// Total gap markers emitted for dropped records
+    pub gap_markers_emitted: AtomicU64,
 }
 
 /// Commands sent to the background writer thread.

@@ -40,8 +40,18 @@ class PortfolioIsolationTest {
     @Autowired
     AccountService accountService;
 
+    @Autowired
+    com.stockbroker.common.security.jwt.JwtTokenValidator jwtTokenValidator;
+
+    @Autowired
+    org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
+
     private String userAAccessToken;
     private String userBAccessToken;
+    private UUID userAId;
+    private UUID userBId;
+    private UUID userAAccountId;
+    private UUID userBAccountId;
 
     @BeforeEach
     void setup() {
@@ -59,6 +69,20 @@ class PortfolioIsolationTest {
         ResponseEntity<AuthDtos.LoginResponse> loginRespB = restTemplate.postForEntity("/api/v1/auth/login", loginB, AuthDtos.LoginResponse.class);
         userBAccessToken = loginRespB.getBody().accessToken();
 
+        userAId = UUID.fromString(jwtTokenValidator.extractSubjectUnsafe(userAAccessToken));
+        userBId = UUID.fromString(jwtTokenValidator.extractSubjectUnsafe(userBAccessToken));
+        userAAccountId = accountService.getOrCreateDefaultAccount(userAId).getId();
+        userBAccountId = accountService.getOrCreateDefaultAccount(userBId).getId();
+
+        // Clean up any state from previous runs for these users
+        jdbcTemplate.update("DELETE FROM watchlist_items WHERE watchlist_id IN (SELECT id FROM watchlists WHERE user_id IN (?, ?))", userAId, userBId);
+        jdbcTemplate.update("DELETE FROM watchlists WHERE user_id IN (?, ?)", userAId, userBId);
+        jdbcTemplate.update("DELETE FROM fills WHERE user_id IN (?, ?)", userAId, userBId);
+        jdbcTemplate.update("DELETE FROM orders WHERE user_id IN (?, ?)", userAId, userBId);
+        jdbcTemplate.update("DELETE FROM positions WHERE account_id IN (?, ?)", userAAccountId, userBAccountId);
+        jdbcTemplate.update("DELETE FROM ledger_entries WHERE transaction_id IN (SELECT id FROM ledger_transactions WHERE account_id IN (?, ?))", userAAccountId, userBAccountId);
+        jdbcTemplate.update("DELETE FROM ledger_transactions WHERE account_id IN (?, ?)", userAAccountId, userBAccountId);
+
         // Get account IDs by calling portfolio endpoint (creates default account)
         HttpHeaders headersA = new HttpHeaders();
         headersA.setBearerAuth(userAAccessToken);
@@ -69,11 +93,6 @@ class PortfolioIsolationTest {
         headersB.setBearerAuth(userBAccessToken);
         HttpEntity<?> entityB = new HttpEntity<>(headersB);
         restTemplate.exchange("/api/v1/portfolio", HttpMethod.GET, entityB, TradingDtos.PortfolioResponse.class);
-
-        // Get account IDs via service - call getOrCreateDefaultAccount
-        // We'll use the accountService to get the default account for each user
-        // Extract user IDs from JWT claims (in test, we can use the service directly)
-        // For simplicity, we'll use the ledger service which creates account on first deposit
     }
 
     @Test
@@ -135,11 +154,11 @@ class PortfolioIsolationTest {
         HttpEntity<?> entityA = new HttpEntity<>(headersA);
 
         // Deposit 10,000 USDT
-        ledgerService.createDeposit(UUID.randomUUID(), UUID.randomUUID(), "USDT", new BigDecimal("10000"));
+        ledgerService.createDeposit(userAAccountId, userAId, "USDT", new BigDecimal("10000"));
 
         // Buy 1 BTC at 50,000
         ledgerService.createFill(
-                UUID.randomUUID(), UUID.randomUUID(),
+                userAAccountId, userAId,
                 "BTC-USDT", "BUY",
                 new BigDecimal("1.0"), new BigDecimal("50000"),
                 "USDT", new BigDecimal("250"),
@@ -174,7 +193,7 @@ class PortfolioIsolationTest {
 
         // Buy 2 BTC at 50,000
         ledgerService.createFill(
-                UUID.randomUUID(), UUID.randomUUID(),
+                userAAccountId, userAId,
                 "BTC-USDT", "BUY",
                 new BigDecimal("2.0"), new BigDecimal("50000"),
                 "USDT", new BigDecimal("500"),
@@ -183,7 +202,7 @@ class PortfolioIsolationTest {
 
         // Sell 1 BTC at 60,000
         ledgerService.createFill(
-                UUID.randomUUID(), UUID.randomUUID(),
+                userAAccountId, userAId,
                 "BTC-USDT", "SELL",
                 new BigDecimal("1.0"), new BigDecimal("60000"),
                 "USDT", new BigDecimal("300"),

@@ -51,6 +51,9 @@ pub enum BookError {
     /// Invalid window configuration
     #[error("invalid window configuration")]
     InvalidWindowConfig,
+    /// Book is in an invalid state
+    #[error("book in invalid state")]
+    InvalidBookState,
 }
 
 impl From<sb_core::error::CoreError> for BookError {

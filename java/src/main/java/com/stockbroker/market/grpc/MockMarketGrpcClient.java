@@ -40,8 +40,14 @@ public class MockMarketGrpcClient extends MarketGrpcClient {
 
     @PostConstruct
     public void init() {
-        // Don't call parent init - we don't connect to real feed
         log.info("MockMarketGrpcClient initialized for testing");
+        List<String> instruments = listInstruments();
+        subscribedSymbols.addAll(instruments);
+        for (String symbol : instruments) {
+            stateManager.onBookUpdate(createMockBookUpdate(symbol, epoch.get(), sequence.incrementAndGet()));
+            stateManager.onMetrics(createMockMetrics(symbol, epoch.get(), sequence.incrementAndGet()));
+        }
+        startMockDataGeneration();
     }
 
     @Override
@@ -82,6 +88,8 @@ public class MockMarketGrpcClient extends MarketGrpcClient {
         }
     }
 
+    private final ConcurrentHashMap<String, AtomicBoolean> hasSentSnapshot = new ConcurrentHashMap<>();
+
     private void generateMockBookUpdate() {
         if (!running.get() || subscribedSymbols.isEmpty()) return;
 
@@ -89,10 +97,48 @@ public class MockMarketGrpcClient extends MarketGrpcClient {
             long seq = sequence.incrementAndGet();
             long currentEpoch = epoch.get();
 
-            // Create mock book update
-            var update = createMockBookUpdate(symbol, currentEpoch, seq);
+            boolean sentSnap = hasSentSnapshot.computeIfAbsent(symbol, k -> new AtomicBoolean(false)).getAndSet(true);
+            var update = !sentSnap
+                    ? createMockBookUpdate(symbol, currentEpoch, seq)
+                    : createMockBookDelta(symbol, currentEpoch, seq);
+
             stateManager.onBookUpdate(update);
         }
+    }
+
+    private com.stockbroker.market.v1.BookUpdate createMockBookDelta(String symbol, long epoch, long seq) {
+        List<com.stockbroker.market.v1.Level> bids = new ArrayList<>();
+        List<com.stockbroker.market.v1.Level> asks = new ArrayList<>();
+
+        long basePrice = 50000000000L;
+        long qty = 100000000L + (long) (Math.random() * 50000000);
+
+        bids.add(com.stockbroker.market.v1.Level.newBuilder()
+                .setPrice(basePrice - 10000)
+                .setQty(qty)
+                .build());
+
+        asks.add(com.stockbroker.market.v1.Level.newBuilder()
+                .setPrice(basePrice + 10000)
+                .setQty(qty)
+                .build());
+
+        var delta = com.stockbroker.market.v1.BookDelta.newBuilder()
+                .addAllBids(bids)
+                .addAllAsks(asks)
+                .build();
+
+        return com.stockbroker.market.v1.BookUpdate.newBuilder()
+                .setSymbol(symbol)
+                .setEpoch(epoch)
+                .setSeq(seq)
+                .setDelta(delta)
+                .setTiming(com.stockbroker.market.v1.Timing.newBuilder()
+                        .setExchangeTsNs(Instant.now().toEpochMilli() * 1_000_000)
+                        .setRecvTsNs(Instant.now().toEpochMilli() * 1_000_000)
+                        .setPublishTsNs(Instant.now().toEpochMilli() * 1_000_000)
+                        .build())
+                .build();
     }
 
     private void generateMockTrade() {

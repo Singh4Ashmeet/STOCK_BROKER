@@ -121,7 +121,7 @@ export function useWebSocketWorker(): UseWebSocketWorkerReturn {
       const { ticket } = await response.json();
       
       const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8081';
-      workerRef.current?.postMessage({ type: 'connect', ticket, wsUrl });
+      (workerRef.current as Worker | null)?.postMessage({ type: 'connect', ticket, wsUrl });
     } catch (error) {
       console.error('[WS] Connect error:', error);
       useMarketStore.getState().setConnectionStatus('error', 'Failed to connect');
@@ -129,7 +129,7 @@ export function useWebSocketWorker(): UseWebSocketWorkerReturn {
   }, [workerReady]);
 
   const disconnect = useCallback(() => {
-    workerRef.current?.postMessage({ type: 'disconnect' });
+    (workerRef.current as Worker | null)?.postMessage({ type: 'disconnect' });
   }, []);
 
   const subscribe = useCallback((
@@ -139,7 +139,7 @@ export function useWebSocketWorker(): UseWebSocketWorkerReturn {
   ) => {
     const key = `${channel}:${symbol}`;
     useMarketStore.getState().addSubscription(key, { channel, symbol, depth });
-    workerRef.current?.postMessage({ type: 'subscribe', channel, symbol, depth });
+    (workerRef.current as Worker | null)?.postMessage({ type: 'subscribe', channel, symbol, depth });
   }, []);
 
   const unsubscribe = useCallback((
@@ -148,17 +148,17 @@ export function useWebSocketWorker(): UseWebSocketWorkerReturn {
   ) => {
     const key = `${channel}:${symbol}`;
     useMarketStore.getState().removeSubscription(key);
-    workerRef.current?.postMessage({ type: 'unsubscribe', channel, symbol });
+    (workerRef.current as Worker | null)?.postMessage({ type: 'unsubscribe', channel, symbol });
   }, []);
 
   const resync = useCallback((symbol: string) => {
     useMarketStore.getState().setResyncing(symbol, true);
     useMarketStore.getState().setConnectionStatus('resyncing');
-    workerRef.current?.postMessage({ type: 'resync', channel: 'book', symbol });
+    (workerRef.current as Worker | null)?.postMessage({ type: 'resync', channel: 'book', symbol });
   }, []);
 
   const ping = useCallback(() => {
-    workerRef.current?.postMessage({ type: 'ping' });
+    (workerRef.current as Worker | null)?.postMessage({ type: 'ping' });
   }, []);
 
   return {

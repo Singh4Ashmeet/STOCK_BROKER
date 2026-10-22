@@ -54,7 +54,7 @@ export function OrderBookCanvas({
       seq: book.seq,
       resyncing: book.resyncing,
     };
-  }, [book]);
+  }, [book, maxLevels]);
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -247,8 +247,8 @@ export function OrderBookCanvas({
     ctx.fillStyle = dimColor;
     ctx.font = '10px JetBrains Mono, monospace';
     ctx.textAlign = 'left';
-    ctx.fillText(`E:${book.epoch} S:${book.seq}`, 10, ch - 8);
-  }, [renderData]);
+    ctx.fillText(`E:${data.epoch} S:${data.seq}`, 10, ch - 8);
+  }, [renderData, showSpread]);
 
   // Animation loop - batched to 60fps
   useEffect(() => {

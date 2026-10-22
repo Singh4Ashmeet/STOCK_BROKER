@@ -2,7 +2,8 @@
 
 import { TokenPair, LoginRequest, RegisterRequest, User, ApiError } from './types';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081';
+const AUTH_BASE = '/api/auth';
+const BACKEND_BASE = '/api/backend';
 
 class AuthClient {
   private accessToken: string | null = null;
@@ -17,7 +18,7 @@ class AuthClient {
   }
 
   async login(credentials: LoginRequest): Promise<TokenPair> {
-    const response = await fetch(`${API_BASE}/api/v1/auth/login`, {
+    const response = await fetch(`${AUTH_BASE}/login`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -37,7 +38,7 @@ class AuthClient {
   }
 
   async register(data: RegisterRequest): Promise<User> {
-    const response = await fetch(`${API_BASE}/api/v1/auth/register`, {
+    const response = await fetch(`${AUTH_BASE}/register`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -56,7 +57,7 @@ class AuthClient {
 
   async logout(): Promise<void> {
     try {
-      await fetch(`${API_BASE}/api/v1/auth/logout`, {
+      await fetch(`${AUTH_BASE}/logout`, {
         method: 'POST',
         credentials: 'include',
       });
@@ -72,7 +73,7 @@ class AuthClient {
     }
 
     this.refreshPromise = (async () => {
-      const response = await fetch(`${API_BASE}/api/v1/auth/refresh`, {
+      const response = await fetch(`${AUTH_BASE}/refresh`, {
         method: 'POST',
         credentials: 'include', // Sends httpOnly refresh cookie automatically
       });
@@ -95,7 +96,7 @@ class AuthClient {
   async getCurrentUser(): Promise<User | null> {
     if (!this.accessToken) return null;
 
-    const response = await fetch(`${API_BASE}/api/v1/users/me`, {
+    const response = await fetch(`${BACKEND_BASE}/auth/me`, {
       headers: {
         Authorization: `Bearer ${this.accessToken}`,
       },
@@ -120,7 +121,7 @@ class AuthClient {
       throw new Error('No access token');
     }
 
-    const response = await fetch(`${API_BASE}/api/v1${endpoint}`, {
+    const response = await fetch(`${BACKEND_BASE}${endpoint}`, {
       ...options,
       headers: {
         ...options.headers,
@@ -135,7 +136,7 @@ class AuthClient {
       try {
         await this.refreshAccessToken();
         // Retry with new token
-        const retryResponse = await fetch(`${API_BASE}/api/v1${endpoint}`, {
+        const retryResponse = await fetch(`${BACKEND_BASE}${endpoint}`, {
           ...options,
           headers: {
             ...options.headers,

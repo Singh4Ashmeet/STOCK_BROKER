@@ -1,6 +1,5 @@
 package com.stockbroker.common.config;
 
-import com.stockbroker.common.security.CurrentUser;
 import io.github.bucket4j.Bucket;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -13,7 +12,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.function.Supplier;
 
 /**
@@ -47,6 +47,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private final Supplier<Bucket> tradingRateLimiter;
     private final Supplier<Bucket> userRateLimiter;
     private final Supplier<Bucket> ipRateLimiter;
+    private final ConcurrentMap<String, Bucket> buckets = new ConcurrentHashMap<>();
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -94,20 +95,14 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private Bucket selectRateLimiter(HttpServletRequest request, String path, String method) {
         String pathLower = path.toLowerCase();
         
-        // Check if user is authenticated
-        UUID userId = getCurrentUserId();
-        
         // Auth endpoints - strict rate limiting (always per-IP)
         if (pathLower.startsWith("/api/v1/auth/")) {
-            return authRateLimiter.get();
+            return bucketFor(request, "auth", authRateLimiter);
         }
         
         // Market data endpoints
         if (pathLower.startsWith("/api/v1/market/") || pathLower.startsWith("/api/v1/instruments")) {
-            if (userId != null) {
-                return getUserBucket(userId, "market");
-            }
-            return marketRateLimiter.get();
+            return bucketFor(request, "market", marketRateLimiter);
         }
         
         // Trading endpoints
@@ -119,39 +114,25 @@ public class RateLimitFilter extends OncePerRequestFilter {
             pathLower.startsWith("/api/v1/alerts/") ||
             pathLower.startsWith("/api/v1/backtests/") ||
             pathLower.startsWith("/api/v1/strategies/")) {
-            if (userId != null) {
-                return getUserBucket(userId, "trading");
-            }
-            return tradingRateLimiter.get();
+            return bucketFor(request, "trading", tradingRateLimiter);
         }
         
         // WebSocket ticket
         if (pathLower.startsWith("/api/v1/ws/ticket")) {
-            if (userId != null) {
-                return getUserBucket(userId, "ws");
-            }
-            return tradingRateLimiter.get();
+            return bucketFor(request, "ws", tradingRateLimiter);
         }
         
-        // For authenticated users, use user-based rate limiting
-        // For anonymous, use IP-based
-        if (userId != null) {
-            return getUserBucket(userId, "default");
-        }
-        return ipRateLimiter.get();
+        return bucketFor(request, "default", ipRateLimiter);
     }
-    
-    private UUID getCurrentUserId() {
-        try {
-            return CurrentUser.getUserIdOrNull();
-        } catch (Exception e) {
-            return null;
-        }
-    }
-    
-    private Bucket getUserBucket(UUID userId, String endpointType) {
-        // In production, this can resolve a bucket per-user per-endpoint ("user:" + userId + ":" + endpointType)
-        return userRateLimiter.get();
+
+    private Bucket bucketFor(HttpServletRequest request, String endpointType, Supplier<Bucket> supplier) {
+        // This servlet filter runs before the security chain, so using the
+        // authenticated principal here would be unreliable. Keying by the
+        // container-provided peer address makes the limiter effective without
+        // trusting spoofable forwarded headers. A Redis-backed deployment can
+        // replace this with a bounded per-user/per-IP keyspace.
+        String remoteAddress = request.getRemoteAddr();
+        return buckets.computeIfAbsent(endpointType + ':' + remoteAddress, ignored -> supplier.get());
     }
 
     private void addRateLimitHeaders(HttpServletResponse response, Bucket bucket) {

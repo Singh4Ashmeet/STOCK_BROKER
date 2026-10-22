@@ -27,6 +27,10 @@ spring:
 
 # Enable mock feed for tests
 sb:
+  auth:
+    jwt:
+      private-key-path: ${SB_JWT_PRIVATE_KEY_PATH:file:../infra/secrets/jwt_private.key}
+      public-key-path: ${SB_JWT_PUBLIC_KEY_PATH:file:../infra/secrets/jwt_public.key}
   market:
     gateway:
       host: ${SB_FEED_HOST:localhost}

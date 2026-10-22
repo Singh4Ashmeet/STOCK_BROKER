@@ -56,7 +56,7 @@ class ConflationTest {
         String ticket = ticketResp.getBody().ticket();
 
         int port = restTemplate.getRestTemplate().getUriTemplateHandler().expand("/").getPort();
-        String wsUrl = "ws://localhost:" + port + "/ws/v1?ticket=" + ticket;
+        String wsUrl = "ws://localhost:" + port + "/api/ws/v1?ticket=" + ticket;
 
         StandardWebSocketClient wsClient = new StandardWebSocketClient();
         TestWebSocketHandler handler = new TestWebSocketHandler();

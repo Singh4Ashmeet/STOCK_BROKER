@@ -183,8 +183,8 @@ class FullGatewayTest {
         headers.setBearerAuth(accessToken);
         HttpEntity<?> entity = new HttpEntity<>(headers);
 
-        ResponseEntity<MarketDtosExtended.LatencyResponse> response = restTemplate.exchange(
-                "/api/v1/system/latency", HttpMethod.GET, entity, MarketDtosExtended.LatencyResponse.class);
+        ResponseEntity<String> response = restTemplate.exchange(
+                "/api/v1/system/latency", HttpMethod.GET, entity, String.class);
 
         // This requires ADMIN role, so expect 403
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);

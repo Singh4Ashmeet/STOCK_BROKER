@@ -18,12 +18,12 @@
 //! ### API
 //!
 //! ```ignore
-//! apply_snapshot(&mut self, bids: &[Level], asks: &[Level])
-//! apply_delta(&mut self, bids: &[Level], asks: &[Level]) -> ApplyResult
+//! apply_snapshot(&mut self, bids: &[Level], asks: &[Level]) -> Result<(), BookError>
+//! apply_delta(&mut self, bids: &[Level], asks: &[Level]) -> Result<ApplyResult, BookError>
 //! best_bid(&self) -> Option<Level>; best_ask(&self) -> Option<Level>
 //! levels(&self, side, n, out: &mut [Level]) -> usize
-//! depth_qty(&self, side, n) -> Qty
-//! walk_market(&self, side, qty) -> FillPlan
+//! depth_qty(&self, side, n) -> Result<Qty, BookError>
+//! walk_market(&self, side, qty) -> Result<FillPlan, BookError>
 //! clear(&mut self)
 //! ```
 //!

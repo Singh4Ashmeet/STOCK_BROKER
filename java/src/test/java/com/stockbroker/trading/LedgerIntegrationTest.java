@@ -47,7 +47,16 @@ class LedgerIntegrationTest {
     LedgerTransactionRepository transactionRepository;
 
     @Autowired
+    com.stockbroker.common.security.jwt.JwtTokenValidator jwtTokenValidator;
+
+    @Autowired
+    com.stockbroker.trading.service.AccountService accountService;
+
+    @Autowired
     LedgerEntryRepository entryRepository;
+
+    @Autowired
+    org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
 
     private String accessToken;
     private UUID accountId;
@@ -63,19 +72,16 @@ class LedgerIntegrationTest {
         ResponseEntity<AuthDtos.LoginResponse> loginResp = restTemplate.postForEntity("/api/v1/auth/login", login, AuthDtos.LoginResponse.class);
         accessToken = loginResp.getBody().accessToken();
 
-        // Get user's account
-        HttpHeaders headers = new HttpHeaders();
-        headers.setBearerAuth(accessToken);
-        HttpEntity<?> entity = new HttpEntity<>(headers);
-        restTemplate.exchange(
-                "/api/v1/portfolio", HttpMethod.GET, entity, com.stockbroker.trading.api.TradingDtos.PortfolioResponse.class);
-        
-        // Get account from repository
-        List<Account> accounts = accountRepository.findByUserId(UUID.fromString("00000000-0000-0000-0000-000000000000"));
-        if (!accounts.isEmpty()) {
-            accountId = accounts.get(0).getId();
-            userId = accounts.get(0).getUserId();
-        }
+        userId = UUID.fromString(jwtTokenValidator.extractSubjectUnsafe(accessToken));
+        Account acc = accountService.getOrCreateDefaultAccount(userId);
+        accountId = acc.getId();
+
+        // Clean up all ledger data for this account to ensure test isolation across runs.
+        // Order matters: entries first (FK to transactions and ledger_accounts), then transactions, then positions, then ledger_accounts.
+        jdbcTemplate.update("DELETE FROM ledger_entries WHERE transaction_id IN (SELECT id FROM ledger_transactions WHERE account_id = ?)", accountId);
+        jdbcTemplate.update("DELETE FROM ledger_transactions WHERE account_id = ?", accountId);
+        jdbcTemplate.update("DELETE FROM positions WHERE account_id = ?", accountId);
+        jdbcTemplate.update("DELETE FROM ledger_accounts WHERE account_id = ?", accountId);
     }
 
     @Test

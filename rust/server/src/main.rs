@@ -9,8 +9,12 @@ use std::time::Duration;
 use sb_book::BookConfig;
 use sb_core::InstrumentSpec;
 use sb_metrics::engine::MetricsConfig as EngineMetricsConfig;
-use sb_server::config::{load_config, ServerConfig};
-use sb_server::metrics::{CrossCheckConfig, FeedMetrics, HealthTracker, LatencyRecorder, PrometheusMetrics, SymbolLatencyRecorders, health_router, start_prometheus_server, start_latency_reporter, start_cross_check_task};
+use sb_server::config::{ServerConfig, load_config};
+use sb_server::metrics::{
+    CrossCheckConfig, FeedMetrics, HealthTracker, LatencyRecorder, PrometheusMetrics,
+    SymbolLatencyRecorders, health_router, start_cross_check_task, start_latency_reporter,
+    start_prometheus_server,
+};
 use sb_server::proto::market_data_server::MarketDataServer;
 use sb_server::service::MarketDataService;
 use sb_server::state::SymbolState;
@@ -32,7 +36,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap_or_else(|| "server.toml".to_owned());
 
     let server_config: ServerConfig = load_config(&config_path)?;
-    
+
     tracing::info!(
         listen_addr = %server_config.listen_addr,
         http_addr = %server_config.http_addr,
@@ -44,7 +48,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let feed_metrics = Arc::new(FeedMetrics::default());
     let prom_metrics = Arc::new(PrometheusMetrics::new()?);
     let latency_recorders: SymbolLatencyRecorders = Arc::new(parking_lot::RwLock::new(
-        server_config.symbols.iter().map(|s| (s.clone(), LatencyRecorder::new())).collect()
+        server_config
+            .symbols
+            .iter()
+            .map(|s| (s.clone(), LatencyRecorder::new()))
+            .collect(),
     ));
     let health_tracker = Arc::new(HealthTracker::new(&server_config.symbols));
 
@@ -113,18 +121,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Start Prometheus metrics exporter if enabled (on separate port if needed)
     let mut handles: Vec<JoinHandle<()>> = vec![grpc_handle, http_handle];
-    
+
     if server_config.observability.enable_prometheus {
-        let prom_addr = format!("0.0.0.0:{}", server_config.http_addr.split(':').next_back().unwrap_or("9090"));
-        let prom_addr: std::net::SocketAddr = prom_addr.parse().unwrap_or_else(|_| "[::]:9090".parse().unwrap());
+        let prom_addr = format!(
+            "0.0.0.0:{}",
+            server_config
+                .http_addr
+                .split(':')
+                .next_back()
+                .unwrap_or("9090")
+        );
+        let prom_addr: std::net::SocketAddr = prom_addr
+            .parse()
+            .unwrap_or_else(|_| "[::]:9090".parse().unwrap());
         let prom_handle = start_prometheus_server(prom_addr, &prom_metrics);
         handles.push(prom_handle);
         tracing::info!(%prom_addr, "Prometheus exporter listening");
     }
 
     // Start latency reporter
-    let latency_interval = Duration::from_secs(server_config.observability.latency_report_interval_secs);
-    let latency_handle = start_latency_reporter(prom_metrics.clone(), latency_recorders.clone(), latency_interval);
+    let latency_interval =
+        Duration::from_secs(server_config.observability.latency_report_interval_secs);
+    let latency_handle = start_latency_reporter(
+        prom_metrics.clone(),
+        latency_recorders.clone(),
+        latency_interval,
+    );
     handles.push(latency_handle);
 
     // Start cross-check task if enabled
@@ -152,7 +174,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             cross_check_config,
         );
         handles.push(cross_check_handle);
-        tracing::info!("Cross-check task started (interval: {}s)", server_config.observability.cross_check_interval_secs);
+        tracing::info!(
+            "Cross-check task started (interval: {}s)",
+            server_config.observability.cross_check_interval_secs
+        );
     }
 
     // Wait for shutdown signal

@@ -16,6 +16,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ContextConfiguration(classes = LocalTestConfiguration.class)
+@org.springframework.test.context.ActiveProfiles("test")
 class AuthSecurityTest {
 
     @Autowired

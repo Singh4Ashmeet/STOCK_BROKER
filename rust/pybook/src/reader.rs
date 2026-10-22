@@ -9,12 +9,12 @@ use sb_core::{Aggressor, BookSide, Epoch, InstrumentSpec, Level, Price, Qty, Seq
 use sb_metrics::engine::{MetricsConfig, MetricsEngine};
 use sb_replay::reader::EventLogReader;
 use sb_replay::schema::{
-    RecordKind, decode_book_payload, decode_marker_payload, decode_trade_payload,
+    decode_book_payload, decode_marker_payload, decode_trade_payload, RecordKind,
 };
 
 use crate::batch::PyEventBatch;
 use crate::book::compute_book_checksum;
-use crate::error::{DataGapError, PyBookError, replay_err_to_py};
+use crate::error::{replay_err_to_py, DataGapError, PyBookError};
 use crate::spec::PyInstrumentSpec;
 
 /// Coarse-grained event reader for high-throughput replay.
@@ -53,7 +53,9 @@ impl PyEventReader {
     ) -> PyResult<Self> {
         let paths = extract_paths(files)?;
         if paths.is_empty() {
-            return Err(PyBookError::new_err("No event-log files provided to EventReader"));
+            return Err(PyBookError::new_err(
+                "No event-log files provided to EventReader",
+            ));
         }
 
         // Determine InstrumentSpec: either passed explicitly or read from first file header
@@ -69,7 +71,9 @@ impl PyEventReader {
                 h.lot_size,
                 0, // LogHeader does not store min_notional; default to 0
             )
-            .map_err(|e| PyBookError::new_err(format!("Invalid InstrumentSpec in file header: {e:?}")))?
+            .map_err(|e| {
+                PyBookError::new_err(format!("Invalid InstrumentSpec in file header: {e:?}"))
+            })?
         };
 
         let book_config = BookConfig {
@@ -123,7 +127,14 @@ impl PyEventReader {
         skip_gaps: bool,
     ) -> PyResult<Self> {
         let files = vec![PathBuf::from(path)];
-        Self::create_internal(files, spec, depth_levels, vwap_window_secs, trade_flow_window_secs, skip_gaps)
+        Self::create_internal(
+            files,
+            spec,
+            depth_levels,
+            vwap_window_secs,
+            trade_flow_window_secs,
+            skip_gaps,
+        )
     }
 
     /// Open and chronologically sort all hourly `.pbz` files for a recorded day:
@@ -179,7 +190,14 @@ impl PyEventReader {
             )));
         }
 
-        Self::create_internal(files, spec, depth_levels, vwap_window_secs, trade_flow_window_secs, skip_gaps)
+        Self::create_internal(
+            files,
+            spec,
+            depth_levels,
+            vwap_window_secs,
+            trade_flow_window_secs,
+            skip_gaps,
+        )
     }
 
     /// Read next batch of up to `batch_size` market events.
@@ -267,7 +285,9 @@ impl PyEventReader {
                 h.lot_size,
                 0, // LogHeader does not store min_notional; default to 0
             )
-            .map_err(|e| PyBookError::new_err(format!("Invalid InstrumentSpec in file header: {e:?}")))?
+            .map_err(|e| {
+                PyBookError::new_err(format!("Invalid InstrumentSpec in file header: {e:?}"))
+            })?
         };
 
         let book_config = BookConfig {
@@ -327,7 +347,12 @@ impl PyEventReader {
                 self.current_idx += 1;
             }
 
-            let record_opt = self.reader.as_mut().unwrap().next_record().map_err(replay_err_to_py)?;
+            let record_opt = self
+                .reader
+                .as_mut()
+                .unwrap()
+                .next_record()
+                .map_err(replay_err_to_py)?;
             let record = match record_opt {
                 Some(r) => r,
                 None => {
@@ -352,11 +377,11 @@ impl PyEventReader {
 
             match kind {
                 RecordKind::BookSnapshot => {
-                    let (bids, asks) = decode_book_payload(&record.payload)
-                        .map_err(replay_err_to_py)?;
-                    self.book
-                        .apply_snapshot(&bids, &asks)
-                        .map_err(|e| PyBookError::new_err(format!("apply_snapshot failed: {e:?}")))?;
+                    let (bids, asks) =
+                        decode_book_payload(&record.payload).map_err(replay_err_to_py)?;
+                    self.book.apply_snapshot(&bids, &asks).map_err(|e| {
+                        PyBookError::new_err(format!("apply_snapshot failed: {e:?}"))
+                    })?;
                     self.metrics.on_book_update(&self.book);
                     self.snapshots_applied += 1;
                     self.book_valid = true;
@@ -364,17 +389,17 @@ impl PyEventReader {
                     self.seq = Seq::new(0);
                 }
                 RecordKind::BookDelta => {
-                    let (bids, asks) = decode_book_payload(&record.payload)
-                        .map_err(replay_err_to_py)?;
+                    let (bids, asks) =
+                        decode_book_payload(&record.payload).map_err(replay_err_to_py)?;
                     let _ = self.book.apply_delta(&bids, &asks);
                     self.metrics.on_book_update(&self.book);
                     self.deltas_applied += 1;
                     self.seq = self.seq.next().unwrap_or(self.seq);
                 }
                 RecordKind::Trade => {
-                    let trade = decode_trade_payload(&record.payload)
-                        .map_err(replay_err_to_py)?;
-                    self.metrics.on_trade(exchange_ts, trade.price, trade.qty, trade.aggressor);
+                    let trade = decode_trade_payload(&record.payload).map_err(replay_err_to_py)?;
+                    self.metrics
+                        .on_trade(exchange_ts, trade.price, trade.qty, trade.aggressor);
                     self.trades_applied += 1;
                     trade_p = trade.price.units();
                     trade_q = trade.qty.units();
@@ -413,10 +438,18 @@ impl PyEventReader {
             batch.epoch.push(self.epoch.id());
             batch.seq.push(self.seq.id());
 
-            batch.best_bid_price.push(bb.map(|l| l.price.units()).unwrap_or(0));
-            batch.best_bid_qty.push(bb.map(|l| l.qty.units()).unwrap_or(0));
-            batch.best_ask_price.push(ba.map(|l| l.price.units()).unwrap_or(0));
-            batch.best_ask_qty.push(ba.map(|l| l.qty.units()).unwrap_or(0));
+            batch
+                .best_bid_price
+                .push(bb.map(|l| l.price.units()).unwrap_or(0));
+            batch
+                .best_bid_qty
+                .push(bb.map(|l| l.qty.units()).unwrap_or(0));
+            batch
+                .best_ask_price
+                .push(ba.map(|l| l.price.units()).unwrap_or(0));
+            batch
+                .best_ask_qty
+                .push(ba.map(|l| l.qty.units()).unwrap_or(0));
             batch.spread.push(snap.bbo.spread_units);
             batch.mid.push(snap.bbo.mid);
             batch.microprice.push(snap.bbo.microprice);
@@ -425,7 +458,9 @@ impl PyEventReader {
             batch.trade_flow_imbalance.push(snap.trade_flow.imbalance);
 
             // Fetch top K levels for depth arrays
-            let n_bids = self.book.levels(BookSide::Bid, self.depth_levels, &mut bid_buf);
+            let n_bids = self
+                .book
+                .levels(BookSide::Bid, self.depth_levels, &mut bid_buf);
             for i in 0..self.depth_levels {
                 if i < n_bids {
                     batch.bid_prices.push(bid_buf[i].price.units());
@@ -436,7 +471,9 @@ impl PyEventReader {
                 }
             }
 
-            let n_asks = self.book.levels(BookSide::Ask, self.depth_levels, &mut ask_buf);
+            let n_asks = self
+                .book
+                .levels(BookSide::Ask, self.depth_levels, &mut ask_buf);
             for i in 0..self.depth_levels {
                 if i < n_asks {
                     batch.ask_prices.push(ask_buf[i].price.units());
@@ -469,5 +506,7 @@ fn extract_paths(files: &Bound<'_, PyAny>) -> PyResult<Vec<PathBuf>> {
     if let Ok(list) = files.extract::<Vec<String>>() {
         return Ok(list.into_iter().map(PathBuf::from).collect());
     }
-    Err(PyBookError::new_err("files must be a file path string or list of file paths"))
+    Err(PyBookError::new_err(
+        "files must be a file path string or list of file paths",
+    ))
 }

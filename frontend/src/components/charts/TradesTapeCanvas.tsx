@@ -23,7 +23,7 @@ export function TradesTapeCanvas({
 
   const tradeData = useMemo(() => {
     return trades.slice(0, maxTrades);
-  }, [trades]);
+  }, [trades, maxTrades]);
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;

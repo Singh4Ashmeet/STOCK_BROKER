@@ -41,7 +41,10 @@ fn _pybook(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Exceptions
     m.add("PyBookError", m.py().get_type_bound::<PyBookError>())?;
     m.add("DataGapError", m.py().get_type_bound::<DataGapError>())?;
-    m.add("SchemaVersionError", m.py().get_type_bound::<SchemaVersionError>())?;
+    m.add(
+        "SchemaVersionError",
+        m.py().get_type_bound::<SchemaVersionError>(),
+    )?;
 
     // Classes
     m.add_class::<PyInstrumentSpec>()?;

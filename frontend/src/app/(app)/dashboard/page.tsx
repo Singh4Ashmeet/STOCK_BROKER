@@ -242,13 +242,13 @@ export default function DashboardPage() {
                       <div className="text-right">
                         <p className="text-xs text-surface-500 dark:text-surface-400">Spread</p>
                         <p className="font-bold text-surface-900 dark:text-surface-50">
-                          {activeMetrics.spread ? `${activeMetrics.spread.toFixed(1)} bps` : '—'}
+                          {activeMetrics.spread ? `${parseFloat(activeMetrics.spread).toFixed(1)} bps` : '—'}
                         </p>
                       </div>
                       <div className="text-right">
                         <p className="text-xs text-surface-500 dark:text-surface-400">Imbalance</p>
-                        <p className={`font-bold ${activeMetrics.imbalanceTopN > 0 ? 'text-green-600' : activeMetrics.imbalanceTopN < 0 ? 'text-red-600' : 'text-surface-900 dark:text-surface-50'}`}>
-                          {activeMetrics.imbalanceTopN !== undefined ? activeMetrics.imbalanceTopN.toFixed(3) : '—'}
+                        <p className={`font-bold ${activeMetrics.imbalance_top_n > 0 ? 'text-green-600' : activeMetrics.imbalance_top_n < 0 ? 'text-red-600' : 'text-surface-900 dark:text-surface-50'}`}>
+                          {activeMetrics.imbalance_top_n !== undefined ? activeMetrics.imbalance_top_n.toFixed(3) : '—'}
                         </p>
                       </div>
                     </div>

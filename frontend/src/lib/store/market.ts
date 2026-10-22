@@ -140,23 +140,24 @@ export const useMarketStore = create<MarketStore>()(
     subscriptions: new Map(),
     
     // Book actions
-    setBook: (symbol, book) => {
-      const bids = book.snapshot?.bids
-        ?.map(l => ({ price: l.price, qty: l.qty }))
-        .sort((a, b) => parseFloat(b.price) - parseFloat(a.price)) || [];
-      const asks = book.snapshot?.asks
-        ?.map(l => ({ price: l.price, qty: l.qty }))
-        .sort((a, b) => parseFloat(a.price) - parseFloat(b.price)) || [];
+    setBook: (symbol, book: any) => {
+      // Wire format: { t, ch, s, ep, sq, tm, d: { b: [price, qty][], a: [price, qty][] } }
+      const bids = book.d?.b
+        ?.map((l: [string, string]) => ({ price: l[0], qty: l[1] }))
+        .sort((a: any, b: any) => parseFloat(b.price) - parseFloat(a.price)) || [];
+      const asks = book.d?.a
+        ?.map((l: [string, string]) => ({ price: l[0], qty: l[1] }))
+        .sort((a: any, b: any) => parseFloat(a.price) - parseFloat(b.price)) || [];
       
       set(state => ({
         books: new Map(state.books).set(symbol, {
           symbol,
-          epoch: book.epoch,
-          seq: book.seq,
+          epoch: book.ep,
+          seq: book.sq,
           bids,
           asks,
           timestamp: Date.now(),
-          bookValid: book.book_valid,
+          bookValid: true, // snapshots are always valid
           resyncing: false,
           lastResyncAt: Date.now(),
         }),
@@ -164,28 +165,29 @@ export const useMarketStore = create<MarketStore>()(
       }));
     },
     
-    applyDelta: (symbol, delta) => {
+    applyDelta: (symbol, delta: any) => {
+      // Wire format: { t, ch, s, ep, sq, tm, d: { b: [price, qty][], a: [price, qty][] } }
       const existing = get().books.get(symbol);
       if (!existing) return;
       
       const newBids = new Map(existing.bids.map(l => [l.price, l]));
       const newAsks = new Map(existing.asks.map(l => [l.price, l]));
       
-      delta.delta?.bids?.forEach(level => {
-        const qty = parseFloat(level.qty);
+      delta.d?.b?.forEach((level: [string, string]) => {
+        const qty = parseFloat(level[1]);
         if (qty === 0) {
-          newBids.delete(level.price);
+          newBids.delete(level[0]);
         } else {
-          newBids.set(level.price, { price: level.price, qty: level.qty });
+          newBids.set(level[0], { price: level[0], qty: level[1] });
         }
       });
       
-      delta.delta?.asks?.forEach(level => {
-        const qty = parseFloat(level.qty);
+      delta.d?.a?.forEach((level: [string, string]) => {
+        const qty = parseFloat(level[1]);
         if (qty === 0) {
-          newAsks.delete(level.price);
+          newAsks.delete(level[0]);
         } else {
-          newAsks.set(level.price, { price: level.price, qty: level.qty });
+          newAsks.set(level[0], { price: level[0], qty: level[1] });
         }
       });
       
@@ -197,12 +199,12 @@ export const useMarketStore = create<MarketStore>()(
       set(state => ({
         books: new Map(state.books).set(symbol, {
           ...existing,
-          epoch: delta.epoch,
-          seq: delta.seq,
+          epoch: delta.ep,
+          seq: delta.sq,
           bids,
           asks,
           timestamp: Date.now(),
-          bookValid: delta.book_valid,
+          bookValid: true,
         }),
         lastUpdate: Date.now(),
       }));
@@ -222,10 +224,22 @@ export const useMarketStore = create<MarketStore>()(
       });
     },
     
-    addTrade: (symbol, trade) => {
+    addTrade: (symbol, trade: any) => {
+      // Wire format: { t, ch, s, ep, sq, tm, d: { p, q, side, id } }
+      const tradeData = trade.d ? {
+        symbol: trade.s,
+        epoch: trade.ep,
+        seq: trade.sq,
+        timing: trade.tm,
+        price: trade.d.p,
+        qty: trade.d.q,
+        side: trade.d.side,
+        venue_trade_id: trade.d.id,
+      } : trade;
+      
       set(state => {
         const existing = state.trades.get(symbol) || { trades: [], maxTrades: MAX_TRADES_PER_SYMBOL };
-        const newTrades = [trade, ...existing.trades].slice(0, MAX_TRADES_PER_SYMBOL);
+        const newTrades = [tradeData, ...existing.trades].slice(0, MAX_TRADES_PER_SYMBOL);
         return {
           trades: new Map(state.trades).set(symbol, { trades: newTrades, maxTrades: MAX_TRADES_PER_SYMBOL }),
           lastUpdate: Date.now(),
@@ -244,7 +258,7 @@ export const useMarketStore = create<MarketStore>()(
     },
     
     // Connection actions
-    setConnectionStatus: (status, error = null) => {
+    setConnectionStatus: (status: ConnectionState['status'], error: string | null = null) => {
       set(state => ({
         connection: {
           ...state.connection,
@@ -393,7 +407,7 @@ export const useMarketStore = create<MarketStore>()(
         .sort((a, b) => a - b);
       
       if (samples.length === 0) {
-        return { p50: 0, p95: 0, p99: 0, avg: 0, max: 0 };
+        return { p50: 0, p95: 0, p99: 0, avg: 0, max: 0, count: 0 };
       }
       
       const pct = (arr: number[], p: number) => {
@@ -409,6 +423,7 @@ export const useMarketStore = create<MarketStore>()(
         p99: pct(samples, 99),
         avg,
         max: samples[samples.length - 1],
+        count: samples.length,
       };
     },
     
@@ -446,10 +461,10 @@ export const selectLatencyStats = (state: MarketStore) => {
     .filter(l => l >= 0 && l < 1000)
     .sort((a, b) => a - b);
   
-  if (samples.length === 0) return { p50: 0, p95: 0, p99: 0, avg: 0, max: 0 };
+  if (samples.length === 0) return { p50: 0, p95: 0, p99: 0, avg: 0, max: 0, count: 0 };
   
   const pct = (arr: number[], p: number) => arr[Math.min(Math.floor(arr.length * p / 100), arr.length - 1)];
   const avg = samples.reduce((a, b) => a + b, 0) / samples.length;
   
-  return { p50: pct(samples, 50), p95: pct(samples, 95), p99: pct(samples, 99), avg, max: samples[samples.length - 1] };
+  return { p50: pct(samples, 50), p95: pct(samples, 95), p99: pct(samples, 99), avg, max: samples[samples.length - 1], count: samples.length };
 };

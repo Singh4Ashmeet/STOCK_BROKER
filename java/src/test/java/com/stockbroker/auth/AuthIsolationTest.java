@@ -33,6 +33,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ContextConfiguration(classes = LocalTestConfiguration.class)
+@org.springframework.test.context.ActiveProfiles("test")
 class AuthIsolationTest {
 
     @Autowired
@@ -330,6 +331,32 @@ class AuthIsolationTest {
                 "/api/v1/backtests/" + userBBacktestId + "/result", HttpMethod.GET, entity, String.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    void userACannotReadOrEnumerateUserBBacktestJobs() {
+        ResearchDtos.CreateBacktestRequest request = new ResearchDtos.CreateBacktestRequest(
+                "momentum", "BINANCE:BTC-USDT", "2026-01-01T00:00:00Z", "2026-01-31T23:59:59Z",
+                java.util.Map.of("lookback", "20"), "job-idempotency-b", "config-b", "data-b", "commit-b");
+        HttpHeaders userBHeaders = new HttpHeaders();
+        userBHeaders.setBearerAuth(userBAccessToken);
+        ResponseEntity<ResearchDtos.JobResponse> created = restTemplate.exchange(
+                "/api/v1/backtest-jobs", HttpMethod.POST, new HttpEntity<>(request, userBHeaders),
+                ResearchDtos.JobResponse.class);
+        assertThat(created.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(created.getBody()).isNotNull();
+
+        HttpHeaders userAHeaders = new HttpHeaders();
+        userAHeaders.setBearerAuth(userAAccessToken);
+        String jobId = created.getBody().jobId();
+        ResponseEntity<String> readOther = restTemplate.exchange(
+                "/api/v1/backtest-jobs/" + jobId, HttpMethod.GET, new HttpEntity<>(userAHeaders), String.class);
+        ResponseEntity<String> listOther = restTemplate.exchange(
+                "/api/v1/backtest-jobs", HttpMethod.GET, new HttpEntity<>(userAHeaders), String.class);
+
+        assertThat(readOther.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(listOther.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(listOther.getBody()).doesNotContain(jobId);
     }
 
     @Test

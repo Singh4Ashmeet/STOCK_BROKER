@@ -92,8 +92,12 @@ impl MetricsEngine {
         self.latest.bbo = compute_bbo(best_bid, best_ask);
 
         // Depth and imbalance
-        let bid_depth = book.depth_qty(BookSide::Bid, self.config.depth_levels);
-        let ask_depth = book.depth_qty(BookSide::Ask, self.config.depth_levels);
+        let bid_depth = book
+            .depth_qty(BookSide::Bid, self.config.depth_levels)
+            .unwrap_or(Qty::ZERO);
+        let ask_depth = book
+            .depth_qty(BookSide::Ask, self.config.depth_levels)
+            .unwrap_or(Qty::ZERO);
         self.latest.depth = compute_depth(bid_depth, ask_depth, self.config.depth_levels);
 
         // VWAP and trade-flow snapshots are read from their own state
@@ -166,8 +170,12 @@ pub fn slow_recompute(
     let bbo = compute_bbo(best_bid, best_ask);
 
     // Depth
-    let bid_depth = book.depth_qty(BookSide::Bid, depth_levels);
-    let ask_depth = book.depth_qty(BookSide::Ask, depth_levels);
+    let bid_depth = book
+        .depth_qty(BookSide::Bid, depth_levels)
+        .unwrap_or(Qty::ZERO);
+    let ask_depth = book
+        .depth_qty(BookSide::Ask, depth_levels)
+        .unwrap_or(Qty::ZERO);
     let depth = compute_depth(bid_depth, ask_depth, depth_levels);
 
     // Find latest trade timestamp

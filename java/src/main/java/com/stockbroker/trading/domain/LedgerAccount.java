@@ -19,7 +19,7 @@ public class LedgerAccount {
     @Column(name = "id", columnDefinition = "uuid")
     private UUID id;
 
-    @Column(name = "account_id", nullable = false)
+    @Column(name = "account_id")
     private UUID accountId;
 
     @Column(name = "code", nullable = false)

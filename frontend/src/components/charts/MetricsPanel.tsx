@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { useMarketStore, selectMetrics, selectConnectionStatus, selectPerformanceMetrics, selectLatencyStats } from '@/lib/store';
 import type { Metrics } from '@/lib/api';
 import { formatNumber, formatCurrency, formatPercent } from '@/lib/utils';
@@ -25,8 +25,8 @@ export function MetricsPanel({ symbol, compact = false }: MetricsPanelProps) {
     // For now, generate placeholder based on current values
     if (!metrics) return [];
     const mid = metrics.mid || 0;
-    const spread = metrics.spread || 0;
-    const imbalance = metrics.imbalanceTopN || 0;
+    const spread = typeof metrics.spread === 'string' ? parseFloat(metrics.spread) : (metrics.spread || 0);
+    const imbalance = metrics.imbalance_top_n || 0;
     return Array.from({ length: 50 }, (_, i) => ({
       mid: mid + (Math.random() - 0.5) * mid * 0.01,
       spread: spread + (Math.random() - 0.5) * spread * 0.2,
@@ -51,9 +51,9 @@ export function MetricsPanel({ symbol, compact = false }: MetricsPanelProps) {
             <>
               <MetricItem label="Mid" value={formatNumber(metrics.mid || 0, 2)} />
               <MetricItem label="Spread" value={`${formatNumber(metrics.spread || 0, 1)} bps`} />
-              <MetricItem label="Imbalance" value={formatNumber(metrics.imbalanceTopN || 0, 3)} color={metrics.imbalanceTopN > 0 ? 'green' : metrics.imbalanceTopN < 0 ? 'red' : undefined} />
-              <MetricItem label="VWAP" value={formatCurrency(metrics.rollingVwap || 0)} />
-              <MetricItem label="TFI" value={formatNumber(metrics.tradeFlowImbalance || 0, 3)} />
+              <MetricItem label="Imbalance" value={formatNumber(metrics.imbalance_top_n || 0, 3)} color={metrics.imbalance_top_n > 0 ? 'green' : metrics.imbalance_top_n < 0 ? 'red' : undefined} />
+              <MetricItem label="VWAP" value={formatCurrency(metrics.rolling_vwap || 0)} />
+              <MetricItem label="TFI" value={formatNumber(metrics.trade_flow_imbalance || 0, 3)} />
               <MetricItem label="Microprice" value={formatNumber(metrics.microprice || 0, 2)} />
             </>
           )}
@@ -95,17 +95,17 @@ export function MetricsPanel({ symbol, compact = false }: MetricsPanelProps) {
           />
           <MetricCard
             label="Spread"
-            value={`${formatNumber(metrics.spread, 1)} bps`}
+            value={`${formatNumber(typeof metrics.spread === 'string' ? parseFloat(metrics.spread) : (metrics.spread || 0), 1)} bps`}
             sparkline={sparklineData.map(d => d.spread)}
             unit="bps"
-            trend={metrics.spread ? (metrics.spread > 10 ? 'up' : 'down') : undefined}
+            trend={metrics.spread ? ((typeof metrics.spread === 'string' ? parseFloat(metrics.spread) : metrics.spread) > 10 ? 'up' : 'down') : undefined}
           />
           <MetricCard
             label="Imbalance"
-            value={formatNumber(metrics.imbalanceTopN, 3)}
+            value={formatNumber(metrics.imbalance_top_n, 3)}
             sparkline={sparklineData.map(d => d.imbalance)}
             unit=""
-            color={metrics.imbalanceTopN > 0 ? 'green' : metrics.imbalanceTopN < 0 ? 'red' : undefined}
+            color={metrics.imbalance_top_n > 0 ? 'green' : metrics.imbalance_top_n < 0 ? 'red' : undefined}
           />
           <MetricCard
             label="Microprice"
@@ -114,39 +114,39 @@ export function MetricsPanel({ symbol, compact = false }: MetricsPanelProps) {
           />
           <MetricCard
             label="VWAP"
-            value={formatCurrency(metrics.rollingVwap)}
+            value={formatCurrency(metrics.rolling_vwap)}
             unit=""
           />
           <MetricCard
             label="Trade Flow Imbalance"
-            value={formatNumber(metrics.tradeFlowImbalance, 3)}
+            value={formatNumber(metrics.trade_flow_imbalance, 3)}
             unit=""
           />
           <MetricCard
             label="Best Bid"
-            value={metrics.bestBid ? formatNumber(metrics.bestBid, 2) : '—'}
+            value={metrics.best_bid ? formatNumber(parseFloat(metrics.best_bid), 2) : '—'}
             unit=""
           />
           <MetricCard
             label="Best Ask"
-            value={metrics.bestAsk ? formatNumber(metrics.bestAsk, 2) : '—'}
+            value={metrics.best_ask ? formatNumber(parseFloat(metrics.best_ask), 2) : '—'}
             unit=""
           />
           <MetricCard
             label="Bid Qty"
-            value={metrics.bestBidQty ? formatNumber(metrics.bestBidQty, 4) : '—'}
+            value={metrics.best_bid_qty ? formatNumber(parseFloat(metrics.best_bid_qty), 4) : '—'}
             unit=""
           />
           <MetricCard
             label="Ask Qty"
-            value={metrics.bestAskQty ? formatNumber(metrics.bestAskQty, 4) : '—'}
+            value={metrics.best_ask_qty ? formatNumber(parseFloat(metrics.best_ask_qty), 4) : '—'}
             unit=""
           />
           <MetricCard
             label="Book Valid"
-            value={metrics.bookValid ? 'Yes' : 'No'}
+            value={metrics.book_valid ? 'Yes' : 'No'}
             unit=""
-            color={metrics.bookValid ? 'green' : 'red'}
+            color={metrics.book_valid ? 'green' : 'red'}
           />
         </div>
       )}
@@ -156,10 +156,11 @@ export function MetricsPanel({ symbol, compact = false }: MetricsPanelProps) {
         <div className="mb-6">
           <h3 className="text-sm font-medium text-surface-700 dark:text-surface-300 mb-3">Market Depth</h3>
           <div className="space-y-2">
-            {metrics.depth.slice(0, 10).map((level, i) => (
-              <DepthLevelBar key={i} level={level} maxQty={metrics.depth[0]?.bidQty ? 
-                Math.max(...metrics.depth.map(d => parseFloat(d.bidQty || '0'), parseFloat(d.askQty || '0'))) : 1} />
-            ))}
+            {metrics.depth.slice(0, 10).map((level, i) => {
+              const maxQty = metrics.depth[0]?.bid_qty ? 
+                Math.max(...metrics.depth.flatMap(d => [parseFloat(d.bid_qty || '0'), parseFloat(d.ask_qty || '0')])) : 1;
+              return <DepthLevelBar key={i} level={level} maxQty={maxQty} />;
+            })}
           </div>
         </div>
       )}
@@ -202,9 +203,9 @@ function MetricCard({
   trend?: 'up' | 'down';
   color?: 'green' | 'red';
 }) {
-  const canvasRef = React.useRef<HTMLCanvasElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   
-  React.useEffect(() => {
+  useEffect(() => {
     if (!sparkline || !canvasRef.current) return;
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
@@ -265,7 +266,7 @@ function LatencyBadge() {
   const latencyStats = useMarketStore(selectLatencyStats);
   const connection = useMarketStore(selectConnectionStatus);
   
-  if (!connection.isConnected && connection.status !== 'resyncing') return null;
+  if (connection.status !== 'connected' && connection.status !== 'resyncing') return null;
   
   const statusColor = latencyStats.p99 < 50 ? 'green' : latencyStats.p99 < 100 ? 'yellow' : 'red';
   

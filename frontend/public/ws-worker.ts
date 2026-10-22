@@ -17,6 +17,7 @@ type WorkerMessage =
   | { type: 'unsubscribe'; channel: 'book' | 'trades' | 'metrics'; symbol: string }
   | { type: 'resync'; channel: 'book'; symbol: string }
   | { type: 'ping' }
+  | { type: 'batch'; messages: WsMessage[] }
   | { type: 'message'; data: WsMessage }
   | { type: 'state'; status: 'connecting' | 'connected' | 'disconnected' | 'error'; error?: string }
   | { type: 'latency'; clientSent: number; serverSent: number; received: number };

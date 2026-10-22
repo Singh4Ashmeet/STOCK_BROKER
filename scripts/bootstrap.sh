@@ -85,12 +85,13 @@ generate_sha256_hex() {
     printf "%s" "$1" | openssl dgst -sha256 -binary | xxd -p -c 256
 }
 
-generate_ed25519_keypair() {
+generate_rsa_keypair() {
     local private_key_path="$1"
     local public_key_path="$2"
 
-    # Generate Ed25519 private key
-    openssl genpkey -algorithm Ed25519 -out "${private_key_path}" 2>/dev/null
+    # The Java API verifies RS256 JWTs. Generate a 3072-bit RSA keypair so
+    # local bootstrap material matches the configured signing algorithm.
+    openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 -out "${private_key_path}" 2>/dev/null
 
     # Extract public key
     openssl pkey -in "${private_key_path}" -pubout -out "${public_key_path}" 2>/dev/null
@@ -202,8 +203,8 @@ create_secrets() {
         return 0
     fi
 
-    log_info "Generating Ed25519 JWT signing keypair..."
-    generate_ed25519_keypair "${private_key}" "${public_key}"
+    log_info "Generating RSA JWT signing keypair..."
+    generate_rsa_keypair "${private_key}" "${public_key}"
     log_success "JWT keypair generated at ${SECRETS_DIR}/"
 }
 
@@ -254,9 +255,9 @@ print_summary() {
     echo "Created/updated:"
     echo "  - .env              (gitignored, contains all secrets)"
     if [[ "${posix_fs}" == "yes" ]]; then
-        echo "  - infra/secrets/    (gitignored, JWT Ed25519 keypair, mode 700/600)"
+        echo "  - infra/secrets/    (gitignored, JWT RSA keypair, mode 700/600)"
     else
-        echo "  - infra/secrets/    (gitignored, JWT Ed25519 keypair, POSIX permissions NOT enforced)"
+        echo "  - infra/secrets/    (gitignored, JWT RSA keypair, POSIX permissions NOT enforced)"
         echo "    WARNING: Secrets protected only by Windows user-profile ACLs and .gitignore."
         echo    "    For production-grade permissions, use a Linux filesystem (e.g., ~/dev/stock_broker in WSL2)."
     fi
@@ -269,7 +270,7 @@ print_summary() {
     echo "  - ClickHouse: admin and app passwords"
     echo "  - Grafana: admin password"
     echo "  - Service-to-service token"
-    echo "  - JWT Ed25519 keypair (kid: 2026-01)"
+    echo "  - JWT RSA keypair"
     echo
     echo "Next steps:"
     echo "  1. Run 'make up' to start the core+analytics+obs stack"

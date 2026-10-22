@@ -82,7 +82,11 @@ impl SymbolState {
         bids: &[Level],
         asks: &[Level],
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        self.book.apply_delta(bids, asks)?;
+        let result = self.book.apply_delta(bids, asks)?;
+        if result == sb_book::ApplyResult::Crossed || !self.book.is_valid() {
+            self.book_valid = false;
+            return Err(Box::new(sb_book::BookError::Crossed));
+        }
         self.seq = self.seq.next()?;
         self.metrics.on_book_update(&self.book);
         self.cache_snapshot();
@@ -155,10 +159,7 @@ impl SymbolState {
         self.snapshot_asks.clear();
 
         // Re-use the pre-allocated Vecs (clear keeps capacity).
-        let mut buf = [Level::new(
-            sb_core::Price::ZERO,
-            sb_core::Qty::ZERO,
-        ); 128];
+        let mut buf = [Level::new(sb_core::Price::ZERO, sb_core::Qty::ZERO); 128];
 
         let n = if self.max_depth <= 128 {
             self.max_depth

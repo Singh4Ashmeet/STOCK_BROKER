@@ -396,15 +396,18 @@ public class MarketWebSocketHandler extends TextWebSocketHandler {
                     "sq", metrics.seq(),
                     "tm", metrics.timing(),
                     "d", Map.of(
-                            "bb", metrics.bestBid(),
-                            "ba", metrics.bestAsk(),
-                            "spr", metrics.spread(),
+                            "best_bid", metrics.bestBid(),
+                            "best_ask", metrics.bestAsk(),
+                            "best_bid_qty", metrics.bestBidQty(),
+                            "best_ask_qty", metrics.bestAskQty(),
+                            "spread", metrics.spread(),
                             "mid", metrics.mid(),
-                            "mp", metrics.microprice(),
-                            "imb", metrics.imbalanceTopN(),
-                            "vwap", metrics.rollingVwap(),
-                            "tfi", metrics.tradeFlowImbalance(),
-                            "valid", metrics.bookValid()
+                            "microprice", metrics.microprice(),
+                            "imbalance_top_n", metrics.imbalanceTopN(),
+                            "rolling_vwap", metrics.rollingVwap(),
+                            "trade_flow_imbalance", metrics.tradeFlowImbalance(),
+                            "depth", metrics.depth(),
+                            "book_valid", metrics.bookValid()
                     )
             );
             ctx.enqueue(msg);
@@ -492,15 +495,18 @@ public class MarketWebSocketHandler extends TextWebSocketHandler {
                 "sq", metrics.seq(),
                 "tm", metrics.timing(),
                 "d", Map.of(
-                        "bb", metrics.bestBid(),
-                        "ba", metrics.bestAsk(),
-                        "spr", metrics.spread(),
+                        "best_bid", metrics.bestBid(),
+                        "best_ask", metrics.bestAsk(),
+                        "best_bid_qty", metrics.bestBidQty(),
+                        "best_ask_qty", metrics.bestAskQty(),
+                        "spread", metrics.spread(),
                         "mid", metrics.mid(),
-                        "mp", metrics.microprice(),
-                        "imb", metrics.imbalanceTopN(),
-                        "vwap", metrics.rollingVwap(),
-                        "tfi", metrics.tradeFlowImbalance(),
-                        "valid", metrics.bookValid()
+                        "microprice", metrics.microprice(),
+                        "imbalance_top_n", metrics.imbalanceTopN(),
+                        "rolling_vwap", metrics.rollingVwap(),
+                        "trade_flow_imbalance", metrics.tradeFlowImbalance(),
+                        "depth", metrics.depth(),
+                        "book_valid", metrics.bookValid()
                 )
         );
 

@@ -31,8 +31,8 @@ public interface LedgerEntryRepository extends JpaRepository<LedgerEntry, Long> 
     // For reconciliation: get all entries for an account
     @Query(value = """
         SELECT le.* FROM ledger_entries le
-        JOIN ledger_transactions lt ON le.transaction_id = lt.id
-        WHERE lt.account_id = :accountId
+        JOIN ledger_accounts la ON le.ledger_account = la.id
+        WHERE la.account_id = :accountId
         ORDER BY le.created_at
         """, nativeQuery = true)
     List<LedgerEntry> findByAccountId(@Param("accountId") UUID accountId);
@@ -40,8 +40,8 @@ public interface LedgerEntryRepository extends JpaRepository<LedgerEntry, Long> 
     // Sum amounts by account and asset for balance calculation
     @Query(value = """
         SELECT COALESCE(SUM(le.amount), 0) FROM ledger_entries le
-        JOIN ledger_transactions lt ON le.transaction_id = lt.id
-        WHERE lt.account_id = :accountId AND le.asset = :asset
+        JOIN ledger_accounts la ON le.ledger_account = la.id
+        WHERE la.account_id = :accountId AND le.asset = :asset
         """, nativeQuery = true)
     List<Object[]> sumByAccountAndAsset(@Param("accountId") UUID accountId, @Param("asset") String asset);
 }

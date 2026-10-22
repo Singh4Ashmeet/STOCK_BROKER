@@ -47,6 +47,9 @@ class OrderExecutorTest {
     @Autowired
     ObjectMapper objectMapper;
 
+    @Autowired
+    org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
+
     private String accessToken;
 
     @BeforeEach
@@ -60,6 +63,10 @@ class OrderExecutorTest {
         String accessToken = loginResp.getBody().accessToken();
         
         this.accessToken = accessToken;
+
+        // Clean up any old orders and fills from prior test runs
+        jdbcTemplate.update("DELETE FROM fills WHERE user_id IN (SELECT id FROM users WHERE email = 'orderexec@test.com')");
+        jdbcTemplate.update("DELETE FROM orders WHERE user_id IN (SELECT id FROM users WHERE email = 'orderexec@test.com')");
     }
 
     @Test
@@ -88,7 +95,7 @@ class OrderExecutorTest {
         TradingDtos.OrderResponse order = response.getBody();
         assertThat(order).isNotNull();
         assertThat(order.status()).isEqualTo(TradingDtos.OrderStatus.FILLED);
-        assertThat(order.filledQty()).isEqualTo("0.1");
+        assertThat(new java.math.BigDecimal(order.filledQty())).isEqualByComparingTo("0.1");
         assertThat(order.avgPrice()).isNotNull();
         assertThat(order.fills()).isNotEmpty();
 
@@ -142,7 +149,7 @@ class OrderExecutorTest {
                         TradingDtos.OrderSide.BUY,
                         TradingDtos.OrderType.LIMIT,
                         "0.01",
-                        "1000000", // Very high limit price - should fill as market
+                        "100000000000", // High limit price above mock ask (~50 billion) - fills against book
                         TradingDtos.TimeInForce.IOC,
                         "limit-buy-2"
                 ),

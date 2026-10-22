@@ -30,14 +30,32 @@ fn main() {
     let t0 = TsNs::from_nanos(base_sec * 1_000_000_000);
 
     let initial_bids = vec![
-        Level::new(Price::from_units(6000000).unwrap(), Qty::from_units(500000).unwrap()),
-        Level::new(Price::from_units(5999000).unwrap(), Qty::from_units(1000000).unwrap()),
-        Level::new(Price::from_units(5998000).unwrap(), Qty::from_units(1500000).unwrap()),
+        Level::new(
+            Price::from_units(6000000).unwrap(),
+            Qty::from_units(500000).unwrap(),
+        ),
+        Level::new(
+            Price::from_units(5999000).unwrap(),
+            Qty::from_units(1000000).unwrap(),
+        ),
+        Level::new(
+            Price::from_units(5998000).unwrap(),
+            Qty::from_units(1500000).unwrap(),
+        ),
     ];
     let initial_asks = vec![
-        Level::new(Price::from_units(6001000).unwrap(), Qty::from_units(400000).unwrap()),
-        Level::new(Price::from_units(6002000).unwrap(), Qty::from_units(800000).unwrap()),
-        Level::new(Price::from_units(6003000).unwrap(), Qty::from_units(1200000).unwrap()),
+        Level::new(
+            Price::from_units(6001000).unwrap(),
+            Qty::from_units(400000).unwrap(),
+        ),
+        Level::new(
+            Price::from_units(6002000).unwrap(),
+            Qty::from_units(800000).unwrap(),
+        ),
+        Level::new(
+            Price::from_units(6003000).unwrap(),
+            Qty::from_units(1200000).unwrap(),
+        ),
     ];
 
     handle

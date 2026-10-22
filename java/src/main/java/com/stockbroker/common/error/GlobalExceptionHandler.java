@@ -116,9 +116,8 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<Problem> handleHttpMessageNotReadable(HttpMessageNotReadableException ex, HttpServletRequest request) {
-        BusinessProblem problem = new BusinessProblem.ValidationFailed(
-                "Malformed JSON request body: " + ex.getMostSpecificCause().getMessage());
-        log.warn("Malformed JSON: {}", ex.getMessage());
+        BusinessProblem problem = new BusinessProblem.ValidationFailed("Malformed JSON request body");
+        log.warn("Malformed JSON request body rejected: {}", ex.getMostSpecificCause().getClass().getSimpleName());
         return buildResponse(problem, request);
     }
 

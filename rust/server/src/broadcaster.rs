@@ -19,8 +19,8 @@
 //! receives a consistent state (snapshot) after falling behind.
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use tokio::sync::mpsc;
 
@@ -399,7 +399,14 @@ impl Broadcaster {
         })
     }
 
-    /// Internal: drain a subscriber's queue, bump epoch, send snapshot.
+    /// Internal: bump epoch and enqueue a fresh snapshot for a slow subscriber.
+    ///
+    /// When a subscriber's queue is full, we bump their per-subscriber epoch
+    /// and try to enqueue a snapshot. The consumer must treat any epoch bump
+    /// as a signal that all prior pending deltas are stale and should be
+    /// discarded. If the channel is completely stuck (try_send still fails),
+    /// the subscriber will be cleaned up once they drop or close their
+    /// receiver.
     fn conflate_subscriber(
         &mut self,
         id: u64,
@@ -412,17 +419,15 @@ impl Broadcaster {
             return;
         };
 
-        // Check if the channel is full
-        let _ = sub.tx.try_reserve();
-
         // Bump the subscriber's epoch and reset seq.
         sub.sub_epoch = sub.sub_epoch.wrapping_add(1);
         sub.sub_seq = 1;
         sub.conflations.fetch_add(1, Ordering::Relaxed);
 
-        // Try to send the snapshot. If the channel is completely stuck, the
-        // subscriber will be cleaned up on the next publish when try_send
-        // returns Closed.
+        // Try to send the snapshot. If the channel is still full, the
+        // message is silently dropped — the subscriber will eventually
+        // consume enough messages to free space, and the next publish
+        // will trigger another conflation attempt with fresher data.
         let msg = OutboundMsg::BookSnapshot {
             symbol: symbol.to_owned(),
             epoch: sub.sub_epoch,

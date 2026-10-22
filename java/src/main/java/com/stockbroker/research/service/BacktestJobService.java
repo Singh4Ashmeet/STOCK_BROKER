@@ -40,21 +40,21 @@ public class BacktestJobService {
         }
     }
 
-    public String submitBacktest(ResearchDtos.CreateBacktestRequest request) {
-        return createJob("backtest", request, true);
+    public String submitBacktest(UUID userId, ResearchDtos.CreateBacktestRequest request) {
+        return createJob(userId, "backtest", request, true);
     }
 
-    public String submitWalkForward(ResearchDtos.WalkForwardRequest request) {
-        return createJob("walk-forward", request, false);
+    public String submitWalkForward(UUID userId, ResearchDtos.WalkForwardRequest request) {
+        return createJob(userId, "walk-forward", request, false);
     }
 
-    public String submitSensitivityAnalysis(ResearchDtos.SensitivityRequest request) {
-        return createJob("sensitivity", request, false);
+    public String submitSensitivityAnalysis(UUID userId, ResearchDtos.SensitivityRequest request) {
+        return createJob(userId, "sensitivity", request, false);
     }
 
-    private String createJob(String type, Object request, boolean execute) {
+    private String createJob(UUID userId, String type, Object request, boolean execute) {
         String jobId = UUID.randomUUID().toString();
-        JobState state = new JobState(jobId, type, request, Instant.now());
+        JobState state = new JobState(jobId, userId, type, request, Instant.now());
         jobs.put(jobId, state);
         if (execute) {
             executor.submit(() -> runBacktestJob(state));
@@ -62,15 +62,16 @@ public class BacktestJobService {
         return jobId;
     }
 
-    public ResearchDtos.JobStatusResponse getJobStatus(String jobId) {
+    public ResearchDtos.JobStatusResponse getJobStatus(UUID userId, String jobId) {
         JobState state = jobs.get(jobId);
-        return state == null ? null : state.toStatusResponse();
+        return state == null || !state.userId.equals(userId) ? null : state.toStatusResponse();
     }
 
-    public List<ResearchDtos.JobSummary> listJobs(String statusFilter, int limit, int offset) {
+    public List<ResearchDtos.JobSummary> listJobs(UUID userId, String statusFilter, int limit, int offset) {
         int safeLimit = Math.max(1, Math.min(limit, 100));
         int safeOffset = Math.max(0, offset);
         return jobs.values().stream()
+                .filter(job -> job.userId.equals(userId))
                 .filter(job -> statusFilter == null || job.status.name().equalsIgnoreCase(statusFilter))
                 .sorted(Comparator.comparing((JobState job) -> job.createdAt).reversed())
                 .skip(safeOffset)
@@ -79,7 +80,11 @@ public class BacktestJobService {
                 .toList();
     }
 
-    public List<ResearchDtos.ArtifactInfo> listArtifacts(String jobId) {
+    public List<ResearchDtos.ArtifactInfo> listArtifacts(UUID userId, String jobId) {
+        JobState state = jobs.get(jobId);
+        if (state == null || !state.userId.equals(userId)) {
+            return List.of();
+        }
         Map<String, ArtifactMeta> jobArtifacts = artifacts.get(jobId);
         if (jobArtifacts == null) {
             return List.of();
@@ -91,7 +96,11 @@ public class BacktestJobService {
                 .toList();
     }
 
-    public byte[] getArtifact(String jobId, String artifactId) {
+    public byte[] getArtifact(UUID userId, String jobId, String artifactId) {
+        JobState state = jobs.get(jobId);
+        if (state == null || !state.userId.equals(userId)) {
+            return null;
+        }
         Map<String, ArtifactMeta> jobArtifacts = artifacts.get(jobId);
         ArtifactMeta artifact = jobArtifacts == null ? null : jobArtifacts.get(artifactId);
         if (artifact == null) {
@@ -204,6 +213,7 @@ public class BacktestJobService {
 
     private static final class JobState {
         private final String jobId;
+        private final UUID userId;
         private final String type;
         @SuppressWarnings("unused")
         private final Object request;
@@ -213,8 +223,9 @@ public class BacktestJobService {
         private volatile String message = "Job queued";
         private volatile Instant updatedAt;
 
-        private JobState(String jobId, String type, Object request, Instant createdAt) {
+        private JobState(String jobId, UUID userId, String type, Object request, Instant createdAt) {
             this.jobId = jobId;
+            this.userId = userId;
             this.type = type;
             this.request = request;
             this.createdAt = createdAt;

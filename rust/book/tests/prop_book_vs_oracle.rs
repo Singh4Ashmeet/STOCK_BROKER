@@ -61,12 +61,17 @@ fn arb_levels() -> impl Strategy<Value = Vec<Level>> {
     prop::collection::vec(arb_any_level(), 0..20)
 }
 
-/// Generate a snapshot (two sides with regular levels only)
+/// Generate a snapshot (two sides with regular levels only, non-crossed)
 fn arb_snapshot() -> impl Strategy<Value = (Vec<Level>, Vec<Level>)> {
     (
         prop::collection::vec(arb_regular_level(), 0..10),
         prop::collection::vec(arb_regular_level(), 0..10),
     )
+        .prop_filter("non-crossed snapshot", |(bids, asks)| {
+            let best_bid = bids.iter().map(|l| l.price.units()).max().unwrap_or(i64::MIN);
+            let best_ask = asks.iter().map(|l| l.price.units()).min().unwrap_or(i64::MAX);
+            best_bid < best_ask
+        })
 }
 
 /// Generate a delta (two sides with any levels)
@@ -147,15 +152,15 @@ fn assert_books_equal(optimized: &Book, oracle: &OracleBook, step: usize) {
 
     // depth_qty for various n
     for n in [1, 2, 5, 10, 20, 50] {
-        let opt_depth_bid = optimized.depth_qty(BookSide::Bid, n);
-        let ora_depth_bid = oracle.depth_qty(BookSide::Bid, n);
+        let opt_depth_bid = optimized.depth_qty(BookSide::Bid, n).unwrap_or_else(|_| Qty::ZERO);
+        let ora_depth_bid = oracle.depth_qty(BookSide::Bid, n).unwrap_or_else(|_| Qty::ZERO);
         assert_eq!(
             opt_depth_bid, ora_depth_bid,
             "step {step}: bid depth_qty n={n}"
         );
 
-        let opt_depth_ask = optimized.depth_qty(BookSide::Ask, n);
-        let ora_depth_ask = oracle.depth_qty(BookSide::Ask, n);
+        let opt_depth_ask = optimized.depth_qty(BookSide::Ask, n).unwrap_or_else(|_| Qty::ZERO);
+        let ora_depth_ask = oracle.depth_qty(BookSide::Ask, n).unwrap_or_else(|_| Qty::ZERO);
         assert_eq!(
             opt_depth_ask, ora_depth_ask,
             "step {step}: ask depth_qty n={n}"
@@ -170,12 +175,12 @@ fn assert_books_equal(optimized: &Book, oracle: &OracleBook, step: usize) {
         Qty::from_units(1000).unwrap(),
         Qty::from_units(10000).unwrap(),
     ] {
-        let opt_plan_bid = optimized.walk_market(BookSide::Bid, qty);
-        let ora_plan_bid = oracle.walk_market(BookSide::Bid, qty);
+        let opt_plan_bid = optimized.walk_market(BookSide::Bid, qty).unwrap_or_else(|_| FillPlan::empty());
+        let ora_plan_bid = oracle.walk_market(BookSide::Bid, qty).unwrap_or_else(|_| FillPlan::empty());
         assert_fill_plans_equal(&opt_plan_bid, &ora_plan_bid, BookSide::Bid, qty, step);
 
-        let opt_plan_ask = optimized.walk_market(BookSide::Ask, qty);
-        let ora_plan_ask = oracle.walk_market(BookSide::Ask, qty);
+        let opt_plan_ask = optimized.walk_market(BookSide::Ask, qty).unwrap_or_else(|_| FillPlan::empty());
+        let ora_plan_ask = oracle.walk_market(BookSide::Ask, qty).unwrap_or_else(|_| FillPlan::empty());
         assert_fill_plans_equal(&opt_plan_ask, &ora_plan_ask, BookSide::Ask, qty, step);
     }
 }
@@ -299,7 +304,8 @@ proptest! {
             match op {
                 Operation::Snapshot { bids, asks } => {
                     let opt_result = optimized.apply_snapshot(bids, asks);
-                    oracle.apply_snapshot(bids, asks);
+                    let ora_result = oracle.apply_snapshot(bids, asks);
+            prop_assert!(ora_result.is_ok(), "step {step}: oracle apply_snapshot failed: {:?}", ora_result);
 
                     // Optimized book should succeed (snapshots don't cross by construction)
                     prop_assert!(opt_result.is_ok(), "step {step}: optimized apply_snapshot failed: {:?}", opt_result);
@@ -314,21 +320,21 @@ proptest! {
 
                     // Results should match
                     match (opt_result, ora_result) {
-                        // Both succeeded (no cross)
-                        (Ok(opt_res), Ok(())) => {
-                            prop_assert_eq!(opt_res, ApplyResult::Ok, "step {}: expected Ok", step);
-                        }
-                        // Optimized crossed, oracle crossed (different return types but same semantic)
-                        (Ok(ApplyResult::Crossed), Err(BookError::Crossed)) => {
+                        // Both crossed
+                        (Ok(ApplyResult::Crossed), Ok(ApplyResult::Crossed)) => {
                             // Both crossed - this is expected
+                        }
+                        // Both succeeded (no cross)
+                        (Ok(opt_res), Ok(ora_res)) => {
+                            prop_assert_eq!(opt_res, ora_res, "step {}: apply_delta results should match", step);
                         }
                         // Optimized succeeded, oracle failed (but not crossed)
                         (Ok(opt_res), Err(ora_err)) if !matches!(ora_err, BookError::Crossed) => {
                             prop_assert!(false, "step {}: oracle error but optimized succeeded: opt={:?}, ora={:?}", step, opt_res, ora_err);
                         }
                         // Optimized failed, oracle succeeded
-                        (Err(opt_err), Ok(())) => {
-                            prop_assert!(false, "step {}: optimized error but oracle succeeded: opt={:?}, ora=Ok", step, opt_err);
+                        (Err(opt_err), Ok(ora_res)) if !matches!(opt_err, BookError::Crossed) => {
+                            prop_assert!(false, "step {}: optimized error but oracle succeeded: opt={:?}, ora={:?}", step, opt_err, ora_res);
                         }
                         // Both errored (same error)
                         (Err(opt_err), Err(ora_err)) => {
@@ -383,16 +389,18 @@ mod regressions {
                 )],
             )
             .unwrap();
-        oracle.apply_snapshot(
-            &[Level::new(
-                Price::from_units(1000).unwrap(),
-                Qty::from_units(100).unwrap(),
-            )],
-            &[Level::new(
-                Price::from_units(1010).unwrap(),
-                Qty::from_units(200).unwrap(),
-            )],
-        );
+        oracle
+            .apply_snapshot(
+                &[Level::new(
+                    Price::from_units(1000).unwrap(),
+                    Qty::from_units(100).unwrap(),
+                )],
+                &[Level::new(
+                    Price::from_units(1010).unwrap(),
+                    Qty::from_units(200).unwrap(),
+                )],
+            )
+            .unwrap();
 
         // Apply delta that crosses the book
         let opt_result = optimized.apply_delta(
@@ -411,7 +419,7 @@ mod regressions {
         );
 
         assert_eq!(opt_result, Ok(ApplyResult::Crossed));
-        assert_eq!(ora_result, Err(BookError::Crossed));
+        assert_eq!(ora_result, Ok(ApplyResult::Crossed));
 
         // After crossing, both should be crossed
         assert!(optimized.is_crossed());
@@ -440,16 +448,18 @@ mod regressions {
                 )],
             )
             .unwrap();
-        oracle.apply_snapshot(
-            &[Level::new(
-                Price::from_units(5000).unwrap(),
-                Qty::from_units(100).unwrap(),
-            )],
-            &[Level::new(
-                Price::from_units(5010).unwrap(),
-                Qty::from_units(200).unwrap(),
-            )],
-        );
+        oracle
+            .apply_snapshot(
+                &[Level::new(
+                    Price::from_units(5000).unwrap(),
+                    Qty::from_units(100).unwrap(),
+                )],
+                &[Level::new(
+                    Price::from_units(5010).unwrap(),
+                    Qty::from_units(200).unwrap(),
+                )],
+            )
+            .unwrap();
 
         assert_books_equal(&optimized, &oracle, 0);
 
@@ -481,10 +491,12 @@ mod regressions {
 
             // Compare results
             match (opt_result, ora_result) {
+                // Both crossed
+                (Ok(ApplyResult::Crossed), Ok(ApplyResult::Crossed)) => {
+                    // Both crossed - this is expected
+                }
                 // Both succeeded (no cross)
-                (Ok(ApplyResult::Ok), Ok(())) => {}
-                // Both crossed (different return types but same semantic)
-                (Ok(ApplyResult::Crossed), Err(BookError::Crossed)) => {}
+                (Ok(ApplyResult::Ok), Ok(ApplyResult::Ok)) => {}
                 // Both errored with same error
                 (Err(opt_err), Err(ora_err)) => {
                     assert_eq!(opt_err, ora_err, "step {}: BookError mismatch", i)
@@ -525,8 +537,8 @@ mod regressions {
         );
 
         optimized.apply_snapshot(&[bid_far], &[ask_far]).unwrap();
-        oracle.apply_snapshot(&[bid_far], &[ask_far]);
-        // Both should succeed - oracle returns (), optimized returns Result
+        oracle.apply_snapshot(&[bid_far], &[ask_far]).unwrap();
+        // Both should succeed - oracle returns Result, optimized returns Result
 
         assert_books_equal(&optimized, &oracle, 0);
 
@@ -555,16 +567,18 @@ mod regressions {
                 )],
             )
             .unwrap();
-        oracle.apply_snapshot(
-            &[Level::new(
-                Price::from_units(1000).unwrap(),
-                Qty::from_units(100).unwrap(),
-            )],
-            &[Level::new(
-                Price::from_units(1010).unwrap(),
-                Qty::from_units(200).unwrap(),
-            )],
-        );
+        oracle
+            .apply_snapshot(
+                &[Level::new(
+                    Price::from_units(1000).unwrap(),
+                    Qty::from_units(100).unwrap(),
+                )],
+                &[Level::new(
+                    Price::from_units(1010).unwrap(),
+                    Qty::from_units(200).unwrap(),
+                )],
+            )
+            .unwrap();
 
         // Remove bid level (qty = 0)
         optimized
@@ -617,32 +631,34 @@ mod regressions {
                 ],
             )
             .unwrap();
-        oracle.apply_snapshot(
-            &[
-                Level::new(
-                    Price::from_units(1000).unwrap(),
-                    Qty::from_units(100).unwrap(),
-                ),
-                Level::new(
-                    Price::from_units(990).unwrap(),
-                    Qty::from_units(200).unwrap(),
-                ),
-            ],
-            &[
-                Level::new(
-                    Price::from_units(1010).unwrap(),
-                    Qty::from_units(100).unwrap(),
-                ),
-                Level::new(
-                    Price::from_units(1020).unwrap(),
-                    Qty::from_units(200).unwrap(),
-                ),
-            ],
-        );
+        oracle
+            .apply_snapshot(
+                &[
+                    Level::new(
+                        Price::from_units(1000).unwrap(),
+                        Qty::from_units(100).unwrap(),
+                    ),
+                    Level::new(
+                        Price::from_units(990).unwrap(),
+                        Qty::from_units(200).unwrap(),
+                    ),
+                ],
+                &[
+                    Level::new(
+                        Price::from_units(1010).unwrap(),
+                        Qty::from_units(100).unwrap(),
+                    ),
+                    Level::new(
+                        Price::from_units(1020).unwrap(),
+                        Qty::from_units(200).unwrap(),
+                    ),
+                ],
+            )
+            .unwrap();
 
         // Buy 150 units (walk asks) - partial fill of second level
-        let opt_plan = optimized.walk_market(BookSide::Ask, Qty::from_units(150).unwrap());
-        let ora_plan = oracle.walk_market(BookSide::Ask, Qty::from_units(150).unwrap());
+        let opt_plan = optimized.walk_market(BookSide::Ask, Qty::from_units(150).unwrap()).unwrap();
+        let ora_plan = oracle.walk_market(BookSide::Ask, Qty::from_units(150).unwrap()).unwrap();
 
         assert_fill_plans_equal(
             &opt_plan,

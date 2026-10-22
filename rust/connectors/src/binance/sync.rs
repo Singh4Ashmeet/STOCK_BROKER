@@ -6,6 +6,7 @@
 //! Enforces:
 //! - Buffering WebSocket diffs while fetching REST snapshot
 //! - Drop events with `u <= lastUpdateId`
+//! - Stale/duplicate events in Live state (final_update_id <= prev_u) are dropped
 //! - First applied event must satisfy `U <= lastUpdateId + 1 <= u`
 //! - Strict gap detection during Live: `U == prev_u + 1`
 //! - Crossed book detection marks Invalid
@@ -27,6 +28,12 @@ pub struct OrderBookSynchronizer {
     seq: Seq,
     buffered_diffs: Vec<DiffEvent>,
     prev_u: u64,
+    /// Counter for sequence gaps detected.
+    gap_count: u64,
+    /// Counter for stale/duplicate events silently dropped.
+    stale_count: u64,
+    /// Counter for resynchronizations triggered.
+    resync_count: u64,
 }
 
 impl OrderBookSynchronizer {
@@ -49,6 +56,9 @@ impl OrderBookSynchronizer {
             seq: Seq::new(1),
             buffered_diffs: Vec::with_capacity(1024),
             prev_u: 0,
+            gap_count: 0,
+            stale_count: 0,
+            resync_count: 0,
         })
     }
 
@@ -80,6 +90,24 @@ impl OrderBookSynchronizer {
     #[must_use]
     pub fn seq(&self) -> Seq {
         self.seq
+    }
+
+    /// Number of sequence gaps detected.
+    #[must_use]
+    pub fn gap_count(&self) -> u64 {
+        self.gap_count
+    }
+
+    /// Number of stale/duplicate events dropped.
+    #[must_use]
+    pub fn stale_count(&self) -> u64 {
+        self.stale_count
+    }
+
+    /// Number of resynchronizations triggered.
+    #[must_use]
+    pub fn resync_count(&self) -> u64 {
+        self.resync_count
     }
 
     /// Called on WebSocket disconnect or connection drop.
@@ -132,8 +160,15 @@ impl OrderBookSynchronizer {
                 Ok(None)
             }
             ConnectionState::Live => {
+                // Stale/duplicate detection: drop events already covered
+                if event.final_update_id <= self.prev_u {
+                    self.stale_count = self.stale_count.saturating_add(1);
+                    return Ok(None);
+                }
+
                 // Strict sequence check: U must be prev_u + 1
                 if event.first_update_id != self.prev_u + 1 {
+                    self.gap_count = self.gap_count.saturating_add(1);
                     self.mark_invalid();
                     return Err(ConnectorError::SequenceGap {
                         expected: self.prev_u + 1,
@@ -289,6 +324,7 @@ impl OrderBookSynchronizer {
         self.seq = Seq::new(1);
         self.buffered_diffs.clear();
         self.prev_u = 0;
+        self.resync_count = self.resync_count.saturating_add(1);
         self.book.clear();
     }
 }

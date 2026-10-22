@@ -9,7 +9,7 @@ use sb_book::BookConfig;
 use sb_core::{Aggressor, BookSide, InstrumentSpec, Level, Price, Qty, TsNs};
 use sb_metrics::engine::MetricsConfig;
 use sb_replay::reader::EventLogReader;
-use sb_replay::schema::{RecordKind, decode_book_payload, decode_trade_payload};
+use sb_replay::schema::{decode_book_payload, decode_trade_payload, RecordKind};
 use sb_replay::{EventLogWriter, WriterConfig};
 use sb_server::state::SymbolState;
 
@@ -51,14 +51,32 @@ fn generate_recorded_day(dir: &std::path::Path) -> Vec<PathBuf> {
     let t0 = TsNs::from_nanos(base_sec * 1_000_000_000);
 
     let initial_bids = vec![
-        Level::new(Price::from_units(6000000).unwrap(), Qty::from_units(500000).unwrap()),
-        Level::new(Price::from_units(5999000).unwrap(), Qty::from_units(1000000).unwrap()),
-        Level::new(Price::from_units(5998000).unwrap(), Qty::from_units(1500000).unwrap()),
+        Level::new(
+            Price::from_units(6000000).unwrap(),
+            Qty::from_units(500000).unwrap(),
+        ),
+        Level::new(
+            Price::from_units(5999000).unwrap(),
+            Qty::from_units(1000000).unwrap(),
+        ),
+        Level::new(
+            Price::from_units(5998000).unwrap(),
+            Qty::from_units(1500000).unwrap(),
+        ),
     ];
     let initial_asks = vec![
-        Level::new(Price::from_units(6001000).unwrap(), Qty::from_units(400000).unwrap()),
-        Level::new(Price::from_units(6002000).unwrap(), Qty::from_units(800000).unwrap()),
-        Level::new(Price::from_units(6003000).unwrap(), Qty::from_units(1200000).unwrap()),
+        Level::new(
+            Price::from_units(6001000).unwrap(),
+            Qty::from_units(400000).unwrap(),
+        ),
+        Level::new(
+            Price::from_units(6002000).unwrap(),
+            Qty::from_units(800000).unwrap(),
+        ),
+        Level::new(
+            Price::from_units(6003000).unwrap(),
+            Qty::from_units(1200000).unwrap(),
+        ),
     ];
 
     handle
@@ -171,8 +189,7 @@ fn test_replay_parity_rust_server_and_pybook_at_every_event() {
     // ──────────────────────────────────────────────────────────────────────────
     // Step 1: Initialize Rust Server SymbolState
     // ──────────────────────────────────────────────────────────────────────────
-    let mut server_state =
-        SymbolState::new(spec, book_config(), metrics_config(), 10).unwrap();
+    let mut server_state = SymbolState::new(spec, book_config(), metrics_config(), 10).unwrap();
 
     // Collect all expected states from the Rust Server stream
     struct EventState {
@@ -212,12 +229,7 @@ fn test_replay_parity_rust_server_and_pybook_at_every_event() {
                 }
                 RecordKind::Trade => {
                     let trade = decode_trade_payload(&record.payload).unwrap();
-                    server_state.record_trade(
-                        exchange_ts,
-                        trade.price,
-                        trade.qty,
-                        trade.aggressor,
-                    );
+                    server_state.record_trade(exchange_ts, trade.price, trade.qty, trade.aggressor);
                 }
                 RecordKind::GapMarker | RecordKind::ResyncMarker | RecordKind::ReconnectMarker => {
                     server_state.set_invalid();
@@ -279,8 +291,7 @@ fn test_replay_parity_rust_server_and_pybook_at_every_event() {
     // ──────────────────────────────────────────────────────────────────────────
     // Step 2: Replay through PyEventReader (coarse 10,000 batch API)
     // ──────────────────────────────────────────────────────────────────────────
-    let mut py_reader =
-        PyEventReader::from_paths(files, Some(spec), 10, 3600, 3600, true).unwrap();
+    let mut py_reader = PyEventReader::from_paths(files, Some(spec), 10, 3600, 3600, true).unwrap();
 
     let mut py_event_idx = 0;
 

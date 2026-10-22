@@ -54,7 +54,7 @@ export function DepthChartCanvas({
       bestBid: bids[0] ? parseFloat(bids[0].price) : 0,
       bestAsk: asks[0] ? parseFloat(asks[0].price) : 0,
     };
-  }, [book]);
+  }, [book, maxLevels]);
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;

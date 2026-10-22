@@ -9,8 +9,8 @@ use sb_metrics::engine::{MetricsConfig, MetricsEngine};
 
 fn spec() -> InstrumentSpec {
     // price_scale=2 → 1 unit = 0.01; tick_size=10 → 0.10
-    // qty_scale=5 → 1 unit = 0.00001; lot_size=100 → 0.00100
-    InstrumentSpec::new(2, 5, 10, 100, 0).unwrap()
+    // qty_scale=5 → 1 unit = 0.00001; lot_size=10 → 0.00010
+    InstrumentSpec::new(2, 5, 10, 10, 0).unwrap()
 }
 
 fn config() -> BookConfig {

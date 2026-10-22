@@ -256,24 +256,44 @@ impl PyEventBatch {
         let pa = py.import_bound("pyarrow")?;
         let dict = self.to_dict(py)?;
         let names: Vec<&str> = vec![
-            "recv_ts", "exchange_ts", "event_kind", "book_valid", "epoch", "seq",
-            "best_bid_price", "best_bid_qty", "best_ask_price", "best_ask_qty",
-            "spread", "mid", "microprice", "imbalance", "vwap", "trade_flow_imbalance",
-            "trade_price", "trade_qty", "trade_aggressor",
+            "recv_ts",
+            "exchange_ts",
+            "event_kind",
+            "book_valid",
+            "epoch",
+            "seq",
+            "best_bid_price",
+            "best_bid_qty",
+            "best_ask_price",
+            "best_ask_qty",
+            "spread",
+            "mid",
+            "microprice",
+            "imbalance",
+            "vwap",
+            "trade_flow_imbalance",
+            "trade_price",
+            "trade_qty",
+            "trade_aggressor",
         ];
         let mut arrays = Vec::new();
         for &name in &names {
-            let item = dict.get_item(name)?.ok_or_else(|| {
-                pyo3::exceptions::PyKeyError::new_err(format!("missing {name}"))
-            })?;
+            let item = dict
+                .get_item(name)?
+                .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err(format!("missing {name}")))?;
             let arr = pa.call_method1("array", (item,))?;
             arrays.push(arr);
         }
-        let table = pa.getattr("Table")?.call_method1("from_arrays", (arrays, names))?;
+        let table = pa
+            .getattr("Table")?
+            .call_method1("from_arrays", (arrays, names))?;
         Ok(table.unbind())
     }
 
     fn __repr__(&self) -> String {
-        format!("EventBatch(length={}, depth_levels={})", self.length, self.depth_levels)
+        format!(
+            "EventBatch(length={}, depth_levels={})",
+            self.length, self.depth_levels
+        )
     }
 }

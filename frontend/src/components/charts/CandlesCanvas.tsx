@@ -76,6 +76,18 @@ export function CandlesCanvas({
       .slice(-maxCandles);
   }, [trades, timeframeState, maxCandles]);
 
+  const timeToX = useCallback((index: number): number => {
+    const canvas = canvasRef.current;
+    if (!canvas) return 0;
+    const leftPad = 60;
+    const rightPad = 60;
+    const plotWidth = canvas.width - leftPad - rightPad;
+    const candleSpacing = 2;
+    const availableWidth = plotWidth;
+    const candleWidth = Math.max(1, (availableWidth / candles.length) - candleSpacing);
+    return leftPad + index * (candleWidth + candleSpacing) + candleWidth / 2;
+  }, [candles.length]);
+
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -320,7 +332,7 @@ export function CandlesCanvas({
       ctx.fillText(price.toFixed(2), 4, y + 3);
     }
     
-  }, [candles, crosshair, timeframeState]);
+  }, [candles, crosshair, timeframeState, showVolume]);
 
   // Animation loop
   useEffect(() => {
@@ -392,7 +404,7 @@ export function CandlesCanvas({
         canvasEl.removeEventListener('mouseleave', handleMouseLeave);
       }
     };
-  }, [candles, showVolume]);
+  }, [candles, showVolume, timeToX]);
 
   // Resize observer
   useEffect(() => {
@@ -416,18 +428,6 @@ export function CandlesCanvas({
       '1d': 86_400_000,
     };
     return map[tf] || 300_000;
-  }
-  
-  function timeToX(index: number): number {
-    const canvas = canvasRef.current;
-    if (!canvas) return 0;
-    const leftPad = 60;
-    const rightPad = 60;
-    const plotWidth = canvas.width - leftPad - rightPad;
-    const candleSpacing = 2;
-    const availableWidth = plotWidth;
-    const candleWidth = Math.max(1, (availableWidth / candles.length) - candleSpacing);
-    return leftPad + index * (candleWidth + candleSpacing) + candleWidth / 2;
   }
   
   function formatVolume(vol: number): string {

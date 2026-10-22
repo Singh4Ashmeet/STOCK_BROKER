@@ -21,6 +21,7 @@ import java.security.spec.X509EncodedKeySpec;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.Date;
+import java.util.UUID;
 
 /**
  * Validates JWT tokens using the configured public key.
@@ -102,6 +103,33 @@ public class JwtTokenValidator {
 
             // Get claims
             JWTClaimsSet claims = signedJWT.getJWTClaimsSet();
+
+            String subject = claims.getSubject();
+            if (subject == null || subject.isBlank()) {
+                throw new JwtValidationException("Missing subject claim");
+            }
+            try {
+                UUID.fromString(subject);
+            } catch (IllegalArgumentException e) {
+                throw new JwtValidationException("Invalid subject claim");
+            }
+
+            Date issuedAt = claims.getIssueTime();
+            if (issuedAt == null) {
+                throw new JwtValidationException("Missing issued-at claim");
+            }
+            if (issuedAt.toInstant().isAfter(Instant.now().plus(jwtProperties.getClockSkew()))) {
+                throw new JwtValidationException("Token issued in the future");
+            }
+
+            if (claims.getJWTID() == null || claims.getJWTID().isBlank()) {
+                throw new JwtValidationException("Missing JWT ID claim");
+            }
+
+            String role = claims.getStringClaim("role");
+            if (!"USER".equals(role) && !"ADMIN".equals(role)) {
+                throw new JwtValidationException("Invalid role claim");
+            }
 
             // Verify expiration with clock skew
             Date expiration = claims.getExpirationTime();

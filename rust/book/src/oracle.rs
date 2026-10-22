@@ -16,8 +16,8 @@
 use std::collections::BTreeMap;
 
 use crate::BookError;
-use crate::types::{FillLevel, FillPlan};
-use sb_core::{Level, Price, Qty};
+use crate::types::{ApplyResult, FillLevel, FillPlan};
+use sb_core::{InstrumentSpec, Level, Price, Qty};
 
 /// Oracle book using `BTreeMap` per side (reference implementation)
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -26,6 +26,10 @@ pub struct OracleBook {
     bids: BTreeMap<Price, Qty>,
     /// Asks sorted ascending by price (lowest first)
     asks: BTreeMap<Price, Qty>,
+    /// Optional instrument spec for tick/lot validation
+    spec: Option<InstrumentSpec>,
+    /// Validity flag
+    is_valid: bool,
 }
 
 impl Default for OracleBook {
@@ -35,55 +39,140 @@ impl Default for OracleBook {
 }
 
 impl OracleBook {
-    /// Create a new empty oracle book
+    /// Create a new empty oracle book without instrument spec validation
     #[must_use]
     pub fn new() -> Self {
         Self {
             bids: BTreeMap::new(),
             asks: BTreeMap::new(),
+            spec: None,
+            is_valid: false,
         }
     }
 
-    /// Apply a full snapshot to the book
-    pub fn apply_snapshot(&mut self, bids: &[Level], asks: &[Level]) {
-        self.clear();
-        for level in bids {
-            if !level.is_removal() {
-                self.bids.insert(level.price, level.qty);
-            }
-        }
-        for level in asks {
-            if !level.is_removal() {
-                self.asks.insert(level.price, level.qty);
-            }
+    /// Create a new oracle book with an authoritative instrument spec
+    #[must_use]
+    pub fn with_spec(spec: InstrumentSpec) -> Self {
+        Self {
+            bids: BTreeMap::new(),
+            asks: BTreeMap::new(),
+            spec: Some(spec),
+            is_valid: false,
         }
     }
 
-    /// Apply a delta to the book
+    /// Check if the book is in a valid, uncrossed state
+    #[must_use]
+    pub fn is_valid(&self) -> bool {
+        self.is_valid && !self.is_crossed()
+    }
+
+    /// Apply a full snapshot to the book transactionally.
     ///
     /// # Errors
     ///
-    /// Returns `BookError::Crossed` if the book becomes crossed after applying
-    pub fn apply_delta(&mut self, bids: &[Level], asks: &[Level]) -> Result<(), BookError> {
+    /// Returns `BookError::Crossed` if the snapshot is crossed, or validation errors
+    /// if price/quantity fail alignment checks. State is untouched on error.
+    pub fn apply_snapshot(&mut self, bids: &[Level], asks: &[Level]) -> Result<(), BookError> {
+        let mut temp_bids = BTreeMap::new();
+        let mut temp_asks = BTreeMap::new();
+
+        if let Some(spec) = &self.spec {
+            for level in bids {
+                if !level.is_removal() {
+                    level.price.ticks(spec)?;
+                    if !level.qty.is_lot_aligned(spec) {
+                        return Err(BookError::NotLotAligned);
+                    }
+                }
+            }
+            for level in asks {
+                if !level.is_removal() {
+                    level.price.ticks(spec)?;
+                    if !level.qty.is_lot_aligned(spec) {
+                        return Err(BookError::NotLotAligned);
+                    }
+                }
+            }
+        }
+
+        for level in bids {
+            if !level.is_removal() {
+                temp_bids.insert(level.price, level.qty);
+            }
+        }
+        for level in asks {
+            if !level.is_removal() {
+                temp_asks.insert(level.price, level.qty);
+            }
+        }
+
+        match (temp_bids.iter().next_back(), temp_asks.iter().next()) {
+            (Some((&best_bid, _)), Some((&best_ask, _))) if best_bid >= best_ask => {
+                return Err(BookError::Crossed);
+            }
+            _ => {}
+        }
+
+        self.bids = temp_bids;
+        self.asks = temp_asks;
+        self.is_valid = true;
+        Ok(())
+    }
+
+    /// Apply a delta to the book transactionally on validation errors.
+    ///
+    /// # Errors
+    ///
+    /// Returns `BookError` if price/quantity validation fails.
+    /// Returns `Ok(ApplyResult::Crossed)` if the book became crossed.
+    pub fn apply_delta(
+        &mut self,
+        bids: &[Level],
+        asks: &[Level],
+    ) -> Result<ApplyResult, BookError> {
+        if let Some(spec) = &self.spec {
+            for level in bids {
+                level.price.ticks(spec)?;
+                if !level.is_removal() && !level.qty.is_lot_aligned(spec) {
+                    return Err(BookError::NotLotAligned);
+                }
+            }
+            for level in asks {
+                level.price.ticks(spec)?;
+                if !level.is_removal() && !level.qty.is_lot_aligned(spec) {
+                    return Err(BookError::NotLotAligned);
+                }
+            }
+        }
+
+        let mut temp_bids = self.bids.clone();
+        let mut temp_asks = self.asks.clone();
+
         for level in bids {
             if level.is_removal() {
-                self.bids.remove(&level.price);
+                temp_bids.remove(&level.price);
             } else {
-                self.bids.insert(level.price, level.qty);
+                temp_bids.insert(level.price, level.qty);
             }
         }
         for level in asks {
             if level.is_removal() {
-                self.asks.remove(&level.price);
+                temp_asks.remove(&level.price);
             } else {
-                self.asks.insert(level.price, level.qty);
+                temp_asks.insert(level.price, level.qty);
             }
         }
 
+        self.bids = temp_bids;
+        self.asks = temp_asks;
+
         if self.is_crossed() {
-            return Err(BookError::Crossed);
+            self.is_valid = false;
+            return Ok(ApplyResult::Crossed);
         }
-        Ok(())
+        self.is_valid = true;
+        Ok(ApplyResult::Ok)
     }
 
     /// Get the best bid (highest price)
@@ -134,33 +223,41 @@ impl OracleBook {
         count
     }
 
-    /// Get total quantity at top N levels
-    #[must_use]
-    pub fn depth_qty(&self, side: sb_core::BookSide, n: usize) -> Qty {
+    /// Get total quantity at top N levels without silent saturation
+    ///
+    /// # Errors
+    ///
+    /// Returns `BookError::Overflow` if sum exceeds `i64::MAX`.
+    pub fn depth_qty(&self, side: sb_core::BookSide, n: usize) -> Result<Qty, BookError> {
         let mut total = Qty::ZERO;
         match side {
             sb_core::BookSide::Bid => {
                 for &qty in self.bids.values().rev().take(n) {
-                    total = total
-                        .checked_add(qty)
-                        .unwrap_or_else(|_| Qty::from_units(i64::MAX).unwrap());
+                    total = total.checked_add(qty).map_err(|_| BookError::Overflow)?;
                 }
             }
             sb_core::BookSide::Ask => {
                 for &qty in self.asks.values().take(n) {
-                    total = total
-                        .checked_add(qty)
-                        .unwrap_or_else(|_| Qty::from_units(i64::MAX).unwrap());
+                    total = total.checked_add(qty).map_err(|_| BookError::Overflow)?;
                 }
             }
         }
-        total
+        Ok(total)
     }
 
     /// Walk the market (simulate a market order fill)
     ///
-    /// Returns a `FillPlan` with the levels consumed and quantities filled.
-    pub fn walk_market(&self, side: sb_core::BookSide, qty: Qty) -> FillPlan {
+    /// # Errors
+    ///
+    /// Returns `BookError::Overflow` if notional or quantity exceeds arithmetic bounds.
+    pub fn walk_market(&self, side: sb_core::BookSide, qty: Qty) -> Result<FillPlan, BookError> {
+        if self.is_crossed() {
+            return Err(BookError::Crossed);
+        }
+        if !self.is_valid() {
+            return Err(BookError::InvalidBookState);
+        }
+
         let mut plan = FillPlan::empty();
         let mut remaining = qty;
 
@@ -177,12 +274,16 @@ impl OracleBook {
                         remaining
                     };
                     plan.levels.push(FillLevel::new(price, level_qty, fill_qty));
-                    plan.total_notional += sb_core::notional(price, fill_qty);
+                    let notional_val = sb_core::notional(price, fill_qty);
+                    plan.total_notional = plan
+                        .total_notional
+                        .checked_add(notional_val)
+                        .ok_or(BookError::Overflow)?;
                     remaining = remaining.checked_sub(fill_qty).unwrap_or(Qty::ZERO);
                     plan.total_filled = plan
                         .total_filled
                         .checked_add(fill_qty)
-                        .unwrap_or_else(|_| Qty::from_units(i64::MAX).unwrap());
+                        .map_err(|_| BookError::Overflow)?;
                 }
             }
             sb_core::BookSide::Ask => {
@@ -197,30 +298,39 @@ impl OracleBook {
                         remaining
                     };
                     plan.levels.push(FillLevel::new(price, level_qty, fill_qty));
-                    plan.total_notional += sb_core::notional(price, fill_qty);
+                    let notional_val = sb_core::notional(price, fill_qty);
+                    plan.total_notional = plan
+                        .total_notional
+                        .checked_add(notional_val)
+                        .ok_or(BookError::Overflow)?;
                     remaining = remaining.checked_sub(fill_qty).unwrap_or(Qty::ZERO);
                     plan.total_filled = plan
                         .total_filled
                         .checked_add(fill_qty)
-                        .unwrap_or_else(|_| Qty::from_units(i64::MAX).unwrap());
+                        .map_err(|_| BookError::Overflow)?;
                 }
             }
         }
 
         if !plan.total_filled.is_zero() {
-            // Calculate average price
-            let avg_price_units = plan.total_notional / i128::from(plan.total_filled.units());
-            plan.avg_price =
-                Price::from_units(i64::try_from(avg_price_units).unwrap_or(i64::MAX)).ok();
+            let filled_i128 = i128::from(plan.total_filled.units());
+            let avg_price_units = plan
+                .total_notional
+                .checked_div(filled_i128)
+                .ok_or(BookError::Overflow)?;
+            let avg_price_i64 = i64::try_from(avg_price_units).map_err(|_| BookError::Overflow)?;
+            let avg_price = Price::from_units(avg_price_i64).map_err(|_| BookError::Overflow)?;
+            plan.avg_price = Some(avg_price);
         }
 
-        plan
+        Ok(plan)
     }
 
     /// Clear the book
     pub fn clear(&mut self) {
         self.bids.clear();
         self.asks.clear();
+        self.is_valid = true;
     }
 
     /// Check if the book is crossed (best bid >= best ask)
@@ -275,11 +385,12 @@ mod tests {
             Qty::from_units(200).unwrap(),
         );
 
-        book.apply_snapshot(&[bid1], &[ask1]);
+        book.apply_snapshot(&[bid1], &[ask1]).unwrap();
 
         assert_eq!(book.best_bid().unwrap().price.units(), 1000);
         assert_eq!(book.best_ask().unwrap().price.units(), 1010);
         assert!(!book.is_crossed());
+        assert!(book.is_valid());
     }
 
     #[test]
@@ -296,19 +407,23 @@ mod tests {
                 Price::from_units(1010).unwrap(),
                 Qty::from_units(200).unwrap(),
             )],
-        );
-
-        // Update bid level
-        book.apply_delta(
-            &[Level::new(
-                Price::from_units(1000).unwrap(),
-                Qty::from_units(150).unwrap(),
-            )],
-            &[],
         )
         .unwrap();
 
+        // Update bid level
+        let res = book
+            .apply_delta(
+                &[Level::new(
+                    Price::from_units(1000).unwrap(),
+                    Qty::from_units(150).unwrap(),
+                )],
+                &[],
+            )
+            .unwrap();
+
+        assert_eq!(res, ApplyResult::Ok);
         assert_eq!(book.best_bid().unwrap().qty.units(), 150);
+        assert!(book.is_valid());
     }
 
     #[test]
@@ -325,7 +440,8 @@ mod tests {
                 Price::from_units(1010).unwrap(),
                 Qty::from_units(200).unwrap(),
             )],
-        );
+        )
+        .unwrap();
 
         // Remove bid level (qty = 0)
         book.apply_delta(
@@ -352,7 +468,8 @@ mod tests {
                 Price::from_units(1010).unwrap(),
                 Qty::from_units(200).unwrap(),
             )],
-        );
+        )
+        .unwrap();
 
         // Cross the book by moving bid above ask
         let result = book.apply_delta(
@@ -363,7 +480,40 @@ mod tests {
             &[],
         );
 
-        assert!(matches!(result, Err(BookError::Crossed)));
+        assert_eq!(result, Ok(ApplyResult::Crossed));
+        assert!(book.is_crossed());
+        assert!(!book.is_valid());
+    }
+
+    #[test]
+    fn oracle_snapshot_crossed_atomic() {
+        let mut book = OracleBook::new();
+        let initial_bid = Level::new(
+            Price::from_units(1000).unwrap(),
+            Qty::from_units(100).unwrap(),
+        );
+        let initial_ask = Level::new(
+            Price::from_units(1010).unwrap(),
+            Qty::from_units(200).unwrap(),
+        );
+        book.apply_snapshot(&[initial_bid], &[initial_ask]).unwrap();
+
+        // Attempt crossed snapshot
+        let bad_bid = Level::new(
+            Price::from_units(1020).unwrap(),
+            Qty::from_units(100).unwrap(),
+        );
+        let bad_ask = Level::new(
+            Price::from_units(1010).unwrap(),
+            Qty::from_units(200).unwrap(),
+        );
+        let err = book.apply_snapshot(&[bad_bid], &[bad_ask]);
+        assert_eq!(err, Err(BookError::Crossed));
+
+        // Prior state must be completely preserved
+        assert_eq!(book.best_bid().unwrap().price.units(), 1000);
+        assert_eq!(book.best_ask().unwrap().price.units(), 1010);
+        assert!(book.is_valid());
     }
 
     #[test]
@@ -396,7 +546,8 @@ mod tests {
                     Qty::from_units(200).unwrap(),
                 ),
             ],
-        );
+        )
+        .unwrap();
 
         let mut out = [Level::new(Price::ZERO, Qty::ZERO); 10];
         let n = book.levels(BookSide::Bid, 2, &mut out);
@@ -436,12 +587,13 @@ mod tests {
                     Qty::from_units(200).unwrap(),
                 ),
             ],
-        );
+        )
+        .unwrap();
 
-        let depth = book.depth_qty(BookSide::Bid, 2);
+        let depth = book.depth_qty(BookSide::Bid, 2).unwrap();
         assert_eq!(depth.units(), 300);
 
-        let depth = book.depth_qty(BookSide::Ask, 1);
+        let depth = book.depth_qty(BookSide::Ask, 1).unwrap();
         assert_eq!(depth.units(), 100);
     }
 
@@ -471,10 +623,13 @@ mod tests {
                     Qty::from_units(200).unwrap(),
                 ),
             ],
-        );
+        )
+        .unwrap();
 
         // Buy 150 units (walk asks)
-        let plan = book.walk_market(BookSide::Ask, Qty::from_units(150).unwrap());
+        let plan = book
+            .walk_market(BookSide::Ask, Qty::from_units(150).unwrap())
+            .unwrap();
         assert_eq!(plan.total_filled.units(), 150);
         assert_eq!(plan.levels.len(), 2);
         assert_eq!(plan.levels[0].price.units(), 1010);

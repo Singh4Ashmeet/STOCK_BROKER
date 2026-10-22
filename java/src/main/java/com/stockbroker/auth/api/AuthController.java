@@ -63,9 +63,16 @@ public class AuthController {
     }
 
     @PostMapping("/refresh")
-    public ResponseEntity<AuthDtos.RefreshResponse> refresh(@Valid @RequestBody AuthDtos.RefreshRequest request,
+    public ResponseEntity<AuthDtos.RefreshResponse> refresh(
+                                                             @RequestBody(required = false) AuthDtos.RefreshRequest request,
+                                                             @CookieValue(value = "refresh_token", required = false) String refreshCookieValue,
                                                              HttpServletResponse response) {
-        var result = authService.refresh(request.refreshToken());
+        String refreshToken = request != null && request.refreshToken() != null && !request.refreshToken().isBlank()
+                ? request.refreshToken() : refreshCookieValue;
+        if (refreshToken == null || refreshToken.isBlank()) {
+            throw new com.stockbroker.common.error.BusinessProblem.AuthTokenInvalid("Invalid refresh token");
+        }
+        var result = authService.refresh(refreshToken);
 
         // Set new refresh token as HttpOnly cookie (rotation)
         ResponseCookie refreshCookie = ResponseCookie.from("refresh_token", result.refreshToken())
@@ -86,8 +93,10 @@ public class AuthController {
 
     @PostMapping("/logout")
     public ResponseEntity<Void> logout(@RequestBody(required = false) AuthDtos.LogoutRequest request,
+                                        @CookieValue(value = "refresh_token", required = false) String refreshCookieValue,
                                         HttpServletResponse response) {
-        String refreshToken = request != null ? request.refreshToken() : null;
+        String refreshToken = request != null && request.refreshToken() != null && !request.refreshToken().isBlank()
+                ? request.refreshToken() : refreshCookieValue;
         authService.logout(refreshToken);
 
         // Clear refresh cookie
@@ -126,14 +135,9 @@ public class AuthController {
     }
 
     private String getClientIp(HttpServletRequest request) {
-        String xfHeader = request.getHeader("X-Forwarded-For");
-        if (xfHeader != null && !xfHeader.isBlank()) {
-            return xfHeader.split(",")[0].trim();
-        }
-        String xRealIp = request.getHeader("X-Real-IP");
-        if (xRealIp != null && !xRealIp.isBlank()) {
-            return xRealIp;
-        }
+        // Forwarded headers are attacker-controlled unless a trusted reverse
+        // proxy has already normalized them. Do not let callers select the
+        // login-rate-limit key directly.
         return request.getRemoteAddr();
     }
 }

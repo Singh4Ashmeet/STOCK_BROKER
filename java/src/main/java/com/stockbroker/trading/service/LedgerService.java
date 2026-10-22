@@ -46,7 +46,7 @@ public class LedgerService {
      * Get or create a ledger account for the given account and asset.
      */
     public LedgerAccount getOrCreateLedgerAccount(UUID accountId, String asset, String code) {
-        return ledgerAccountRepository.findByAccountIdAndAsset(accountId, asset)
+        return ledgerAccountRepository.findByAccountIdAndCode(accountId, code)
                 .orElseGet(() -> {
                     LedgerAccount la = new LedgerAccount();
                     la.setAccountId(accountId);
@@ -56,11 +56,21 @@ public class LedgerService {
                 });
     }
 
+    public LedgerAccount getOrCreateSystemLedgerAccount(String asset, String code) {
+        return ledgerAccountRepository.findSystemAccountByCode(code)
+                .orElseGet(() -> {
+                    LedgerAccount la = new LedgerAccount();
+                    la.setAccountId(null);
+                    la.setAsset(asset);
+                    la.setCode(code);
+                    return ledgerAccountRepository.save(la);
+                });
+    }
+
     /**
      * Create a DEPOSIT transaction: credits cash asset.
-     * Entries: DR Cash (positive), CR Equity (negative) - wait, for deposit:
-     * DR Cash (+amount), CR Deposits/Income (-amount)
-     * Actually: Asset increases (debit), Liability/Equity increases (credit)
+     * Entries: DR Cash (positive), CR Equity (negative)
+     * Balanced per asset.
      */
     @Transactional
     public LedgerTransaction createDeposit(UUID accountId, UUID userId, String asset, BigDecimal amount) {
@@ -71,8 +81,8 @@ public class LedgerService {
         // Get or create cash ledger account
         LedgerAccount cashAccount = getOrCreateLedgerAccount(accountId, asset, "CASH:" + asset);
         
-        // Get or create equity/deposits ledger account (the counterparty)
-        LedgerAccount equityAccount = getOrCreateLedgerAccount(accountId, asset, "EQUITY:" + asset);
+        // Get or create equity/deposits system ledger account (the counterparty)
+        LedgerAccount equityAccount = getOrCreateSystemLedgerAccount(asset, "EQUITY:" + asset);
 
         // Create transaction
         LedgerTransaction tx = new LedgerTransaction();
@@ -94,9 +104,15 @@ public class LedgerService {
 
     /**
      * Create a FILL transaction from a trade execution.
-     * For BUY: DR Asset (+qty), CR Cash (-qty * price - fees)
-     * For SELL: DR Cash (+qty * price - fees), CR Asset (-qty)
-     * Fees: DR Fees (+fee), CR Cash (-fee)
+     * Fully balanced double-entry per asset with clearing counterparty accounts:
+     * For BUY:
+     *   Base asset: DR User Asset (+qty), CR Clearing Base (-qty)
+     *   Quote asset: CR User Cash (-notional), DR Clearing Quote (+notional)
+     *   Fee: CR User Cash (-fee), DR System Fee (+fee)
+     * For SELL:
+     *   Quote asset: DR User Cash (+notional), CR Clearing Quote (-notional)
+     *   Base asset: CR User Asset (-qty), DR Clearing Base (+qty)
+     *   Fee: CR User Cash (-fee), DR System Fee (+fee)
      */
     @Transactional
     public LedgerTransaction createFill(UUID accountId, UUID userId, 
@@ -117,10 +133,14 @@ public class LedgerService {
 
         BigDecimal notional = qty.multiply(price);
 
-        // Get ledger accounts
+        // Get user ledger accounts
         LedgerAccount baseAccount = getOrCreateLedgerAccount(accountId, baseAsset, "ASSET:" + baseAsset);
         LedgerAccount quoteAccount = getOrCreateLedgerAccount(accountId, quoteAsset, "CASH:" + quoteAsset);
-        LedgerAccount feeAccount = getOrCreateLedgerAccount(accountId, feeAsset, "FEES:" + feeAsset);
+
+        // Get system counterparty accounts
+        LedgerAccount clearingBase = getOrCreateSystemLedgerAccount(baseAsset, "CLEARING:" + baseAsset);
+        LedgerAccount clearingQuote = getOrCreateSystemLedgerAccount(quoteAsset, "CLEARING:" + quoteAsset);
+        LedgerAccount feeAccount = getOrCreateSystemLedgerAccount(feeAsset, "FEES:" + feeAsset);
 
         LedgerTransaction tx = new LedgerTransaction();
         tx.setAccountId(accountId);
@@ -136,20 +156,32 @@ public class LedgerService {
         List<LedgerEntry> entries = new ArrayList<>();
 
         if ("BUY".equalsIgnoreCase(side)) {
-            // BUY: receive base asset, pay quote asset + fees
-            entries.add(createEntry(tx.getId(), baseAccount.getId(), baseAsset, qty));                    // DR Asset
-            entries.add(createEntry(tx.getId(), quoteAccount.getId(), quoteAsset, notional.negate()));  // CR Cash
+            // BUY: user receives base asset, clearing gives base asset (sum baseAsset = 0)
+            entries.add(createEntry(tx.getId(), baseAccount.getId(), baseAsset, qty));
+            entries.add(createEntry(tx.getId(), clearingBase.getId(), baseAsset, qty.negate()));
+
+            // User pays quote asset, clearing receives quote asset (sum quoteAsset = 0)
+            entries.add(createEntry(tx.getId(), quoteAccount.getId(), quoteAsset, notional.negate()));
+            entries.add(createEntry(tx.getId(), clearingQuote.getId(), quoteAsset, notional));
+
+            // Fees: user pays fee from cash, fee account receives fee (sum feeAsset = 0)
             if (feeAmount.compareTo(BigDecimal.ZERO) > 0) {
-                entries.add(createEntry(tx.getId(), feeAccount.getId(), feeAsset, feeAmount));           // DR Fees
-                entries.add(createEntry(tx.getId(), quoteAccount.getId(), quoteAsset, feeAmount.negate())); // CR Cash (fees paid from cash)
+                entries.add(createEntry(tx.getId(), quoteAccount.getId(), feeAsset, feeAmount.negate()));
+                entries.add(createEntry(tx.getId(), feeAccount.getId(), feeAsset, feeAmount));
             }
         } else {
-            // SELL: receive quote asset, pay base asset + fees
-            entries.add(createEntry(tx.getId(), quoteAccount.getId(), quoteAsset, notional));            // DR Cash
-            entries.add(createEntry(tx.getId(), baseAccount.getId(), baseAsset, qty.negate()));          // CR Asset
+            // SELL: user receives quote asset, clearing gives quote asset (sum quoteAsset = 0)
+            entries.add(createEntry(tx.getId(), quoteAccount.getId(), quoteAsset, notional));
+            entries.add(createEntry(tx.getId(), clearingQuote.getId(), quoteAsset, notional.negate()));
+
+            // User pays base asset, clearing receives base asset (sum baseAsset = 0)
+            entries.add(createEntry(tx.getId(), baseAccount.getId(), baseAsset, qty.negate()));
+            entries.add(createEntry(tx.getId(), clearingBase.getId(), baseAsset, qty));
+
+            // Fees: user pays fee from cash, fee account receives fee (sum feeAsset = 0)
             if (feeAmount.compareTo(BigDecimal.ZERO) > 0) {
-                entries.add(createEntry(tx.getId(), feeAccount.getId(), feeAsset, feeAmount));           // DR Fees
-                entries.add(createEntry(tx.getId(), quoteAccount.getId(), quoteAsset, feeAmount.negate())); // CR Cash (fees paid from cash)
+                entries.add(createEntry(tx.getId(), quoteAccount.getId(), feeAsset, feeAmount.negate()));
+                entries.add(createEntry(tx.getId(), feeAccount.getId(), feeAsset, feeAmount));
             }
         }
 
@@ -172,7 +204,7 @@ public class LedgerService {
         }
 
         LedgerAccount cashAccount = getOrCreateLedgerAccount(accountId, asset, "CASH:" + asset);
-        LedgerAccount feeAccount = getOrCreateLedgerAccount(accountId, asset, "FEES:" + asset);
+        LedgerAccount feeAccount = getOrCreateSystemLedgerAccount(asset, "FEES:" + asset);
 
         LedgerTransaction tx = new LedgerTransaction();
         tx.setAccountId(accountId);

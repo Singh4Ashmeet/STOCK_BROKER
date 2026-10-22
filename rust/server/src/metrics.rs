@@ -6,13 +6,15 @@
 //! - Health state tracking (connection, book validity, resync count, mismatches)
 //! - Periodic cross-check against exchange REST snapshots
 
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use hdrhistogram::Histogram;
 use parking_lot::RwLock;
-use prometheus::{CounterVec, GaugeVec, HistogramVec, Registry, TextEncoder, Encoder, Opts, HistogramOpts};
+use prometheus::{
+    CounterVec, Encoder, GaugeVec, HistogramOpts, HistogramVec, Opts, Registry, TextEncoder,
+};
 use sb_core::{Clock, Epoch, Level, Seq, TsNs};
 use serde_json;
 use tracing::{debug, warn};
@@ -138,108 +140,111 @@ impl PrometheusMetrics {
         let registry = Registry::new();
 
         let stage_latency = HistogramVec::new(
-            HistogramOpts::new("feed_stage_latency_seconds", "Latency for each processing stage")
-                .buckets(vec![
-                    0.000_001, 0.000_005, 0.000_01, 0.000_05, 0.0001, 0.0005,
-                    0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0, 10.0
-                ]),
-            &["stage"]
+            HistogramOpts::new(
+                "feed_stage_latency_seconds",
+                "Latency for each processing stage",
+            )
+            .buckets(vec![
+                0.000_001, 0.000_005, 0.000_01, 0.000_05, 0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05,
+                0.1, 0.5, 1.0, 5.0, 10.0,
+            ]),
+            &["stage"],
         )?;
 
         let messages_total = CounterVec::new(
             Opts::new("feed_messages_total", "Total messages received by kind"),
-            &["kind"]
+            &["kind"],
         )?;
 
         let resync_total = CounterVec::new(
             Opts::new("feed_resync_total", "Total resyncs triggered"),
-            &["symbol", "reason"]
+            &["symbol", "reason"],
         )?;
 
         let mismatch_total = CounterVec::new(
             Opts::new("feed_book_mismatch_total", "Total book mismatches detected"),
-            &["symbol"]
+            &["symbol"],
         )?;
 
         let checks_total = CounterVec::new(
-            Opts::new("feed_book_checks_total", "Total book cross-checks performed"),
-            &["symbol"]
+            Opts::new(
+                "feed_book_checks_total",
+                "Total book cross-checks performed",
+            ),
+            &["symbol"],
         )?;
 
         let reconnect_total = CounterVec::new(
             Opts::new("feed_reconnect_total", "Total reconnects"),
-            &["venue"]
+            &["venue"],
         )?;
 
         let conflation_total = CounterVec::new(
-            Opts::new("feed_conflation_total", "Total conflations (slow consumers)"),
-            &["symbol"]
+            Opts::new(
+                "feed_conflation_total",
+                "Total conflations (slow consumers)",
+            ),
+            &["symbol"],
         )?;
 
         let log_dropped_total = CounterVec::new(
             Opts::new("feed_log_dropped_total", "Total log records dropped"),
-            &["reason"]
+            &["reason"],
         )?;
 
         let book_valid = GaugeVec::new(
             Opts::new("feed_book_valid", "Book validity (1=valid, 0=invalid)"),
-            &["symbol"]
+            &["symbol"],
         )?;
 
-        let epoch = GaugeVec::new(
-            Opts::new("feed_epoch", "Current epoch number"),
-            &["symbol"]
-        )?;
+        let epoch = GaugeVec::new(Opts::new("feed_epoch", "Current epoch number"), &["symbol"])?;
 
-        let queue_depth = GaugeVec::new(
-            Opts::new("feed_queue_depth", "Queue depth"),
-            &["queue"]
-        )?;
+        let queue_depth = GaugeVec::new(Opts::new("feed_queue_depth", "Queue depth"), &["queue"])?;
 
         let clock_offset_seconds = prometheus::Gauge::new(
             "feed_clock_offset_seconds",
-            "Clock offset from NTP in seconds"
+            "Clock offset from NTP in seconds",
         )?;
 
         let far_level_count = GaugeVec::new(
             Opts::new("feed_far_level_count", "Far level count"),
-            &["symbol", "side"]
+            &["symbol", "side"],
         )?;
 
         let recenter_total = CounterVec::new(
             Opts::new("feed_recenter_total", "Total recenter operations"),
-            &["symbol"]
+            &["symbol"],
         )?;
 
         // Percentile gauges
         let latency_p50 = GaugeVec::new(
             Opts::new("feed_stage_latency_p50_seconds", "Stage latency p50"),
-            &["symbol", "stage"]
+            &["symbol", "stage"],
         )?;
 
         let latency_p90 = GaugeVec::new(
             Opts::new("feed_stage_latency_p90_seconds", "Stage latency p90"),
-            &["symbol", "stage"]
+            &["symbol", "stage"],
         )?;
 
         let latency_p99 = GaugeVec::new(
             Opts::new("feed_stage_latency_p99_seconds", "Stage latency p99"),
-            &["symbol", "stage"]
+            &["symbol", "stage"],
         )?;
 
         let latency_p999 = GaugeVec::new(
             Opts::new("feed_stage_latency_p999_seconds", "Stage latency p99.9"),
-            &["symbol", "stage"]
+            &["symbol", "stage"],
         )?;
 
         let latency_max = GaugeVec::new(
             Opts::new("feed_stage_latency_max_seconds", "Stage latency max"),
-            &["symbol", "stage"]
+            &["symbol", "stage"],
         )?;
 
         let latency_count = GaugeVec::new(
             Opts::new("feed_stage_latency_count", "Stage latency sample count"),
-            &["symbol", "stage"]
+            &["symbol", "stage"],
         )?;
 
         // Register all metrics
@@ -298,13 +303,17 @@ impl PrometheusMetrics {
     pub fn gather(&self) -> String {
         let encoder = TextEncoder::new();
         let mut buffer = Vec::new();
-        encoder.encode(&self.registry.gather(), &mut buffer).unwrap();
+        encoder
+            .encode(&self.registry.gather(), &mut buffer)
+            .unwrap();
         String::from_utf8(buffer).unwrap()
     }
 
     /// Record stage latency.
     pub fn record_stage_latency(&self, stage: Stage, duration_ns: u64) {
-        self.stage_latency.with_label_values(&[stage.label()]).observe(duration_ns as f64 / 1_000_000_000.0);
+        self.stage_latency
+            .with_label_values(&[stage.label()])
+            .observe(duration_ns as f64 / 1_000_000_000.0);
     }
 
     /// Increment message counter.
@@ -344,7 +353,9 @@ impl PrometheusMetrics {
 
     /// Set book validity gauge.
     pub fn set_book_valid(&self, symbol: &str, valid: bool) {
-        self.book_valid.with_label_values(&[symbol]).set(if valid { 1.0 } else { 0.0 });
+        self.book_valid
+            .with_label_values(&[symbol])
+            .set(if valid { 1.0 } else { 0.0 });
     }
 
     /// Set epoch gauge.
@@ -354,7 +365,9 @@ impl PrometheusMetrics {
 
     /// Set queue depth gauge.
     pub fn set_queue_depth(&self, queue: &str, depth: usize) {
-        self.queue_depth.with_label_values(&[queue]).set(depth as f64);
+        self.queue_depth
+            .with_label_values(&[queue])
+            .set(depth as f64);
     }
 
     /// Set clock offset gauge.
@@ -364,7 +377,9 @@ impl PrometheusMetrics {
 
     /// Set far level count gauge.
     pub fn set_far_level_count(&self, symbol: &str, side: &str, count: usize) {
-        self.far_level_count.with_label_values(&[symbol, side]).set(count as f64);
+        self.far_level_count
+            .with_label_values(&[symbol, side])
+            .set(count as f64);
     }
 
     /// Increment recenter counter.
@@ -375,12 +390,24 @@ impl PrometheusMetrics {
     /// Export HdrHistogram percentiles as gauges.
     pub fn export_percentiles(&self, symbol: &str, stage: Stage, h: &Histogram<u64>) {
         let stage_str = stage.label();
-        self.latency_p50.with_label_values(&[symbol, stage_str]).set(h.value_at_percentile(50.0) as f64 / 1_000_000_000.0);
-        self.latency_p90.with_label_values(&[symbol, stage_str]).set(h.value_at_percentile(90.0) as f64 / 1_000_000_000.0);
-        self.latency_p99.with_label_values(&[symbol, stage_str]).set(h.value_at_percentile(99.0) as f64 / 1_000_000_000.0);
-        self.latency_p999.with_label_values(&[symbol, stage_str]).set(h.value_at_percentile(99.9) as f64 / 1_000_000_000.0);
-        self.latency_max.with_label_values(&[symbol, stage_str]).set(h.max() as f64 / 1_000_000_000.0);
-        self.latency_count.with_label_values(&[symbol, stage_str]).set(h.len() as f64);
+        self.latency_p50
+            .with_label_values(&[symbol, stage_str])
+            .set(h.value_at_percentile(50.0) as f64 / 1_000_000_000.0);
+        self.latency_p90
+            .with_label_values(&[symbol, stage_str])
+            .set(h.value_at_percentile(90.0) as f64 / 1_000_000_000.0);
+        self.latency_p99
+            .with_label_values(&[symbol, stage_str])
+            .set(h.value_at_percentile(99.0) as f64 / 1_000_000_000.0);
+        self.latency_p999
+            .with_label_values(&[symbol, stage_str])
+            .set(h.value_at_percentile(99.9) as f64 / 1_000_000_000.0);
+        self.latency_max
+            .with_label_values(&[symbol, stage_str])
+            .set(h.max() as f64 / 1_000_000_000.0);
+        self.latency_count
+            .with_label_values(&[symbol, stage_str])
+            .set(h.len() as f64);
     }
 }
 
@@ -464,7 +491,8 @@ impl FeedMetrics {
 
     /// Set clock offset (atomic only).
     pub fn set_clock_offset(&self, offset_seconds: i64) {
-        self.clock_offset_seconds.store(offset_seconds as u64, Ordering::Relaxed);
+        self.clock_offset_seconds
+            .store(offset_seconds as u64, Ordering::Relaxed);
     }
 }
 
@@ -530,18 +558,21 @@ impl HealthTracker {
         let mut cross_check_times = std::collections::HashMap::new();
 
         for sym in symbols {
-            states.insert(sym.clone(), SymbolHealthState {
-                symbol: sym.clone(),
-                book_valid: false,
-                epoch: 0,
-                seq: 0,
-                resync_count: 0,
-                last_event_age_ms: 0,
-                last_cross_check_ms: 0,
-                cross_check_mismatches: 0,
-                far_bid_levels: 0,
-                far_ask_levels: 0,
-            });
+            states.insert(
+                sym.clone(),
+                SymbolHealthState {
+                    symbol: sym.clone(),
+                    book_valid: false,
+                    epoch: 0,
+                    seq: 0,
+                    resync_count: 0,
+                    last_event_age_ms: 0,
+                    last_cross_check_ms: 0,
+                    cross_check_mismatches: 0,
+                    far_bid_levels: 0,
+                    far_ask_levels: 0,
+                },
+            );
             resync_counts.insert(sym.clone(), 0);
             mismatch_counts.insert(sym.clone(), 0);
             cross_check_times.insert(sym.clone(), Instant::now());
@@ -640,10 +671,7 @@ pub async fn cross_check_book(
 ) -> Result<u64, Box<dyn std::error::Error + Send + Sync>> {
     // Fetch snapshot from exchange REST API
     let client = reqwest::Client::new();
-    let response = client
-        .get(exchange_url)
-        .send()
-        .await?;
+    let response = client.get(exchange_url).send().await?;
 
     if !response.status().is_success() {
         return Err(format!("HTTP {}", response.status()).into());
@@ -660,33 +688,51 @@ pub async fn cross_check_book(
     let mut mismatches = 0u64;
 
     // Check bids (top 10)
-    for (i, (local, exch)) in local_bids.iter().zip(exchange_bids.iter()).take(10).enumerate() {
+    for (i, (local, exch)) in local_bids
+        .iter()
+        .zip(exchange_bids.iter())
+        .take(10)
+        .enumerate()
+    {
         let exch_price = exch[0].as_str().ok_or("bid price")?.parse::<i64>()?;
         let exch_qty = exch[1].as_str().ok_or("bid qty")?.parse::<i64>()?;
 
-        if local.price.units() != exch_price
-            || (local.qty.units() - exch_qty).abs() > tolerance_qty
+        if local.price.units() != exch_price || (local.qty.units() - exch_qty).abs() > tolerance_qty
         {
             mismatches += 1;
             warn!(
                 "Book mismatch for {} bid[{}]: local=({},{}) exchange=({},{})",
-                symbol, i, local.price.units(), local.qty.units(), exch_price, exch_qty
+                symbol,
+                i,
+                local.price.units(),
+                local.qty.units(),
+                exch_price,
+                exch_qty
             );
         }
     }
 
     // Check asks (top 10)
-    for (i, (local, exch)) in local_asks.iter().zip(exchange_asks.iter()).take(10).enumerate() {
+    for (i, (local, exch)) in local_asks
+        .iter()
+        .zip(exchange_asks.iter())
+        .take(10)
+        .enumerate()
+    {
         let exch_price = exch[0].as_str().ok_or("ask price")?.parse::<i64>()?;
         let exch_qty = exch[1].as_str().ok_or("ask qty")?.parse::<i64>()?;
 
-        if local.price.units() != exch_price
-            || (local.qty.units() - exch_qty).abs() > tolerance_qty
+        if local.price.units() != exch_price || (local.qty.units() - exch_qty).abs() > tolerance_qty
         {
             mismatches += 1;
             warn!(
                 "Book mismatch for {} ask[{}]: local=({},{}) exchange=({},{})",
-                symbol, i, local.price.units(), local.qty.units(), exch_price, exch_qty
+                symbol,
+                i,
+                local.price.units(),
+                local.qty.units(),
+                exch_price,
+                exch_qty
             );
         }
     }
@@ -711,7 +757,8 @@ impl Default for CrossCheckConfig {
     fn default() -> Self {
         Self {
             interval: Duration::from_secs(60), // Every minute
-            exchange_endpoint: "https://api.binance.com/api/v3/depth?symbol={symbol}&limit=20".to_string(),
+            exchange_endpoint: "https://api.binance.com/api/v3/depth?symbol={symbol}&limit=20"
+                .to_string(),
             depth: 10,
             qty_tolerance: 100,
         }
@@ -741,9 +788,21 @@ pub fn start_cross_check_task(
                     continue;
                 };
 
-                let url = config.exchange_endpoint.replace("{symbol}", &symbol.replace([':', '-'], ""));
+                let url = config
+                    .exchange_endpoint
+                    .replace("{symbol}", &symbol.replace([':', '-'], ""));
 
-                match fetch_and_compare(&client, symbol, &local_bids, &local_asks, &url, config.depth, config.qty_tolerance).await {
+                match fetch_and_compare(
+                    &client,
+                    symbol,
+                    &local_bids,
+                    &local_asks,
+                    &url,
+                    config.depth,
+                    config.qty_tolerance,
+                )
+                .await
+                {
                     Ok(mismatches) => {
                         health.on_cross_check(symbol, mismatches);
                         if mismatches > 0 {
@@ -785,33 +844,51 @@ async fn fetch_and_compare(
     let mut mismatches = 0u64;
 
     // Check bids
-    for (i, (local, exch)) in local_bids.iter().zip(exchange_bids.iter()).take(depth).enumerate() {
+    for (i, (local, exch)) in local_bids
+        .iter()
+        .zip(exchange_bids.iter())
+        .take(depth)
+        .enumerate()
+    {
         let exch_price = exch[0].as_str().ok_or("bid price")?.parse::<i64>()?;
         let exch_qty = exch[1].as_str().ok_or("bid qty")?.parse::<i64>()?;
 
-        if local.price.units() != exch_price
-            || (local.qty.units() - exch_qty).abs() > qty_tolerance
+        if local.price.units() != exch_price || (local.qty.units() - exch_qty).abs() > qty_tolerance
         {
             mismatches += 1;
             warn!(
                 "Book mismatch for {} bid[{}]: local=({},{}) exchange=({},{})",
-                symbol, i, local.price.units(), local.qty.units(), exch_price, exch_qty
+                symbol,
+                i,
+                local.price.units(),
+                local.qty.units(),
+                exch_price,
+                exch_qty
             );
         }
     }
 
     // Check asks
-    for (i, (local, exch)) in local_asks.iter().zip(exchange_asks.iter()).take(depth).enumerate() {
+    for (i, (local, exch)) in local_asks
+        .iter()
+        .zip(exchange_asks.iter())
+        .take(depth)
+        .enumerate()
+    {
         let exch_price = exch[0].as_str().ok_or("ask price")?.parse::<i64>()?;
         let exch_qty = exch[1].as_str().ok_or("ask qty")?.parse::<i64>()?;
 
-        if local.price.units() != exch_price
-            || (local.qty.units() - exch_qty).abs() > qty_tolerance
+        if local.price.units() != exch_price || (local.qty.units() - exch_qty).abs() > qty_tolerance
         {
             mismatches += 1;
             warn!(
                 "Book mismatch for {} ask[{}]: local=({},{}) exchange=({},{})",
-                symbol, i, local.price.units(), local.qty.units(), exch_price, exch_qty
+                symbol,
+                i,
+                local.price.units(),
+                local.qty.units(),
+                exch_price,
+                exch_qty
             );
         }
     }
@@ -820,44 +897,55 @@ async fn fetch_and_compare(
 }
 
 /// Axum router for health and metrics endpoints.
-pub fn health_router(health: &Arc<HealthTracker>, prom_metrics: &Arc<PrometheusMetrics>) -> axum::Router {
-    use axum::{routing::get, Json};
+pub fn health_router(
+    health: &Arc<HealthTracker>,
+    prom_metrics: &Arc<PrometheusMetrics>,
+) -> axum::Router {
+    use axum::{Json, routing::get};
 
     let health_clone1 = Arc::clone(health);
     let health_clone2 = Arc::clone(health);
     let prom_metrics_clone = Arc::clone(prom_metrics);
 
     axum::Router::new()
-        .route("/health", get({
-            move || {
-                let health = Arc::clone(&health_clone1);
-                async move {
-                    Json(health.get_health())
+        .route(
+            "/health",
+            get({
+                move || {
+                    let health = Arc::clone(&health_clone1);
+                    async move { Json(health.get_health()) }
                 }
-            }
-        }))
-        .route("/health/:symbol", get({
-            move |axum::extract::Path(symbol): axum::extract::Path<String>| {
-                let health = Arc::clone(&health_clone2);
-                async move {
-                    health.get_symbol_health(&symbol)
-                        .map(Json)
-                        .ok_or(axum::http::StatusCode::NOT_FOUND)
+            }),
+        )
+        .route(
+            "/health/:symbol",
+            get({
+                move |axum::extract::Path(symbol): axum::extract::Path<String>| {
+                    let health = Arc::clone(&health_clone2);
+                    async move {
+                        health
+                            .get_symbol_health(&symbol)
+                            .map(Json)
+                            .ok_or(axum::http::StatusCode::NOT_FOUND)
+                    }
                 }
-            }
-        }))
-        .route("/metrics", get({
-            move || {
-                let prom_metrics = Arc::clone(&prom_metrics_clone);
-                async move {
-                    let body = prom_metrics.gather();
-                    axum::response::Response::builder()
-                        .header("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
-                        .body(axum::body::Body::from(body))
-                        .unwrap_or_default()
+            }),
+        )
+        .route(
+            "/metrics",
+            get({
+                move || {
+                    let prom_metrics = Arc::clone(&prom_metrics_clone);
+                    async move {
+                        let body = prom_metrics.gather();
+                        axum::response::Response::builder()
+                            .header("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+                            .body(axum::body::Body::from(body))
+                            .unwrap_or_default()
+                    }
                 }
-            }
-        }))
+            }),
+        )
 }
 
 /// Start the Prometheus HTTP server.
@@ -868,8 +956,9 @@ pub fn start_prometheus_server(
     use axum::routing::get;
 
     let prom_clone = Arc::clone(prom_metrics);
-    let router = axum::Router::new()
-        .route("/metrics", get({
+    let router = axum::Router::new().route(
+        "/metrics",
+        get({
             move || {
                 let prom = Arc::clone(&prom_clone);
                 async move {
@@ -880,7 +969,8 @@ pub fn start_prometheus_server(
                         .unwrap_or_default()
                 }
             }
-        }));
+        }),
+    );
 
     tokio::spawn(async move {
         if let Ok(listener) = tokio::net::TcpListener::bind(addr).await {

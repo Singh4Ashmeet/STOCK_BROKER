@@ -1,8 +1,10 @@
 package com.stockbroker.research.api;
 
+import com.stockbroker.common.security.CurrentUser;
 import com.stockbroker.research.service.BacktestJobService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -13,6 +15,7 @@ import java.util.List;
  */
 @RestController
 @RequestMapping("/api/v1/backtest-jobs")
+@PreAuthorize("isAuthenticated()")
 public class BacktestController {
 
     private final BacktestJobService jobService;
@@ -28,7 +31,7 @@ public class BacktestController {
     @PostMapping
     public ResponseEntity<ResearchDtos.JobResponse> submitBacktest(
             @Valid @RequestBody ResearchDtos.CreateBacktestRequest request) {
-        String jobId = jobService.submitBacktest(request);
+        String jobId = jobService.submitBacktest(CurrentUser.getUserId(), request);
         return ResponseEntity.ok(new ResearchDtos.JobResponse(jobId, ResearchDtos.BacktestStatus.QUEUED, "Job submitted"));
     }
 
@@ -37,7 +40,7 @@ public class BacktestController {
      */
     @GetMapping("/{jobId}")
     public ResponseEntity<ResearchDtos.JobStatusResponse> getJobStatus(@PathVariable String jobId) {
-        ResearchDtos.JobStatusResponse status = jobService.getJobStatus(jobId);
+        ResearchDtos.JobStatusResponse status = jobService.getJobStatus(CurrentUser.getUserId(), jobId);
         if (status == null) {
             return ResponseEntity.notFound().build();
         }
@@ -49,7 +52,7 @@ public class BacktestController {
      */
     @GetMapping("/{jobId}/artifacts")
     public ResponseEntity<ResearchDtos.ArtifactListResponse> listArtifacts(@PathVariable String jobId) {
-        List<ResearchDtos.ArtifactInfo> artifacts = jobService.listArtifacts(jobId);
+        List<ResearchDtos.ArtifactInfo> artifacts = jobService.listArtifacts(CurrentUser.getUserId(), jobId);
         return ResponseEntity.ok(new ResearchDtos.ArtifactListResponse(artifacts));
     }
 
@@ -60,7 +63,7 @@ public class BacktestController {
     public ResponseEntity<org.springframework.core.io.Resource> downloadArtifact(
             @PathVariable String jobId,
             @PathVariable String artifactId) {
-        byte[] artifact = jobService.getArtifact(jobId, artifactId);
+        byte[] artifact = jobService.getArtifact(CurrentUser.getUserId(), jobId, artifactId);
         if (artifact == null) {
             return ResponseEntity.notFound().build();
         }
@@ -78,7 +81,8 @@ public class BacktestController {
             @RequestParam(required = false) String status,
             @RequestParam(defaultValue = "50") int limit,
             @RequestParam(defaultValue = "0") int offset) {
-        List<com.stockbroker.research.api.ResearchDtos.JobSummary> jobs = jobService.listJobs(status, limit, offset);
+        List<com.stockbroker.research.api.ResearchDtos.JobSummary> jobs = jobService.listJobs(
+                CurrentUser.getUserId(), status, limit, offset);
         return ResponseEntity.ok(new com.stockbroker.research.api.ResearchDtos.JobListResponse(jobs, null));
     }
 
@@ -88,7 +92,7 @@ public class BacktestController {
     @PostMapping("/walkforward")
     public ResponseEntity<com.stockbroker.research.api.ResearchDtos.JobResponse> submitWalkForward(
             @Valid @RequestBody com.stockbroker.research.api.ResearchDtos.WalkForwardRequest request) {
-        String jobId = jobService.submitWalkForward(request);
+        String jobId = jobService.submitWalkForward(CurrentUser.getUserId(), request);
         return ResponseEntity.ok(new com.stockbroker.research.api.ResearchDtos.JobResponse(jobId, com.stockbroker.research.api.ResearchDtos.BacktestStatus.QUEUED, "Walk-forward job submitted"));
     }
 
@@ -98,7 +102,7 @@ public class BacktestController {
     @PostMapping("/sensitivity")
     public ResponseEntity<com.stockbroker.research.api.ResearchDtos.JobResponse> submitSensitivityAnalysis(
             @Valid @RequestBody com.stockbroker.research.api.ResearchDtos.SensitivityRequest request) {
-        String jobId = jobService.submitSensitivityAnalysis(request);
+        String jobId = jobService.submitSensitivityAnalysis(CurrentUser.getUserId(), request);
         return ResponseEntity.ok(new com.stockbroker.research.api.ResearchDtos.JobResponse(jobId, com.stockbroker.research.api.ResearchDtos.BacktestStatus.QUEUED, "Sensitivity analysis job submitted"));
     }
 

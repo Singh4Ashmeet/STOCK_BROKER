@@ -54,3 +54,5 @@ infra/secrets/
 rust/core/fuzz/corpus/
 rust/core/fuzz/artifacts/
 rust/core/fuzz/target/
+
+rust/advisory-db.git-*

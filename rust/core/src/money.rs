@@ -176,6 +176,16 @@ impl Qty {
         let units = self.0.checked_sub(other.0).ok_or(CoreError::Overflow)?;
         Self::from_units(units)
     }
+
+    /// Returns the value or a default if the quantity is zero.
+    #[must_use]
+    pub fn unwrap_or_else(self, default: impl FnOnce() -> Self) -> Self {
+        if self.is_zero() {
+            default()
+        } else {
+            self
+        }
+    }
 }
 
 /// Compute the notional value of a price x quantity.

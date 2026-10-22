@@ -12,16 +12,14 @@ use tokio::sync::{Mutex, RwLock};
 use tokio_stream::Stream;
 use tonic::{Request, Response, Status};
 
-use crate::broadcaster::{
-    BroadcastTiming, Broadcaster,
-};
+use crate::broadcaster::{BroadcastTiming, Broadcaster};
 use crate::config::ServerConfig;
 use crate::convert;
-use sb_core::Clock;
 use crate::metrics::{FeedMetrics, HealthTracker, PrometheusMetrics, SymbolLatencyRecorders};
 use crate::proto;
 use crate::proto::market_data_server::MarketData;
 use crate::state::SymbolState;
+use sb_core::Clock;
 
 /// Shared server state protected by locks.
 ///
@@ -97,11 +95,7 @@ impl MarketDataService {
 
     /// Register a symbol with its state and broadcaster.
     /// Called during server startup before accepting connections.
-    pub async fn register_symbol(
-        &self,
-        symbol: String,
-        state: SymbolState,
-    ) {
+    pub async fn register_symbol(&self, symbol: String, state: SymbolState) {
         let broadcaster = Broadcaster::new(
             self.config.subscriber_queue_capacity,
             self.config.max_subscribers,
@@ -164,7 +158,8 @@ impl MarketDataService {
         };
 
         // Record queue+publish latency
-        let queue_publish_ns = u64::try_from(publish_start.elapsed().as_nanos()).unwrap_or(u64::MAX);
+        let queue_publish_ns =
+            u64::try_from(publish_start.elapsed().as_nanos()).unwrap_or(u64::MAX);
 
         // Record internal latency (T4 - T1)
         let internal_ns = u64::try_from((publish_ts_ns - recv_ts_ns).max(0)).unwrap_or(0);
@@ -193,7 +188,15 @@ impl MarketDataService {
         // Update health tracker
         if let Some(health) = &self.health_tracker {
             let last_event_ts = sb_core::TsNs::from_nanos(exchange_ts_ns.max(recv_ts_ns));
-            health.on_book_update(symbol, epoch, seq, book_valid, last_event_ts, far_bid, far_ask);
+            health.on_book_update(
+                symbol,
+                epoch,
+                seq,
+                book_valid,
+                last_event_ts,
+                far_bid,
+                far_ask,
+            );
         }
 
         // Update Prometheus gauges for health
@@ -217,7 +220,14 @@ impl MarketDataService {
             if is_snapshot {
                 bc.publish_snapshot(symbol, bids, asks, timing);
             } else {
-                bc.publish_delta(symbol, bids, asks, timing, &convert::levels_to_broadcast(&local_bids), &convert::levels_to_broadcast(&local_asks));
+                bc.publish_delta(
+                    symbol,
+                    bids,
+                    asks,
+                    timing,
+                    &convert::levels_to_broadcast(&local_bids),
+                    &convert::levels_to_broadcast(&local_asks),
+                );
             }
         }
     }
@@ -282,7 +292,10 @@ impl MarketDataService {
     }
 
     /// Get the current book snapshot for cross-checking.
-    pub async fn get_book_snapshot(&self, symbol: &str) -> Option<(Vec<sb_core::Level>, Vec<sb_core::Level>)> {
+    pub async fn get_book_snapshot(
+        &self,
+        symbol: &str,
+    ) -> Option<(Vec<sb_core::Level>, Vec<sb_core::Level>)> {
         let states = self.states.read().await;
         let state_arc = states.get(symbol)?;
         let st = state_arc.lock().await;
@@ -422,9 +435,7 @@ impl MarketData for MarketDataService {
         _request: Request<proto::SubscribeRequest>,
     ) -> Result<Response<Self::SubscribeTradesStream>, Status> {
         // Trade streaming is not yet implemented (requires connectors integration).
-        Err(Status::unimplemented(
-            "SubscribeTrades not yet implemented",
-        ))
+        Err(Status::unimplemented("SubscribeTrades not yet implemented"))
     }
 
     type SubscribeMetricsStream = MetricsStream;
@@ -499,24 +510,22 @@ impl MarketData for MarketDataService {
                 recv_ts_ns: 0,
                 publish_ts_ns: now_ns(),
             }),
-            payload: Some(proto::book_update::Payload::Snapshot(
-                proto::BookSnapshot {
-                    bids: bids
-                        .iter()
-                        .map(|l| proto::Level {
-                            price: l.price,
-                            qty: l.qty,
-                        })
-                        .collect(),
-                    asks: asks
-                        .iter()
-                        .map(|l| proto::Level {
-                            price: l.price,
-                            qty: l.qty,
-                        })
-                        .collect(),
-                },
-            )),
+            payload: Some(proto::book_update::Payload::Snapshot(proto::BookSnapshot {
+                bids: bids
+                    .iter()
+                    .map(|l| proto::Level {
+                        price: l.price,
+                        qty: l.qty,
+                    })
+                    .collect(),
+                asks: asks
+                    .iter()
+                    .map(|l| proto::Level {
+                        price: l.price,
+                        qty: l.qty,
+                    })
+                    .collect(),
+            })),
         }))
     }
 
@@ -526,13 +535,17 @@ impl MarketData for MarketDataService {
     ) -> Result<Response<proto::HealthResponse>, Status> {
         let health_state = self.get_health_state().await;
 
-        let symbols: Vec<proto::SymbolHealth> = health_state.symbols.into_iter().map(|s| proto::SymbolHealth {
-            symbol: s.symbol,
-            book_valid: s.book_valid,
-            epoch: s.epoch,
-            resync_count: s.resync_count,
-            last_event_age_ms: s.last_event_age_ms,
-        }).collect();
+        let symbols: Vec<proto::SymbolHealth> = health_state
+            .symbols
+            .into_iter()
+            .map(|s| proto::SymbolHealth {
+                symbol: s.symbol,
+                book_valid: s.book_valid,
+                epoch: s.epoch,
+                resync_count: s.resync_count,
+                last_event_age_ms: s.last_event_age_ms,
+            })
+            .collect();
 
         Ok(Response::new(proto::HealthResponse {
             connected: health_state.connected,

@@ -32,11 +32,7 @@ impl PyOrderBook {
     }
 
     /// Apply an order-book snapshot.
-    pub fn apply_snapshot(
-        &mut self,
-        bids: Vec<(i64, i64)>,
-        asks: Vec<(i64, i64)>,
-    ) -> PyResult<()> {
+    pub fn apply_snapshot(&mut self, bids: Vec<(i64, i64)>, asks: Vec<(i64, i64)>) -> PyResult<()> {
         let bid_levels = parse_levels(bids)?;
         let ask_levels = parse_levels(asks)?;
         self.inner
@@ -46,11 +42,7 @@ impl PyOrderBook {
     }
 
     /// Apply incremental order-book deltas.
-    pub fn apply_delta(
-        &mut self,
-        bids: Vec<(i64, i64)>,
-        asks: Vec<(i64, i64)>,
-    ) -> PyResult<()> {
+    pub fn apply_delta(&mut self, bids: Vec<(i64, i64)>, asks: Vec<(i64, i64)>) -> PyResult<()> {
         let bid_levels = parse_levels(bids)?;
         let ask_levels = parse_levels(asks)?;
         let _ = self.inner.apply_delta(&bid_levels, &ask_levels);
@@ -94,7 +86,11 @@ impl PyOrderBook {
     /// Cumulative quantity across top $N$ levels on the specified side ("bid" or "ask").
     pub fn depth_qty(&self, side: &str, n: usize) -> PyResult<i64> {
         let book_side = parse_side(side)?;
-        Ok(self.inner.depth_qty(book_side, n).units())
+        let qty = self
+            .inner
+            .depth_qty(book_side, n)
+            .map_err(|e| PyBookError::new_err(format!("depth_qty error: {e:?}")))?;
+        Ok(qty.units())
     }
 
     /// Top $N$ levels on the specified side as list of `(price_units, qty_units)`.
@@ -103,28 +99,43 @@ impl PyOrderBook {
         let mut buf = vec![Level::new(Price::ZERO, Qty::ZERO); n];
         let written = self.inner.levels(book_side, n, &mut buf);
         buf.truncate(written);
-        Ok(buf.into_iter().map(|l| (l.price.units(), l.qty.units())).collect())
+        Ok(buf
+            .into_iter()
+            .map(|l| (l.price.units(), l.qty.units()))
+            .collect())
     }
 
     /// Walk the book for a marketable market order.
     ///
     /// Side is "bid" (buying: walks asks) or "ask" (selling: walks bids).
     /// Returns `(total_filled_qty, total_notional, fills)` where fills is `[(price_units, qty_units)]`.
-    pub fn walk_market(&self, side: &str, target_qty: i64) -> PyResult<(i64, i64, Vec<(i64, i64)>)> {
+    pub fn walk_market(
+        &self,
+        side: &str,
+        target_qty: i64,
+    ) -> PyResult<(i64, i64, Vec<(i64, i64)>)> {
         let target = Qty::from_units(target_qty)
             .map_err(|e| PyBookError::new_err(format!("Invalid target qty: {e:?}")))?;
         let book_side = match side.to_lowercase().as_str() {
-            "buy" | "bid" => BookSide::Ask, // Buying walks asks
+            "buy" | "bid" => BookSide::Ask,  // Buying walks asks
             "sell" | "ask" => BookSide::Bid, // Selling walks bids
-            other => return Err(PyBookError::new_err(format!("Invalid side: {other} (use 'buy' or 'sell')"))),
+            other => {
+                return Err(PyBookError::new_err(format!(
+                    "Invalid side: {other} (use 'buy' or 'sell')"
+                )))
+            }
         };
-        let plan = self.inner.walk_market(book_side, target);
+        let plan = self
+            .inner
+            .walk_market(book_side, target)
+            .map_err(|e| PyBookError::new_err(format!("walk_market error: {e:?}")))?;
         let fills: Vec<(i64, i64)> = plan
             .levels
             .iter()
             .map(|lvl| (lvl.price.units(), lvl.filled_qty.units()))
             .collect();
-        let total_notional = i64::try_from(plan.total_notional).unwrap_or(i64::MAX);
+        let total_notional = i64::try_from(plan.total_notional)
+            .map_err(|e| PyBookError::new_err(format!("total_notional overflow: {e:?}")))?;
         Ok((plan.total_filled.units(), total_notional, fills))
     }
 
@@ -134,8 +145,14 @@ impl PyOrderBook {
     }
 
     fn __repr__(&self) -> String {
-        let bb = self.best_bid().map(|(p, q)| format!("{p}@{q}")).unwrap_or_else(|| "none".to_string());
-        let ba = self.best_ask().map(|(p, q)| format!("{p}@{q}")).unwrap_or_else(|| "none".to_string());
+        let bb = self
+            .best_bid()
+            .map(|(p, q)| format!("{p}@{q}"))
+            .unwrap_or_else(|| "none".to_string());
+        let ba = self
+            .best_ask()
+            .map(|(p, q)| format!("{p}@{q}"))
+            .unwrap_or_else(|| "none".to_string());
         format!("OrderBook(best_bid={bb}, best_ask={ba})")
     }
 }
@@ -144,7 +161,9 @@ fn parse_side(side: &str) -> PyResult<BookSide> {
     match side.to_lowercase().as_str() {
         "bid" | "bids" | "buy" => Ok(BookSide::Bid),
         "ask" | "asks" | "sell" => Ok(BookSide::Ask),
-        other => Err(PyBookError::new_err(format!("Invalid side '{other}'. Expected 'bid' or 'ask'"))),
+        other => Err(PyBookError::new_err(format!(
+            "Invalid side '{other}'. Expected 'bid' or 'ask'"
+        ))),
     }
 }
 

@@ -62,7 +62,7 @@ spring:
   # RSocket (for WebSocket fan-out if needed)
   rsocket:
     server:
-      port: 7000
+      port: ${SB_RSOCKET_PORT:0}
       transport: websocket
       mapping-path: /rsocket
 
@@ -79,6 +79,10 @@ spring:
 # Server configuration
 server:
   port: ${SB_API_PORT:8081}
+  max-http-request-header-size: 16KB
+  tomcat:
+    max-http-form-post-size: 2MB
+    max-swallow-size: 2MB
   servlet:
     context-path: /api
   compression:
@@ -117,9 +121,9 @@ management:
 # Logging
 logging:
   level:
-    com.stockbroker: DEBUG
-    org.springframework.security: DEBUG
-    org.springframework.web: DEBUG
+    com.stockbroker: INFO
+    org.springframework.security: WARN
+    org.springframework.web: WARN
     org.flywaydb: INFO
     org.jooq: DEBUG
   pattern:
@@ -170,8 +174,10 @@ sb:
       audience: stockbroker-client
       access-token-expiration: 15m
       refresh-token-expiration: 30d
-      private-key-path: ${SB_JWT_PRIVATE_KEY_PATH:file:../infra/secrets/jwt_private.key}
-      public-key-path: ${SB_JWT_PUBLIC_KEY_PATH:file:../infra/secrets/jwt_public.key}
+      # Required outside the dev and test profiles; an empty value fails
+      # @Validated binding before the application accepts traffic.
+      private-key-path: ${SB_JWT_PRIVATE_KEY_PATH:}
+      public-key-path: ${SB_JWT_PUBLIC_KEY_PATH:}
       clock-skew: 60s
 
   # Rate limiting

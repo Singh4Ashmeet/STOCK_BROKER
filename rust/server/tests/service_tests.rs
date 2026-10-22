@@ -66,19 +66,31 @@ async fn start_test_server(config: ServerConfig) -> (Channel, tokio::task::JoinH
 
     // Register one symbol with initial state
     let spec = test_spec();
-    let mut state = SymbolState::new(spec, BookConfig::default(), test_metrics_config(), 50)
-        .unwrap();
+    let mut state =
+        SymbolState::new(spec, BookConfig::default(), test_metrics_config(), 50).unwrap();
 
     // Apply an initial book
     state
         .apply_snapshot(
             &[
-                Level::new(Price::from_units(5000000).unwrap(), Qty::from_units(100000).unwrap()),
-                Level::new(Price::from_units(4999000).unwrap(), Qty::from_units(200000).unwrap()),
+                Level::new(
+                    Price::from_units(5000000).unwrap(),
+                    Qty::from_units(100000).unwrap(),
+                ),
+                Level::new(
+                    Price::from_units(4999000).unwrap(),
+                    Qty::from_units(200000).unwrap(),
+                ),
             ],
             &[
-                Level::new(Price::from_units(5001000).unwrap(), Qty::from_units(150000).unwrap()),
-                Level::new(Price::from_units(5002000).unwrap(), Qty::from_units(250000).unwrap()),
+                Level::new(
+                    Price::from_units(5001000).unwrap(),
+                    Qty::from_units(150000).unwrap(),
+                ),
+                Level::new(
+                    Price::from_units(5002000).unwrap(),
+                    Qty::from_units(250000).unwrap(),
+                ),
             ],
         )
         .unwrap();
@@ -242,8 +254,14 @@ async fn slow_consumer_does_not_block_fast_consumer() {
     let fast = bc.subscribe().unwrap();
     let slow = bc.subscribe().unwrap();
 
-    let bids = vec![BroadcastLevel { price: 5000000, qty: 100000 }];
-    let asks = vec![BroadcastLevel { price: 5001000, qty: 150000 }];
+    let bids = vec![BroadcastLevel {
+        price: 5000000,
+        qty: 100000,
+    }];
+    let asks = vec![BroadcastLevel {
+        price: 5001000,
+        qty: 150000,
+    }];
     let timing = BroadcastTiming {
         exchange_ts_ns: 1_000_000_000,
         recv_ts_ns: 1_000_100_000,
@@ -251,8 +269,10 @@ async fn slow_consumer_does_not_block_fast_consumer() {
     };
 
     // Send initial snapshot to both
-    bc.send_initial_snapshot(fast.id, "BTC", &bids, &asks, timing).unwrap();
-    bc.send_initial_snapshot(slow.id, "BTC", &bids, &asks, timing).unwrap();
+    bc.send_initial_snapshot(fast.id, "BTC", &bids, &asks, timing)
+        .unwrap();
+    bc.send_initial_snapshot(slow.id, "BTC", &bids, &asks, timing)
+        .unwrap();
 
     // Fast consumer drains messages as they come
     let fast_rx = fast.rx;
@@ -265,9 +285,15 @@ async fn slow_consumer_does_not_block_fast_consumer() {
         while let Ok(msg) = tokio::time::timeout(Duration::from_millis(500), rx.recv()).await {
             if let Some(msg) = msg {
                 let (_epoch, seq) = match &msg {
-                    sb_server::broadcaster::OutboundMsg::BookSnapshot { epoch, seq, .. } => (*epoch, *seq),
-                    sb_server::broadcaster::OutboundMsg::BookDelta { epoch, seq, .. } => (*epoch, *seq),
-                    sb_server::broadcaster::OutboundMsg::MetricsUpdate { epoch, seq, .. } => (*epoch, *seq),
+                    sb_server::broadcaster::OutboundMsg::BookSnapshot { epoch, seq, .. } => {
+                        (*epoch, *seq)
+                    }
+                    sb_server::broadcaster::OutboundMsg::BookDelta { epoch, seq, .. } => {
+                        (*epoch, *seq)
+                    }
+                    sb_server::broadcaster::OutboundMsg::MetricsUpdate { epoch, seq, .. } => {
+                        (*epoch, *seq)
+                    }
                 };
 
                 // Check for gaps (seq should increase by 1 within an epoch)
@@ -326,10 +352,7 @@ async fn slow_consumer_does_not_block_fast_consumer() {
     );
 
     // 2. Fast consumer received messages (at least the initial snapshot + some deltas).
-    assert!(
-        fast_count > 0,
-        "fast consumer received 0 messages"
-    );
+    assert!(fast_count > 0, "fast consumer received 0 messages");
 
     // 3. Slow consumer was conflated.
     let slow_conflations = slow.conflations.load(std::sync::atomic::Ordering::Relaxed);
@@ -352,8 +375,14 @@ async fn conflation_produces_valid_epoch_reset() {
     let mut bc = Broadcaster::new(2, 100); // tiny queue
     let handle = bc.subscribe().unwrap();
 
-    let bids = vec![BroadcastLevel { price: 5000000, qty: 100000 }];
-    let asks = vec![BroadcastLevel { price: 5001000, qty: 150000 }];
+    let bids = vec![BroadcastLevel {
+        price: 5000000,
+        qty: 100000,
+    }];
+    let asks = vec![BroadcastLevel {
+        price: 5001000,
+        qty: 150000,
+    }];
     let timing = BroadcastTiming {
         exchange_ts_ns: 1_000_000_000,
         recv_ts_ns: 1_000_100_000,
@@ -366,7 +395,9 @@ async fn conflation_produces_valid_epoch_reset() {
     }
 
     // The subscriber should have been conflated at least once
-    let conflations = handle.conflations.load(std::sync::atomic::Ordering::Relaxed);
+    let conflations = handle
+        .conflations
+        .load(std::sync::atomic::Ordering::Relaxed);
     assert!(conflations > 0, "expected conflation");
 
     // Read remaining messages — the last should be a snapshot after conflation
@@ -377,5 +408,8 @@ async fn conflation_produces_valid_epoch_reset() {
     }
 
     // The conflated message should be present
-    assert!(last_msg.is_some(), "expected at least one message after conflation");
+    assert!(
+        last_msg.is_some(),
+        "expected at least one message after conflation"
+    );
 }

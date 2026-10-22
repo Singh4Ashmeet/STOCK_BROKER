@@ -56,8 +56,8 @@ public class LedgerRepository {
             """;
         MapSqlParameterSource params = new MapSqlParameterSource()
                 .addValue("userId", userId)
-                .addValue("from", from)
-                .addValue("to", to)
+                .addValue("from", java.sql.Timestamp.from(from))
+                .addValue("to", java.sql.Timestamp.from(to))
                 .addValue("limit", limit);
         return jdbcTemplate.query(sql, params, (rs, rowNum) -> new Object[] {
                 rs.getObject("id"),

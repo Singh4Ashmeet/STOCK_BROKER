@@ -47,14 +47,7 @@ export default function TradingPage() {
     };
   }, [connect, subscribe, unsubscribe]);
 
-  useEffect(() => {
-    if (orderForm.side && orderForm.type && orderForm.qty) {
-      const debounce = setTimeout(() => updatePreview(), 300);
-      return () => clearTimeout(debounce);
-    }
-  }, [orderForm.side, orderForm.type, orderForm.qty, orderForm.limitPrice, orderForm.tif, activeSymbol]);
-
-  const updatePreview = async () => {
+  const updatePreview = useCallback(async () => {
     if (!orderForm.qty || (orderForm.type === 'LIMIT' && !orderForm.limitPrice)) {
       setPreview(null);
       return;
@@ -76,7 +69,14 @@ export default function TradingPage() {
     } finally {
       setPreviewLoading(false);
     }
-  };
+  }, [orderForm, activeSymbol]);
+
+  useEffect(() => {
+    if (orderForm.side && orderForm.type && orderForm.qty) {
+      const debounce = setTimeout(() => updatePreview(), 300);
+      return () => clearTimeout(debounce);
+    }
+  }, [orderForm.side, orderForm.type, orderForm.qty, orderForm.limitPrice, orderForm.tif, activeSymbol, updatePreview]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

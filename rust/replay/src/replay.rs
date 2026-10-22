@@ -27,6 +27,10 @@ pub struct ReplaySummary {
     pub trades_count: u64,
     /// Anomaly markers encountered
     pub markers_count: u64,
+    /// Number of gap/resync markers detected — indicates dropped or lost data
+    pub gaps_detected: u64,
+    /// Whether the replay is known to be incomplete (gaps > 0)
+    pub incomplete: bool,
     /// Final metrics snapshot at the end of replay
     pub final_metrics: MetricsSnapshot,
     /// Deterministic fingerprint hash of the final book state
@@ -46,6 +50,7 @@ pub struct ReplayDriver {
     deltas_applied: u64,
     trades_applied: u64,
     markers_seen: u64,
+    gaps_detected: u64,
 }
 
 impl ReplayDriver {
@@ -68,6 +73,7 @@ impl ReplayDriver {
             deltas_applied: 0,
             trades_applied: 0,
             markers_seen: 0,
+            gaps_detected: 0,
         })
     }
 
@@ -130,6 +136,10 @@ impl ReplayDriver {
             RecordKind::GapMarker | RecordKind::ResyncMarker | RecordKind::ReconnectMarker => {
                 let _marker = decode_marker_payload(payload)?;
                 self.markers_seen += 1;
+                // GapMarker explicitly signals data loss — count it
+                if matches!(kind, RecordKind::GapMarker) {
+                    self.gaps_detected += 1;
+                }
             }
             RecordKind::RawFrame => {
                 // Raw venue frames are retained for debugging/audit; pass
@@ -261,12 +271,15 @@ impl ReplayDriver {
     /// Produce a final summary of replay execution.
     #[must_use]
     pub fn summary(&self) -> ReplaySummary {
+        let gaps = self.gaps_detected;
         ReplaySummary {
             total_records: self.records_processed,
             snapshots_count: self.snapshots_applied,
             deltas_count: self.deltas_applied,
             trades_count: self.trades_applied,
             markers_count: self.markers_seen,
+            gaps_detected: gaps,
+            incomplete: gaps > 0,
             final_metrics: self.snapshot(),
             book_checksum: self.compute_book_checksum(),
         }

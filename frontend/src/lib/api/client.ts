@@ -146,13 +146,13 @@ export const alertsApi = {
 
 // Research / Backtesting
 export const researchApi = {
-  createBacktest: (request: CreateBacktestRequest, idempotencyKey: string) =>
+  createBacktest: (backtestRequest: CreateBacktestRequest, idempotencyKey: string) =>
     request<{ backtest_id: string; status: string; message: string }>('/backtests', {
       method: 'POST',
       headers: {
         'Idempotency-Key': idempotencyKey,
       },
-      body: JSON.stringify(request),
+      body: JSON.stringify(backtestRequest),
     }),
 
   listBacktests: (limit = 50, cursor?: string) => {
