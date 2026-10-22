@@ -11,9 +11,9 @@ license = "MIT OR Apache-2.0"
 sb-core = { path = "../core" }
 sb-book = { path = "../book" }
 tokio = { version = "1.43", features = ["rt", "rt-multi-thread", "macros", "time", "sync", "net"] }
-tokio-tungstenite = { version = "0.26", default-features = false, features = ["rustls-tls-webpki-roots", "handshake"] }
+tokio-tungstenite = { version = "0.27", default-features = false, features = ["rustls-tls-webpki-roots", "handshake", "connect"] }
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "json"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 thiserror = { workspace = true }

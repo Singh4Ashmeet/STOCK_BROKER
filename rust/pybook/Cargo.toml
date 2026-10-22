@@ -17,8 +17,8 @@ sb-book = { path = "../book" }
 sb-metrics = { path = "../metrics" }
 sb-replay = { path = "../replay" }
 thiserror = { workspace = true }
-pyo3 = { version = "0.22", features = ["abi3-py310", "extension-module"] }
-numpy = "0.22"
+pyo3 = { version = "0.30", features = ["abi3-py310", "extension-module"] }
+numpy = "0.30"
 
 [dev-dependencies]
 tempfile = "3.16"

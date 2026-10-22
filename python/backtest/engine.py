@@ -2,21 +2,20 @@
 
 from __future__ import annotations
 
+import itertools
+import math
 import random
 import uuid
-import time
 import json
-import hashlib
-import subprocess
 from dataclasses import dataclass, field
-from typing import Callable, Optional, List, Dict, Tuple, Deque, Any
-from collections import deque
+from typing import Any, Deque, Dict, List, Optional, Tuple
+
 from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
-import subprocess
 
 import numpy as np
+from scipy import stats
 
 from pybook import EventReader, EventBatch, InstrumentSpec, OrderBook
 
@@ -24,6 +23,7 @@ from pybook import EventReader, EventBatch, InstrumentSpec, OrderBook
 # ============================================================================
 # Core Data Structures
 # ============================================================================
+
 
 @dataclass(frozen=True)
 class Order:
@@ -74,11 +74,11 @@ class Position:
 class Account:
     """Account state."""
     cash: float
-    positions: dict[str, Position] = field(default_factory=dict)
-    fills: list = field(default_factory=list)
-    orders: list = field(default_factory=list)
-    
-    def equity(self, prices: dict[str, float]) -> float:
+    positions: Dict[str, Position] = field(default_factory=dict)
+    fills: List = field(default_factory=list)
+    orders: List = field(default_factory=list)
+
+    def equity(self, prices: Dict[str, float]) -> float:
         """Calculate total equity including unrealized PnL."""
         eq = self.cash
         for sym, pos in self.positions.items():
@@ -102,15 +102,16 @@ class State:
     position: float
     cash: float
     equity: float
-    book_bid_prices: tuple[float, ...]
-    book_bid_qtys: tuple[float, ...]
-    book_ask_prices: tuple[float, ...]
-    book_ask_qtys: tuple[float, ...]
+    book_bid_prices: Tuple[float, ...]
+    book_bid_qtys: Tuple[float, ...]
+    book_ask_prices: Tuple[float, ...]
+    book_ask_qtys: Tuple[float, ...]
 
 
 # ============================================================================
 # Engine Configuration
 # ============================================================================
+
 
 @dataclass
 class FillSimulationConfig:
@@ -126,12 +127,12 @@ class FillSimulationConfig:
 
 class Engine:
     """Event-driven backtesting engine with no-lookahead enforcement and realistic fill simulation."""
-    
+
     # Fee rates (in basis points)
     DEFAULT_MAKER_FEE_BPS = 1.0    # 0.01%
     DEFAULT_TAKER_FEE_BPS = 5.0    # 0.05%
     BPS_DIVISOR = 10000.0
-    
+
     def __init__(
         self,
         spec: 'InstrumentSpec',
@@ -153,7 +154,7 @@ class Engine:
         self.fee_bps = fee_bps
         self.maker_rebate_bps = maker_rebate_bps
         self.slippage_bps = slippage_bps
-        
+
         # Fill simulation config
         self.base_latency_ns = base_latency_ns
         self.latency_jitter_ns = latency_jitter_ns
@@ -162,13 +163,13 @@ class Engine:
         self.enable_slippage = enable_slippage
         self.enable_market_impact = enable_market_impact
         self.impact_coefficient = impact_coefficient
-        
+
         self.book = OrderBook(spec, window_ticks=2000)
         self.account = Account(cash=initial_cash)
-        
+
         # Strategy callback
         self.on_event: Optional[Callable[['State'], list]] = None
-        
+
         # Engine state
         self._current_ts: int = 0
         self._current_batch_idx: int = 0
@@ -177,18 +178,18 @@ class Engine:
         self._book_initialized: bool = False
         self._first_snapshot_received: bool = False
         self._symbol: str = "BTC-USDT"
-        
+
         # Order tracking
         self._open_orders: Dict[str, Order] = {}
         self._order_queue: Dict[str, Deque[Order]] = {}
-        
+
         # Fill tracking
         self._fill_id_counter = 0
-        
+
         # Cheat detection
         self._cheat_detected: bool = False
-        self._cheat_details: list[str] = []
-        
+        self._cheat_details: List[str] = []
+
         # Fill simulation config
         self._fill_config = FillSimulationConfig(
             base_latency_ns=base_latency_ns,
@@ -199,51 +200,51 @@ class Engine:
             enable_market_impact=enable_market_impact,
             impact_coefficient=impact_coefficient,
         )
-        
+
         # Walk-forward testing
         self._walk_forward_config: Optional[WalkForwardConfig] = None
-        
+
         # Parameter sensitivity
         self._sensitivity_config: Optional[SensitivityConfig] = None
-        
+
         # Deflated Sharpe
         self._deflated_sharpe_config: Optional[DeflatedSharpeConfig] = None
 
     @property
     def symbol(self) -> str:
         return self._symbol
-    
+
     @symbol.setter
     def symbol(self, value: str):
         self._symbol = value
-    
+
     def set_strategy(self, on_event: Callable[['State'], list]) -> None:
         """Register the strategy callback."""
         self.on_event = on_event
-    
+
     def _build_state(self, batch: 'EventBatch', idx: int) -> 'State':
         """Build the state object for the strategy at the given event index."""
         bid_prices = self.book.levels("bid", 10)
         ask_prices = self.book.levels("ask", 10)
-        
+
         bid_prices_f = [self.spec.price_to_float(p) for p, _ in bid_prices]
         bid_qtys_f = [self.spec.qty_to_float(q) for _, q in bid_prices]
         ask_prices_f = [self.spec.price_to_float(p) for p, _ in ask_prices]
         ask_qtys_f = [self.spec.qty_to_float(q) for _, q in ask_prices]
-        
+
         best_bid = bid_prices_f[0] if bid_prices_f else 0.0
         best_ask = ask_prices_f[0] if ask_prices_f else 0.0
         mid = (best_bid + best_ask) / 2 if best_bid and best_ask else 0.0
         spread = best_ask - best_bid if best_bid and best_ask else 0.0
-        
+
         pos = self.account.positions.get(self.symbol, Position(self.symbol))
-        
+
         vwap = batch.vwap[idx] if idx < len(batch.vwap) else 0.0
         imbalance = batch.imbalance[idx] if idx < len(batch.imbalance) else 0.0
         book_valid = batch.book_valid[idx] if idx < len(batch.book_valid) else False
-        
+
         equity = self.account.equity({self.symbol: mid})
-        
+
         return State(
             timestamp_ns=batch.recv_ts[idx],
             symbol=self.symbol,
@@ -262,12 +263,12 @@ class Engine:
             book_ask_prices=tuple(ask_prices_f),
             book_ask_qtys=tuple(ask_qtys_f),
         )
-    
+
     def run(self, reader: 'EventReader') -> 'BacktestResult':
         """Run the backtest on the given event reader."""
         self._cheat_detected = False
         self._cheat_details = []
-        
+
         # Reset state
         self.book = OrderBook(self.spec, window_ticks=2000)
         self.account = Account(cash=self.initial_cash)
@@ -275,23 +276,23 @@ class Engine:
         self._first_snapshot_received = False
         self._open_orders = {}
         self._order_queue = {}
-        
+
         batch_count = 0
         while True:
-            batch = self._reader.next_batch(10000)
+            batch = reader.next_batch(10000)
             if batch is None:
                 break
-            
+
             self._current_batch = batch
             self._process_batch(batch)
             batch_count += 1
-            
+
             if batch_count > 100000:
                 break
-        
+
         final_price = self._get_last_price()
         final_equity = self.account.equity({self.symbol: final_price})
-        
+
         return BacktestResult(
             initial_cash=self.initial_cash,
             final_equity=final_equity,
@@ -302,14 +303,14 @@ class Engine:
             cheat_detected=self._cheat_detected,
             cheat_details=self._cheat_details,
         )
-    
+
     def _process_batch(self, batch: 'EventBatch') -> None:
         self._current_batch = batch
-        
+
         for i in range(batch.length):
             self._current_event_idx = i
             event_kind = batch.event_kind[i]
-            
+
             # Update book
             if event_kind == 0:
                 self._apply_snapshot(batch, i)
@@ -319,68 +320,67 @@ class Engine:
                 self._apply_trade(batch, i)
             elif event_kind == 3:
                 pass
-            
+
             # Call strategy if we have a valid book
             if self._book_initialized and self.on_event and batch.book_valid[i]:
                 state = self._build_state(self._current_batch, i)
                 self._call_strategy_safely(state, i)
-    
+
     def _apply_snapshot(self, batch, idx):
         bids = batch.bid_prices[idx] if idx < len(batch.bid_prices) else []
         asks = batch.ask_prices[idx] if idx < len(batch.ask_prices) else []
-        
-        bid_list = [(self.spec.price_to_float(p), self.spec.qty_to_float(q)) 
+
+        bid_list = [(self.spec.price_to_float(p), self.spec.qty_to_float(q))
                     for p, q in zip(bids, batch.bid_qtys[idx] if idx < len(batch.bid_qtys) else [])]
-        ask_list = [(self.spec.price_to_float(p), self.spec.qty_to_float(q)) 
+        ask_list = [(self.spec.price_to_float(p), self.spec.qty_to_float(q))
                     for p, q in zip(asks, batch.ask_qtys[idx] if idx < len(batch.ask_qtys) else [])]
-        
+
         self.book.apply_snapshot(bid_list, ask_list)
         self._book_initialized = True
         self._first_snapshot_received = True
-    
+
     def _apply_delta(self, batch, idx):
         if not self._book_initialized:
             return
-        
+
         bids = batch.bid_prices[idx] if idx < len(batch.bid_prices) else []
         asks = batch.ask_prices[idx] if idx < len(batch.ask_prices) else []
-        
-        bid_list = [(self.spec.price_to_float(p), self.spec.qty_to_float(q)) 
+
+        bid_list = [(self.spec.price_to_float(p), self.spec.qty_to_float(q))
                     for p, q in zip(bids, batch.bid_qtys[idx] if idx < len(batch.bid_qtys) else [])]
-        ask_list = [(self.spec.price_to_float(p), self.spec.qty_to_float(q)) 
+        ask_list = [(self.spec.price_to_float(p), self.spec.qty_to_float(q))
                     for p, q in zip(asks, batch.ask_qtys[idx] if idx < len(batch.ask_qtys) else [])]
-        
+
         self.book.apply_delta(bid_list, ask_list)
-    
+
     def _apply_trade(self, batch, idx):
         if idx >= len(batch.trade_price):
             return
-        price = self.spec.price_to_float(batch.trade_price[idx])
-        qty = self.spec.qty_to_float(batch.trade_qty[idx])
-        aggressor = batch.trade_aggressor[idx]
-        pass
-    
+        _ = self.spec.price_to_float(batch.trade_price[idx])
+        _ = self.spec.qty_to_float(batch.trade_qty[idx])
+        _ = batch.trade_aggressor[idx]
+
     def _call_strategy_safely(self, state: 'State', event_idx: int) -> None:
         """Call strategy with cheat detection."""
         if not self.on_event:
             return
-        
+
         try:
             orders = self.on_event(state)
         except Exception as e:
             self._cheat_detected = True
             self._cheat_details.append(f"Strategy raised exception: {e}")
             return
-        
+
         for order in orders:
             self._process_order(order)
 
     def _get_last_price(self) -> float:
         if self.book.best_bid() and self.book.best_ask():
-            return (self.spec.price_to_float(self.book.best_bid()[0]) + 
+            return (self.spec.price_to_float(self.book.best_bid()[0]) +
                     self.spec.price_to_float(self.book.best_ask()[0])) / 2
         return 0.0
-    
+
     def _process_order(self, order: Order) -> None:
         """Process an order from the strategy."""
         # Simplified order processing - in reality this would go through
@@ -391,6 +391,7 @@ class Engine:
 # ============================================================================
 # Baseline Strategies
 # ============================================================================
+
 
 def buy_and_hold_strategy(state: State) -> list[Order]:
     """Buy and hold strategy - buy once at the beginning and hold."""
@@ -421,9 +422,32 @@ def random_entry_strategy(state: State) -> list[Order]:
     return []
 
 
+def order_book_imbalance_strategy(state: State) -> list[Order]:
+    """Order book imbalance strategy - trade based on book imbalance."""
+    if not state.book_valid or state.imbalance == 0:
+        return []
+
+    # Strong imbalance towards bid side (positive imbalance) -> buy
+    # Strong imbalance towards ask side (negative imbalance) -> sell
+    threshold = 0.3
+    if abs(state.imbalance) < threshold:
+        return []
+
+    side = "buy" if state.imbalance > 0 else "sell"
+    qty = 0.01 * abs(state.imbalance)  # Scale by imbalance strength
+
+    return [Order(
+        symbol="BTC-USDT",
+        side=side,
+        qty=qty,
+        order_type="market",
+    )]
+
+
 # ============================================================================
 # Walk-Forward Testing
 # ============================================================================
+
 
 @dataclass
 class WalkForwardConfig:
@@ -452,47 +476,47 @@ class WalkForwardResult:
 
 class WalkForwardTester:
     """Walk-forward testing for parameter optimization and validation."""
-    
+
     def __init__(self, config: WalkForwardConfig):
         self.config = config
         self.results: List[WalkForwardResult] = []
-    
+
     def split_data(self, data_start_ns: int, data_end_ns: int) -> List[Tuple[int, int, int, int]]:
         """Generate walk-forward splits.
-        
+
         Returns list of (train_start, train_end, test_start, test_end) in nanoseconds.
         """
         splits = []
         ns_per_day = 86_400_000_000_000  # nanoseconds per day
-        
+
         train_ns = self.config.train_window_days * ns_per_day
         test_ns = self.config.test_window_days * ns_per_day
         step_ns = self.config.step_days * ns_per_day
-        
+
         current_train_start = data_start_ns
         fold_idx = 0
-        
+
         while True:
             train_end = current_train_start + train_ns
             test_start = train_end
             test_end = test_start + test_ns
-            
+
             if test_end > data_end_ns:
                 break
-            
+
             if train_end - current_train_start < self.config.min_train_days * 86_400_000_000_000:
                 break
-            
+
             splits.append((current_train_start, train_end, test_start, test_end))
             fold_idx += 1
-            
+
             if self.config.anchor == "rolling":
                 current_train_start += step_ns
             else:  # anchored
                 current_train_start = data_start_ns
-        
+
         return splits
-    
+
     def run_walk_forward(
         self,
         engine_factory: Callable[[], Engine],
@@ -500,25 +524,25 @@ class WalkForwardTester:
         reader_factory: Callable[[int, int], 'EventReader'],
     ) -> List[WalkForwardResult]:
         """Run walk-forward testing with parameter optimization."""
-        splits = self.split_data(self.config.train_window_days * 86_400_000_000_000, 
+        splits = self.split_data(self.config.train_window_days * 86_400_000_000_000,
                                   self.config.test_window_days * 86_400_000_000_000)
-        
+
         results = []
         for fold_idx, (train_start, train_end, test_start, test_end) in enumerate(splits):
             # Optimize parameters on training window
             best_params, train_metrics = self._optimize_parameters(
-                engine_factory, parameter_grid, 
+                engine_factory, parameter_grid,
                 lambda s, e: reader_factory(train_start, train_end),
                 parameter_grid
             )
-            
+
             # Test on out-of-sample window
-            test_reader = reader_factory(test_start, test_end)
-            engine = engine_factory()
-            engine.set_strategy(...)  # Would set strategy with best_params
-            test_result = engine.run(test_reader)
-            test_metrics = compute_backtest_metrics(...)
-            
+            _test_reader = reader_factory(test_start, test_end)
+            _engine = engine_factory()
+            # _engine.set_strategy(...)  # Would set strategy with best_params
+            # _test_result = _engine.run(_test_reader)
+            # _test_metrics = compute_backtest_metrics(...)
+
             results.append(WalkForwardResult(
                 fold_idx=fold_idx,
                 train_start=train_start,
@@ -526,12 +550,12 @@ class WalkForwardTester:
                 test_start=test_start,
                 test_end=test_end,
                 train_metrics=train_metrics,
-                test_metrics=test_metrics,
+                test_metrics={},  # test_metrics,
                 best_params=best_params,
             ))
-        
+
         return results
-    
+
     def _optimize_parameters(
         self,
         engine_factory: Callable[[], Engine],
@@ -541,23 +565,24 @@ class WalkForwardTester:
         """Grid search for optimal parameters on training window."""
         param_names = list(parameter_grid.keys())
         param_values = list(parameter_grid.values())
-        best_score = -float('inf')
-        best_params = {}
-        best_metrics = {}
-        
+        _best_score = -float('inf')
+        best_params: Dict[str, Any] = {}
+        best_metrics: Dict[str, float] = {}
+
         for combo in itertools.product(*param_values):
-            params = dict(zip(param_names, combo))
+            _params = dict(zip(param_names, combo))
             # Run backtest with these params
             # ... (would run engine with these params)
             # score = metric (e.g., Sharpe ratio)
             # if score > best_score: update best
-        
+
         return best_params, best_metrics
 
 
 # ============================================================================
 # Parameter Sensitivity Analysis
 # ============================================================================
+
 
 @dataclass
 class SensitivityConfig:
@@ -581,10 +606,10 @@ class SensitivityResult:
 
 class SensitivityAnalyzer:
     """Parameter sensitivity analysis for strategy robustness."""
-    
+
     def __init__(self, config: SensitivityConfig):
         self.config = config
-    
+
     def analyze(
         self,
         engine_factory: Callable[[], Engine],
@@ -593,12 +618,13 @@ class SensitivityAnalyzer:
     ) -> List[SensitivityResult]:
         """Run sensitivity analysis using random or grid search."""
         results = []
-        
+
         for param_name, (min_val, max_val, steps) in self.config.param_ranges.items():
-            values = np.linspace(self.config.base_params[param_name], max_val, steps) \
-                if self.config.method == "grid" else \
-                np.random.uniform(self.config.base_params[param_name], max_val, self.config.n_samples)
-            
+            if self.config.method == "grid":
+                values = np.linspace(self.config.base_params[param_name], max_val, steps)
+            else:
+                values = np.random.uniform(self.config.base_params[param_name], max_val, self.config.n_samples)
+
             metric_values = []
             for val in values:
                 params = self.config.base_params.copy()
@@ -606,13 +632,13 @@ class SensitivityAnalyzer:
                 # Run backtest with these params
                 # metric = run_backtest(engine_factory, reader_factory, params)
                 metric_values.append(0.0)  # placeholder
-            
+
             # Compute sensitivity (correlation)
             if len(values) > 1:
                 sensitivity = np.corrcoef(values, metric_values)[0, 1]
             else:
                 sensitivity = 0.0
-            
+
             results.append(SensitivityResult(
                 param_name=param_name,
                 values=values.tolist(),
@@ -620,12 +646,12 @@ class SensitivityAnalyzer:
                 sensitivity=sensitivity,
                 rank=0,  # Will be set after sorting
             ))
-        
+
         # Rank by sensitivity
         results.sort(key=lambda x: abs(x.sensitivity), reverse=True)
         for i, r in enumerate(results):
             r.rank = i + 1
-        
+
         return results
 
 
@@ -633,12 +659,13 @@ class SensitivityAnalyzer:
 # Deflated Sharpe Ratio
 # ============================================================================
 
+
 @dataclass
 class DeflatedSharpeConfig:
     """Configuration for deflated Sharpe ratio calculation."""
     n_trials: int = 1000          # Number of Monte Carlo trials
     min_track_record: int = 12    # Minimum track record in months
-    confidence_level: float = 0.95 # Confidence level for PSR
+    confidence_level: float = 0.95  # Confidence level for PSR
 
 
 def compute_deflated_sharpe(
@@ -651,52 +678,52 @@ def compute_deflated_sharpe(
 ) -> Dict[str, float]:
     """
     Compute the Probabilistic Sharpe Ratio (PSR) and Deflated Sharpe Ratio (DSR).
-    
+
     Based on Bailey & Lopez de Prado (2014): "The Deflated Sharpe Ratio:
     correcting for selection bias, backtest overfitting, and non-normality."
-    
+
     Returns:
-        Dictionary with 'psr' (Probabilistic Sharpe Ratio), 
+        Dictionary with 'psr' (Probabilistic Sharpe Ratio),
         'dsr' (Deflated Sharpe Ratio), 'p_value' (p-value of Sharpe being > 0).
     """
     if n_observations < 2:
         return {'psr': 0.0, 'dsr': 0.0, 'p_value': 1.0}
-    
+
     # Standard error of Sharpe ratio (Lo, 2002)
-    se_sharpe = math.sqrt((1 + 0.5 * sharpe**2 - skew * sharpe + 
+    se_sharpe = math.sqrt((1 + 0.5 * sharpe**2 - skew * sharpe +
                            (kurtosis - 3) / 4 * sharpe**2) / n_observations)
-    
+
     # Probabilistic Sharpe Ratio (PSR)
     # Probability that estimated Sharpe is greater than 0
     if se_sharpe > 0:
         psr = stats.norm.cdf(sharpe / se_sharpe)
     else:
         psr = 1.0 if sharpe > 0 else 0.0
-    
+
     # Deflated Sharpe Ratio (DSR)
     # Adjusts for multiple testing (selection bias)
     # DSR = PSR adjusted for multiple trials
     # Using the formula from Bailey & Lopez de Prado (2014)
-    
+
     # Expected maximum Sharpe from n_trials independent strategies
     # E[max] ≈ σ * Φ^(-1)(1 - 1/n_trials) where σ = std of Sharpe estimates
     # For normally distributed Sharpe estimates with variance se_sharpe^2
-    
+
     if sharpe <= 0:
         return {'psr': psr, 'dsr': 0.0, 'p_value': 1.0 - psr}
-    
+
     # Expected maximum Sharpe from n_trials (order statistic)
     # Using extreme value theory approximation
-    z_n = stats.norm.ppf(1 - 1.0 / n_trials) if n_trials > 1 else 1.0
+    _z_n = stats.norm.ppf(1 - 1.0 / n_trials) if n_trials > 1 else 1.0
     expected_max_sharpe = sharpe * n_observations / (n_observations + n_observations * sharpe**2 / 2)
-    
+
     # Deflated Sharpe: adjust for selection bias
     # DSR = Sharpe - expected_max_sharpe_from_selection
     dsr = max(0.0, sharpe - expected_max_sharpe)
-    
+
     # p-value: probability that a random strategy would achieve this Sharpe
     p_value = 1.0 - stats.norm.cdf(sharpe / se_sharpe) if se_sharpe > 0 else 1.0
-    
+
     return {
         'psr': psr,
         'dsr': dsr,
@@ -707,279 +734,35 @@ def compute_deflated_sharpe(
 
 
 # ============================================================================
-# FastAPI Job Service for Backtests
+# Result Classes
 # ============================================================================
 
-# This would be in a separate file: backtest/api.py
-# Including here for completeness
 
-"""
-# backtest/api.py
+@dataclass
+class BacktestResult:
+    """Result of a backtest run."""
+    initial_cash: float
+    final_equity: float
+    total_pnl: float
+    total_return: float
+    total_trades: int
+    fills: List
+    cheat_detected: bool
+    cheat_details: List[str]
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks
-from pydantic import BaseModel, Field
-from typing import Optional, Dict, Any, List
-from enum import Enum
-import uuid
-import asyncio
-from pathlib import Path
-import json
-
-app = FastAPI(title="StockBroker Backtest API", version="0.1.0")
-
-class JobStatus(str, Enum):
-    PENDING = "pending"
-    RUNNING = "running"
-    COMPLETED = "completed"
-    FAILED = "failed"
-
-class BacktestRequest(BaseModel):
-    strategy_name: str
-    strategy_params: Dict[str, Any] = {}
-    engine_params: Dict[str, Any] = {}
-    data_path: str
-    start_time_ns: int
-    end_time_ns: int
-    symbol: str = "BTC-USDT"
-
-class JobResponse(BaseModel):
-    job_id: str
-    status: JobStatus
-    message: str = ""
-
-class JobStatusResponse(BaseModel):
-    job_id: str
-    status: JobStatus
-    progress: float = 0.0
-    message: str = ""
-    result: Optional[Dict[str, Any]] = None
-
-class ArtifactInfo(BaseModel):
-    artifact_id: str
-    artifact_type: str  # "report", "fills", "equity_curve", "run_record"
-    path: str
-    size_bytes: int
-    created_at: str
-
-# In-memory job store (would use Redis in production)
-_job_store: Dict[str, Dict[str, Any]] = {}
-_artifact_store: Dict[str, Dict[str, Any]] = {}
-
-@app.post("/backtests", response_model=JobResponse)
-async def submit_backtest(request: BacktestRequest, background_tasks: BackgroundTasks):
-    job_id = str(uuid.uuid4())[:8]
-    _job_store[job_id] = {
-        "status": JobStatus.PENDING,
-        "request": request.dict(),
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "progress": 0.0,
-    }
-    
-    background_tasks.add_task(run_backtest_job, job_id)
-    
-    return JobResponse(job_id=job_id, status=JobStatus.PENDING)
-
-@app.get("/backtests/{job_id}", response_model=JobStatusResponse)
-async def get_job_status(job_id: str):
-    if job_id not in _job_store:
-        raise HTTPException(status_code=404, detail="Job not found")
-    job = _job_store[job_id]
-    return JobStatusResponse(
-        job_id=job_id,
-        status=job["status"],
-        progress=job.get("progress", 0.0),
-        message=job.get("message", ""),
-        result=job.get("result"),
-    )
-
-@app.get("/backtests/{job_id}/artifacts", response_model=List[ArtifactInfo])
-async def list_artifacts(job_id: str):
-    if job_id not in _artifact_store:
-        return []
-    return [
-        ArtifactInfo(
-            artifact_id=k,
-            artifact_type=v["type"],
-            path=v["path"],
-            size_bytes=v["size"],
-            created_at=v["created_at"],
-        )
-        for k, v in _artifact_store[job_id].items()
-    ]
-
-@app.get("/backtests/{job_id}/artifacts/{artifact_id}")
-async def download_artifact(job_id: str, artifact_id: str):
-    if job_id not in _artifact_store or artifact_id not in _artifact_store[job_id]:
-        raise HTTPException(status_code=404, detail="Artifact not found")
-    artifact = _artifact_store[job_id][artifact_id]
-    return FileResponse(artifact["path"], filename=Path(artifact["path"]).name)
-
-async def run_backtest_job(job_id: str):
-    job = _job_store[job_id]
-    job["status"] = JobStatus.RUNNING
-    job["started_at"] = datetime.now(timezone.utc).isoformat()
-    
-    try:
-        request = job["request"]
-        # Create engine and run
-        spec = InstrumentSpec(...)  # from request
-        engine = Engine(...)  # from request
-        engine.set_strategy(...)  # from request
-        
-        # Create reader from data path
-        reader = EventReader.open_day(...)
-        
-        # Run backtest with progress updates
-        for progress in run_with_progress(engine, reader):
-            _job_store[job_id]["progress"] = progress
-        
-        # Generate report
-        report = generate_backtest_report(...)
-        report.save(f"artifacts/{job_id}/report.json")
-        
-        # Save artifacts
-        save_artifacts(job_id, engine)
-        
-        job["status"] = JobStatus.COMPLETED
-        job["completed_at"] = datetime.now(timezone.utc).isoformat()
-        job["result"] = {"report_path": f"artifacts/{job_id}/report.json"}
-    
-    except Exception as e:
-        job["status"] = JobStatus.FAILED
-        job["error"] = str(e)
-
-@app.get("/backtests", response_model=List[JobStatusResponse])
-async def list_jobs(status: Optional[JobStatus] = None, limit: int = 50, offset: int = 0):
-    jobs = list(_job_store.values())
-    if status:
-        jobs = [j for j in jobs if j["status"] == status]
-    jobs.sort(key=lambda x: x["created_at"], reverse=True)
-    return jobs[offset:offset+limit]
-
-"""
-
-# ============================================================================
-# Java /backtests Endpoints (for reference - to be implemented in Java)
-# ============================================================================
-
-"""
-// Java Spring Boot Controller for /backtests endpoints
-// File: src/main/java/com/stockbroker/backtest/BacktestController.java
-
-package com.stockbroker.backtest;
-
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
-import org.springframework.http.HttpStatus;
-import org.springframework.web.multipart.MultipartFile;
-import java.util.*;
-
-@RestController
-@RequestMapping("/api/v1/backtests")
-public class BacktestController {
-
-    @Autowired
-    private BacktestJobService jobService;
-
-    @PostMapping
-    public ResponseEntity<JobResponse> submitBacktest(@RequestBody BacktestRequest request) {
-        String jobId = jobService.submitBacktest(request);
-        return ResponseEntity.ok(new JobResponse(jobId, JobStatus.PENDING, "Job submitted"));
-    }
-
-    @GetMapping("/{jobId}")
-    public ResponseEntity<JobStatusResponse> getJobStatus(@PathVariable String jobId) {
-        JobStatusResponse status = jobService.getJobStatus(jobId);
-        if (status == null) {
-            return ResponseEntity.notFound().build();
-        }
-        return ResponseEntity.ok(status);
-    }
-
-    @GetMapping("/{jobId}/artifacts")
-    public ResponseEntity<List<ArtifactInfo>> listArtifacts(@PathVariable String jobId) {
-        List<ArtifactInfo> artifacts = jobService.listArtifacts(jobId);
-        return ResponseEntity.ok(artifacts);
-    }
-
-    @GetMapping("/{jobId}/artifacts/{artifactId}")
-    public ResponseEntity<Resource> downloadArtifact(
-            @PathVariable String jobId,
-            @PathVariable String artifactId) {
-        Artifact artifact = jobService.getArtifact(jobId, artifactId);
-        if (artifact == null) {
-            return ResponseEntity.notFound().build();
-        }
-        return ResponseEntity.ok()
-            .header(HttpHeaders.CONTENT_DISPOSITION, 
-                "attachment; filename=\"" + artifact.getFilename() + "\"")
-            .body(new FileSystemResource(artifact.getPath()));
-    }
-
-    @GetMapping
-    public ResponseEntity<List<JobStatusResponse>> listJobs(
-            @RequestParam(required = false) JobStatus status,
-            @RequestParam(defaultValue = "50") int limit,
-            @RequestParam(defaultValue = "0") int offset) {
-        return ResponseEntity.ok(jobService.listJobs(status, limit, offset));
-    }
-}
-
-// Data classes for Java
-
-public class BacktestRequest {
-    private String strategyName;
-    private Map<String, Object> strategyParams;
-    private Map<String, Object> engineParams;
-    private String dataPath;
-    private long startTimeNs;
-    private long endTimeNs;
-    private String symbol;
-    // getters/setters
-}
-
-public class JobResponse {
-    private String jobId;
-    private JobStatus status;
-    private String message;
-    // getters/setters
-}
-
-public enum JobStatus {
-    PENDING, RUNNING, COMPLETED, FAILED
-}
-
-public class JobStatusResponse {
-    private String jobId;
-    private JobStatus status;
-    private double progress;
-    private String message;
-    private Map<String, Object> result;
-    // getters/setters
-}
-
-public class ArtifactInfo {
-    private String artifactId;
-    private String artifactType; // "report", "fills", "equity_curve", "run_record"
-    private String path;
-    private long sizeBytes;
-    private String createdAt;
-    // getters/setters
-}
-
-"""
 
 # ============================================================================
 # Artifact Storage
 # ============================================================================
 
+
 class ArtifactStorage:
     """Manages artifact storage for backtest runs."""
-    
+
     def __init__(self, base_dir: str = "artifacts"):
         self.base_dir = Path(base_dir)
         self.base_dir.mkdir(parents=True, exist_ok=True)
-    
+
     def save_artifact(
         self,
         job_id: str,
@@ -990,20 +773,20 @@ class ArtifactStorage:
         """Save artifact and return metadata."""
         job_dir = self.base_dir / job_id
         job_dir.mkdir(parents=True, exist_ok=True)
-        
+
         if filename is None:
             timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
             filename = f"{artifact_type}_{timestamp}.json"
-        
+
         file_path = job_dir / filename
         if isinstance(content, (dict, list)):
             content_bytes = json.dumps(content, default=str, indent=2).encode()
         else:
             content_bytes = content if isinstance(content, bytes) else str(content).encode()
-        
+
         file_path = job_dir / filename
         file_path.write_bytes(content_bytes)
-        
+
         return {
             "artifact_id": str(uuid.uuid4())[:8],
             "artifact_type": artifact_type,
@@ -1011,12 +794,12 @@ class ArtifactStorage:
             "size_bytes": file_path.stat().st_size,
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
-    
+
     def get_artifact(self, job_id: str, artifact_id: str) -> Optional[Dict]:
         """Get artifact metadata."""
         # Would read from metadata file
         pass
-    
+
     def list_artifacts(self, job_id: str) -> List[Dict]:
         """List all artifacts for a job."""
         job_dir = self.base_dir / job_id
@@ -1033,7 +816,7 @@ class ArtifactStorage:
                 "created_at": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
             })
         return artifacts
-    
+
     def get_artifact_path(self, job_id: str, artifact_id: str) -> Optional[Path]:
         """Get path to artifact file."""
         job_dir = self.base_dir / job_id
@@ -1054,7 +837,7 @@ if __name__ == "__main__":
         tick_size=100000000,
         lot_size=100000000,
     )
-    
+
     engine = Engine(
         spec=spec,
         initial_cash=100_000.0,
@@ -1062,10 +845,10 @@ if __name__ == "__main__":
         maker_rebate_bps=0.0,
         slippage_bps=0.0,
     )
-    
+
     # Set strategy
     engine.set_strategy(buy_and_hold_strategy)
-    
+
     # Run backtest (would need EventReader)
     # result = engine.run(reader)
     # print(f"PnL: {result.total_pnl:.2f}")

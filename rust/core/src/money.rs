@@ -180,11 +180,7 @@ impl Qty {
     /// Returns the value or a default if the quantity is zero.
     #[must_use]
     pub fn unwrap_or_else(self, default: impl FnOnce() -> Self) -> Self {
-        if self.is_zero() {
-            default()
-        } else {
-            self
-        }
+        if self.is_zero() { default() } else { self }
     }
 }
 

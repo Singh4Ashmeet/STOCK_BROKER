@@ -385,6 +385,23 @@ public class MarketWebSocketHandler extends TextWebSocketHandler {
         }
     }
 
+    private Map<String, Object> formatMetricsData(MarketDtos.Metrics metrics) {
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("best_bid", metrics.bestBid());
+        data.put("best_ask", metrics.bestAsk());
+        data.put("best_bid_qty", metrics.bestBidQty());
+        data.put("best_ask_qty", metrics.bestAskQty());
+        data.put("spread", metrics.spread());
+        data.put("mid", metrics.mid());
+        data.put("microprice", metrics.microprice());
+        data.put("imbalance_top_n", metrics.imbalanceTopN());
+        data.put("rolling_vwap", metrics.rollingVwap());
+        data.put("trade_flow_imbalance", metrics.tradeFlowImbalance());
+        data.put("depth", metrics.depth());
+        data.put("book_valid", metrics.bookValid());
+        return data;
+    }
+
     private void sendMetrics(SessionContext ctx, String symbol) {
         var metrics = marketStateManager.getMetrics(symbol);
         if (metrics != null) {
@@ -395,20 +412,7 @@ public class MarketWebSocketHandler extends TextWebSocketHandler {
                     "ep", metrics.epoch(),
                     "sq", metrics.seq(),
                     "tm", metrics.timing(),
-                    "d", Map.of(
-                            "best_bid", metrics.bestBid(),
-                            "best_ask", metrics.bestAsk(),
-                            "best_bid_qty", metrics.bestBidQty(),
-                            "best_ask_qty", metrics.bestAskQty(),
-                            "spread", metrics.spread(),
-                            "mid", metrics.mid(),
-                            "microprice", metrics.microprice(),
-                            "imbalance_top_n", metrics.imbalanceTopN(),
-                            "rolling_vwap", metrics.rollingVwap(),
-                            "trade_flow_imbalance", metrics.tradeFlowImbalance(),
-                            "depth", metrics.depth(),
-                            "book_valid", metrics.bookValid()
-                    )
+                    "d", formatMetricsData(metrics)
             );
             ctx.enqueue(msg);
         }
@@ -494,20 +498,7 @@ public class MarketWebSocketHandler extends TextWebSocketHandler {
                 "ep", metrics.epoch(),
                 "sq", metrics.seq(),
                 "tm", metrics.timing(),
-                "d", Map.of(
-                        "best_bid", metrics.bestBid(),
-                        "best_ask", metrics.bestAsk(),
-                        "best_bid_qty", metrics.bestBidQty(),
-                        "best_ask_qty", metrics.bestAskQty(),
-                        "spread", metrics.spread(),
-                        "mid", metrics.mid(),
-                        "microprice", metrics.microprice(),
-                        "imbalance_top_n", metrics.imbalanceTopN(),
-                        "rolling_vwap", metrics.rollingVwap(),
-                        "trade_flow_imbalance", metrics.tradeFlowImbalance(),
-                        "depth", metrics.depth(),
-                        "book_valid", metrics.bookValid()
-                )
+                "d", formatMetricsData(metrics)
         );
 
         for (String sessionId : sessionIds) {

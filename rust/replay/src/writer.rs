@@ -241,6 +241,7 @@ impl LogWriterHandle {
     }
 
     /// Convenience helper to log a trade.
+    #[allow(clippy::too_many_arguments)]
     pub fn log_trade(
         &self,
         symbol: &str,
@@ -257,6 +258,7 @@ impl LogWriterHandle {
     }
 
     /// Convenience helper to log a gap marker.
+    #[allow(clippy::too_many_arguments)]
     pub fn log_gap(
         &self,
         symbol: &str,
@@ -355,6 +357,12 @@ impl EventLogWriter {
 }
 
 /// Background worker loop for writing event records.
+#[allow(
+    clippy::too_many_lines,
+    clippy::needless_pass_by_value,
+    clippy::unnecessary_wraps,
+    clippy::collapsible_if
+)]
 fn run_writer_loop(
     receiver: Receiver<WriterCommand>,
     config: WriterConfig,

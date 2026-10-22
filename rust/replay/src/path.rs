@@ -24,7 +24,9 @@ impl HourBucket {
     #[allow(
         clippy::as_conversions,
         clippy::cast_possible_truncation,
-        clippy::cast_sign_loss
+        clippy::cast_sign_loss,
+        clippy::cast_lossless,
+        clippy::arithmetic_side_effects
     )]
     pub fn from_ts_ns(ts_ns: i64) -> Self {
         let secs = ts_ns.max(0) / 1_000_000_000;
@@ -85,11 +87,14 @@ impl LogPathBuilder {
     /// `{base}/venue={VENUE}/symbol={SYMBOL}/date={YYYY-MM-DD}/hour={HH}`
     #[must_use]
     pub fn hour_dir(&self, symbol: &str, bucket: HourBucket) -> PathBuf {
+        let venue = &self.venue;
+        let date_str = bucket.date_string();
+        let hour_str = bucket.hour_string();
         self.base_dir
-            .join(format!("venue={}", self.venue))
-            .join(format!("symbol={}", symbol))
-            .join(format!("date={}", bucket.date_string()))
-            .join(format!("hour={}", bucket.hour_string()))
+            .join(format!("venue={venue}"))
+            .join(format!("symbol={symbol}"))
+            .join(format!("date={date_str}"))
+            .join(format!("hour={hour_str}"))
     }
 
     /// Return the final completed `.pbz` file path for a part index:
@@ -97,7 +102,7 @@ impl LogPathBuilder {
     #[must_use]
     pub fn final_file_path(&self, symbol: &str, bucket: HourBucket, part_idx: u32) -> PathBuf {
         self.hour_dir(symbol, bucket)
-            .join(format!("part-{:04}.pbz", part_idx))
+            .join(format!("part-{part_idx:04}.pbz"))
     }
 
     /// Return the temporary `.part` file path used during writing:
@@ -105,7 +110,7 @@ impl LogPathBuilder {
     #[must_use]
     pub fn part_file_path(&self, symbol: &str, bucket: HourBucket, part_idx: u32) -> PathBuf {
         self.hour_dir(symbol, bucket)
-            .join(format!("part-{:04}.pbz.part", part_idx))
+            .join(format!("part-{part_idx:04}.pbz.part"))
     }
 }
 

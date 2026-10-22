@@ -7,7 +7,7 @@ use sb_connectors::{
     BinanceConfig, BinanceConnector, ConnectionState, Exchange, MarketEvent, OrderBookSynchronizer,
     ParsedMessage,
 };
-use sb_core::{BookSide, Clock, InstrumentSpec, SymbolId, SystemClock};
+use sb_core::{Clock, InstrumentSpec, SymbolId, SystemClock};
 use std::time::Duration;
 use tokio_tungstenite::connect_async;
 
@@ -84,7 +84,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!(
             "🟢 [LIVE SNAPSHOT] epoch={} seq={} bids={} asks={} (internal_lat={}ns)",
             epoch.id(),
-            seq.get(),
+            seq.id(),
             bids.len(),
             asks.len(),
             timing.internal_latency_ns()
@@ -130,21 +130,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     })) => {
                         println!(
                             "⚡ [DELTA] seq={} bids_updated={} asks_updated={} (e2e_lat={}ns)",
-                            seq.get(),
+                            seq.id(),
                             bids.len(),
                             asks.len(),
                             timing.e2e_latency_ns()
                         );
-                        if let Some(bid) = synchronizer.book().best_bid() {
-                            if let Some(ask) = synchronizer.book().best_ask() {
-                                println!(
-                                    "   Spread: {} (bid={} ask={})",
-                                    ask.price.units() - bid.price.units(),
-                                    bid.price.units(),
-                                    ask.price.units()
-                                );
-                            }
+                        if let (Some(bid), Some(ask)) = (
+                            synchronizer.book().best_bid(),
+                            synchronizer.book().best_ask(),
+                        ) {
+                            println!(
+                                "   Spread: {} (bid={} ask={})",
+                                ask.price.units() - bid.price.units(),
+                                bid.price.units(),
+                                ask.price.units()
+                            );
                         }
+                    }
+                    Ok(Some(MarketEvent::Snapshot { .. }))
+                    | Ok(Some(MarketEvent::Trade { .. }))
+                    | Ok(Some(MarketEvent::StateChange { .. })) => {
+                        // on_diff in Live state only returns Delta; other variants are unreachable here
+                        unreachable!("on_diff returned unexpected MarketEvent variant")
                     }
                     Ok(None) => {}
                     Err(e) => {

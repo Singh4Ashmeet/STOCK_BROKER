@@ -41,6 +41,7 @@ impl EventLogReader {
         // 2. Read length-delimited LogHeader
         let mut len_buf = [0u8; 4];
         decoder.read_exact(&mut len_buf)?;
+        #[allow(clippy::as_conversions)]
         let header_len = u32::from_le_bytes(len_buf) as usize;
 
         let mut header_bytes = vec![0u8; header_len];
@@ -88,6 +89,7 @@ impl EventLogReader {
             Err(e) => return Err(ReplayError::Io(e)),
         }
 
+        #[allow(clippy::as_conversions)]
         let record_len = u32::from_le_bytes(len_buf) as usize;
         self.record_buffer.resize(record_len, 0);
         self.decoder.read_exact(&mut self.record_buffer)?;

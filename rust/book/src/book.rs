@@ -406,7 +406,9 @@ impl Book {
         let count = self.levels(side, n, &mut out);
         let mut total = Qty::ZERO;
         for level in out.iter().take(count) {
-            total = total.checked_add(level.qty).map_err(|_| BookError::Overflow)?;
+            total = total
+                .checked_add(level.qty)
+                .map_err(|_| BookError::Overflow)?;
         }
         Ok(total)
     }
@@ -414,6 +416,67 @@ impl Book {
     /// Walk the market (simulate a market order fill)
     ///
     /// # Errors
+    ///
+    fn collect_sorted_bid_levels(&self) -> Vec<(Price, Qty)> {
+        let mut levels = Vec::with_capacity(64);
+
+        // Collect from window (bids: highest price first)
+        let mut idx = self.bid_best_idx;
+        while let Some(i) = idx {
+            let level = &self.bid_window[i];
+            if !level.qty.is_zero() {
+                #[allow(clippy::expect_used)]
+                let price = Price::from_ticks(level.price_ticks, &self.spec)
+                    .expect("valid price_ticks: price_ticks validated on insert");
+                levels.push((price, level.qty));
+            }
+            idx = self.prev_occupied_bid(i);
+        }
+        // Collect from far (highest price first)
+        for (&price_ticks, &qty) in self.bid_far.iter().rev() {
+            #[allow(clippy::expect_used)]
+            let price = Price::from_ticks(price_ticks, &self.spec)
+                .expect("valid price_ticks: price_ticks validated on insert");
+            levels.push((price, qty));
+        }
+        // Sort by price descending (highest first for bids)
+        #[allow(clippy::unnecessary_sort_by)]
+        levels.sort_by_key(|a| std::cmp::Reverse(a.0));
+        levels
+    }
+
+    fn collect_sorted_ask_levels(&self) -> Vec<(Price, Qty)> {
+        let mut levels = Vec::with_capacity(64);
+
+        // Collect from window (asks: lowest price first)
+        let mut idx = self.ask_best_idx;
+        while let Some(i) = idx {
+            let level = &self.ask_window[i];
+            if !level.qty.is_zero() {
+                #[allow(clippy::expect_used)]
+                let price = Price::from_ticks(level.price_ticks, &self.spec)
+                    .expect("valid price_ticks: price_ticks validated on insert");
+                levels.push((price, level.qty));
+            }
+            idx = self.next_occupied_ask(i);
+        }
+        // Collect from far (lowest price first)
+        for (&price_ticks, &qty) in &self.ask_far {
+            #[allow(clippy::expect_used)]
+            let price = Price::from_ticks(price_ticks, &self.spec)
+                .expect("valid price_ticks: price_ticks validated on insert");
+            levels.push((price, qty));
+        }
+        // Sort by price ascending (lowest first for asks)
+        #[allow(clippy::unnecessary_sort_by)]
+        levels.sort_by_key(|a| a.0);
+        levels
+    }
+
+    /// Walk the book for a market order of the given size.
+    ///
+    /// For a Buy order (`side == BookSide::Ask`), walks ask levels (lowest to highest).
+    /// For a Sell order (`side == BookSide::Bid`), walks bid levels (highest to lowest).
     ///
     /// Returns `BookError::Overflow` if notional or quantity exceeds arithmetic bounds.
     /// Returns `BookError::Crossed` if the book is crossed.
@@ -429,112 +492,31 @@ impl Book {
         let mut plan = FillPlan::empty();
         let mut remaining = qty;
 
-        match side {
-            BookSide::Bid => {
-                // Selling: walk bids from best to worst (highest price first)
-                // Collect all levels from window and far, sort by price descending
-                let mut levels = Vec::with_capacity(64);
+        let levels = match side {
+            BookSide::Bid => self.collect_sorted_bid_levels(),
+            BookSide::Ask => self.collect_sorted_ask_levels(),
+        };
 
-                // Collect from window (bids: highest price first)
-                let mut idx = self.bid_best_idx;
-                while let Some(i) = idx {
-                    let level = &self.bid_window[i];
-                    if !level.qty.is_zero() {
-                        // price_ticks is always valid for non-zero qty levels (invariant maintained by set_bid_level)
-                        #[allow(clippy::expect_used)]
-                        let price = Price::from_ticks(level.price_ticks, &self.spec)
-                            .expect("valid price_ticks: price_ticks validated on insert");
-                        levels.push((price, level.qty));
-                    }
-                    idx = self.prev_occupied_bid(i);
-                }
-                // Collect from far (highest price first)
-                for (&price_ticks, &qty) in self.bid_far.iter().rev() {
-                    // price_ticks in far map is always valid (validated on insert)
-                    #[allow(clippy::expect_used)]
-                    let price = Price::from_ticks(price_ticks, &self.spec)
-                        .expect("valid price_ticks: price_ticks validated on insert");
-                    levels.push((price, qty));
-                }
-                // Sort by price descending (highest first for bids)
-                #[allow(clippy::unnecessary_sort_by)]
-                levels.sort_by_key(|a| std::cmp::Reverse(a.0));
-
-                // Fill from best to worst
-                for (price, level_qty) in levels {
-                    if remaining.is_zero() {
-                        break;
-                    }
-                    let fill_qty = if level_qty <= remaining {
-                        level_qty
-                    } else {
-                        remaining
-                    };
-                    plan.levels.push(FillLevel::new(price, level_qty, fill_qty));
-                    let notional_val = sb_core::notional(price, fill_qty);
-                    plan.total_notional = plan
-                        .total_notional
-                        .checked_add(notional_val)
-                        .ok_or(BookError::Overflow)?;
-                    remaining = remaining.checked_sub(fill_qty).unwrap_or(Qty::ZERO);
-                    plan.total_filled = plan
-                        .total_filled
-                        .checked_add(fill_qty)
-                        .map_err(|_| BookError::Overflow)?;
-                }
+        for (price, level_qty) in levels {
+            if remaining.is_zero() {
+                break;
             }
-            BookSide::Ask => {
-                // Buying: walk asks from best to worst (lowest price first)
-                let mut levels = Vec::with_capacity(64);
-
-                // Collect from window (asks: lowest price first)
-                let mut idx = self.ask_best_idx;
-                while let Some(i) = idx {
-                    let level = &self.ask_window[i];
-                    if !level.qty.is_zero() {
-                        // price_ticks is always valid for non-zero qty levels (invariant maintained by set_ask_level)
-                        #[allow(clippy::expect_used)]
-                        let price = Price::from_ticks(level.price_ticks, &self.spec)
-                            .expect("valid price_ticks: price_ticks validated on insert");
-                        levels.push((price, level.qty));
-                    }
-                    idx = self.next_occupied_ask(i);
-                }
-                // Collect from far (lowest price first)
-                for (&price_ticks, &qty) in &self.ask_far {
-                    // price_ticks in far map is always valid (validated on insert)
-                    #[allow(clippy::expect_used)]
-                    let price = Price::from_ticks(price_ticks, &self.spec)
-                        .expect("valid price_ticks: price_ticks validated on insert");
-                    levels.push((price, qty));
-                }
-                // Sort by price ascending (lowest first for asks)
-                #[allow(clippy::unnecessary_sort_by)]
-                levels.sort_by_key(|a| a.0);
-
-                // Fill from best to worst
-                for (price, level_qty) in levels {
-                    if remaining.is_zero() {
-                        break;
-                    }
-                    let fill_qty = if level_qty <= remaining {
-                        level_qty
-                    } else {
-                        remaining
-                    };
-                    plan.levels.push(FillLevel::new(price, level_qty, fill_qty));
-                    let notional_val = sb_core::notional(price, fill_qty);
-                    plan.total_notional = plan
-                        .total_notional
-                        .checked_add(notional_val)
-                        .ok_or(BookError::Overflow)?;
-                    remaining = remaining.checked_sub(fill_qty).unwrap_or(Qty::ZERO);
-                    plan.total_filled = plan
-                        .total_filled
-                        .checked_add(fill_qty)
-                        .map_err(|_| BookError::Overflow)?;
-                }
-            }
+            let fill_qty = if level_qty <= remaining {
+                level_qty
+            } else {
+                remaining
+            };
+            plan.levels.push(FillLevel::new(price, level_qty, fill_qty));
+            let notional_val = sb_core::notional(price, fill_qty);
+            plan.total_notional = plan
+                .total_notional
+                .checked_add(notional_val)
+                .ok_or(BookError::Overflow)?;
+            remaining = remaining.checked_sub(fill_qty).unwrap_or(Qty::ZERO);
+            plan.total_filled = plan
+                .total_filled
+                .checked_add(fill_qty)
+                .map_err(|_| BookError::Overflow)?;
         }
 
         if !plan.total_filled.is_zero() {
@@ -1339,7 +1321,9 @@ mod tests {
         .unwrap();
 
         // Buy 150 units (walk asks)
-        let plan = book.walk_market(BookSide::Ask, Qty::from_units(150).unwrap()).unwrap();
+        let plan = book
+            .walk_market(BookSide::Ask, Qty::from_units(150).unwrap())
+            .unwrap();
         assert_eq!(plan.total_filled.units(), 150);
         assert_eq!(plan.levels.len(), 2);
         assert_eq!(plan.levels[0].price.units(), 1010);

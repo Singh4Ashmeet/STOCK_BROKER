@@ -19,17 +19,19 @@ pub use spec::PyInstrumentSpec;
 
 /// Return detailed build and version information about `pybook`.
 #[pyfunction]
-fn build_info<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
-    let dict = PyDict::new_bound(py);
-    dict.set_item("version", env!("CARGO_PKG_VERSION"))?;
-    dict.set_item("schema_version", sb_replay::schema::SCHEMA_VERSION)?;
+fn build_info<'py>(py: Python<'py>) -> Bound<'py, PyDict> {
+    let dict = PyDict::new(py);
+    dict.set_item("version", env!("CARGO_PKG_VERSION")).unwrap();
+    dict.set_item("schema_version", sb_replay::schema::SCHEMA_VERSION)
+        .unwrap();
     dict.set_item(
         "min_supported_schema_version",
         sb_replay::schema::MIN_SUPPORTED_SCHEMA_VERSION,
-    )?;
-    dict.set_item("rustc_version", "rustc 1.99+")?;
-    dict.set_item("features", "abi3-py310, numpy")?;
-    Ok(dict)
+    )
+    .unwrap();
+    dict.set_item("rustc_version", "rustc 1.99+").unwrap();
+    dict.set_item("features", "abi3-py310, numpy").unwrap();
+    dict
 }
 
 /// PyO3 C-extension module entry point.
@@ -39,11 +41,11 @@ fn _pybook(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(build_info, m)?)?;
 
     // Exceptions
-    m.add("PyBookError", m.py().get_type_bound::<PyBookError>())?;
-    m.add("DataGapError", m.py().get_type_bound::<DataGapError>())?;
+    m.add("PyBookError", m.py().get_type::<PyBookError>())?;
+    m.add("DataGapError", m.py().get_type::<DataGapError>())?;
     m.add(
         "SchemaVersionError",
-        m.py().get_type_bound::<SchemaVersionError>(),
+        m.py().get_type::<SchemaVersionError>(),
     )?;
 
     // Classes

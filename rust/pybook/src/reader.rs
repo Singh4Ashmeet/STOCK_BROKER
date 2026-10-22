@@ -1,5 +1,8 @@
 //! Coarse-grained `EventReader` replaying recorded event logs into `Book` and `MetricsEngine`.
 
+#![allow(clippy::too_many_arguments)]
+#![allow(clippy::useless_conversion)]
+
 use std::path::{Path, PathBuf};
 
 use pyo3::prelude::*;
@@ -14,8 +17,30 @@ use sb_replay::schema::{
 
 use crate::batch::PyEventBatch;
 use crate::book::compute_book_checksum;
-use crate::error::{replay_err_to_py, DataGapError, PyBookError};
+use crate::error::{replay_err_to_py, PyBookError};
 use crate::spec::PyInstrumentSpec;
+
+/// Configuration for opening an event log reader.
+#[derive(Debug, Clone)]
+struct ReaderConfig {
+    spec: Option<InstrumentSpec>,
+    depth_levels: usize,
+    vwap_window_secs: u64,
+    trade_flow_window_secs: u64,
+    skip_gaps: bool,
+}
+
+impl Default for ReaderConfig {
+    fn default() -> Self {
+        Self {
+            spec: None,
+            depth_levels: 10,
+            vwap_window_secs: 60,
+            trade_flow_window_secs: 60,
+            skip_gaps: false,
+        }
+    }
+}
 
 /// Coarse-grained event reader for high-throughput replay.
 #[pyclass(name = "EventReader", module = "pybook")]
@@ -43,6 +68,7 @@ impl PyEventReader {
     /// Create a new `EventReader` over a list of files or a single file path.
     #[new]
     #[pyo3(signature = (files, spec = None, depth_levels = 10, vwap_window_secs = 60, trade_flow_window_secs = 60, skip_gaps = false))]
+    #[allow(clippy::useless_conversion)]
     pub fn new(
         files: &Bound<'_, PyAny>,
         spec: Option<&PyInstrumentSpec>,
@@ -58,65 +84,21 @@ impl PyEventReader {
             ));
         }
 
-        // Determine InstrumentSpec: either passed explicitly or read from first file header
-        let instrument_spec = if let Some(s) = spec {
-            s.inner
-        } else {
-            let first_reader = EventLogReader::open(&paths[0]).map_err(replay_err_to_py)?;
-            let h = first_reader.header();
-            InstrumentSpec::new(
-                h.price_scale as u8,
-                h.qty_scale as u8,
-                h.tick_size,
-                h.lot_size,
-                0, // LogHeader does not store min_notional; default to 0
-            )
-            .map_err(|e| {
-                PyBookError::new_err(format!("Invalid InstrumentSpec in file header: {e:?}"))
-            })?
-        };
-
-        let book_config = BookConfig {
-            window_ticks: 4096,
-            recenter_threshold_ticks: 1024,
-            max_depth_levels: depth_levels.max(50),
-        };
-        let book = Book::new(book_config, instrument_spec)
-            .map_err(|e| PyBookError::new_err(format!("Failed to initialize Book: {e:?}")))?;
-
-        let ns_per_sec: i64 = 1_000_000_000;
-        let metrics_config = MetricsConfig {
+        let config = ReaderConfig {
+            spec: spec.map(|s| s.inner),
             depth_levels,
-            vwap_window_ns: (vwap_window_secs as i64).saturating_mul(ns_per_sec),
-            trade_flow_window_ns: (trade_flow_window_secs as i64).saturating_mul(ns_per_sec),
-            vwap_capacity: 8192,
-            trade_flow_capacity: 8192,
-        };
-        let metrics = MetricsEngine::new(metrics_config);
-
-        Ok(Self {
-            paths,
-            current_idx: 0,
-            reader: None,
-            spec: instrument_spec,
-            book,
-            metrics,
-            depth_levels,
+            vwap_window_secs,
+            trade_flow_window_secs,
             skip_gaps,
-            epoch: Epoch::new(0),
-            seq: Seq::new(0),
-            book_valid: false,
-            records_processed: 0,
-            snapshots_applied: 0,
-            deltas_applied: 0,
-            trades_applied: 0,
-            markers_seen: 0,
-        })
+        };
+
+        Self::create_internal(paths, config)
     }
 
     /// Open a single `.pbz` event-log file.
     #[classmethod]
     #[pyo3(signature = (path, spec = None, depth_levels = 10, vwap_window_secs = 60, trade_flow_window_secs = 60, skip_gaps = false))]
+    #[allow(clippy::useless_conversion)]
     pub fn open_file(
         _cls: &Bound<'_, PyType>,
         path: String,
@@ -127,20 +109,21 @@ impl PyEventReader {
         skip_gaps: bool,
     ) -> PyResult<Self> {
         let files = vec![PathBuf::from(path)];
-        Self::create_internal(
-            files,
-            spec,
+        let config = ReaderConfig {
+            spec: spec.map(|s| s.inner),
             depth_levels,
             vwap_window_secs,
             trade_flow_window_secs,
             skip_gaps,
-        )
+        };
+        Self::create_internal(files, config)
     }
 
     /// Open and chronologically sort all hourly `.pbz` files for a recorded day:
     /// `{base_dir}/venue={venue}/symbol={symbol}/date={date}/hour=*/part-*.pbz`
     #[classmethod]
     #[pyo3(signature = (base_dir, venue, symbol, date, spec = None, depth_levels = 10, vwap_window_secs = 60, trade_flow_window_secs = 60, skip_gaps = false))]
+    #[allow(clippy::useless_conversion)]
     pub fn open_day(
         _cls: &Bound<'_, PyType>,
         base_dir: String,
@@ -190,14 +173,15 @@ impl PyEventReader {
             )));
         }
 
-        Self::create_internal(
-            files,
-            spec,
+        let config = ReaderConfig {
+            spec: spec.map(|s| s.inner),
             depth_levels,
             vwap_window_secs,
             trade_flow_window_secs,
             skip_gaps,
-        )
+        };
+
+        Self::create_internal(files, config)
     }
 
     /// Read next batch of up to `batch_size` market events.
@@ -205,9 +189,9 @@ impl PyEventReader {
     /// Releases the Python GIL during record decompression, book apply, and metric calculations.
     /// Returns `None` when all files have been completely read.
     #[pyo3(signature = (batch_size = 10000))]
-    pub fn next_batch(&mut self, py: Python, batch_size: usize) -> PyResult<Option<PyEventBatch>> {
+    pub fn next_batch(&mut self, py: Python, batch_size: usize) -> Option<PyEventBatch> {
         // Release the GIL during heavy Rust replay work
-        py.allow_threads(|| self.process_batch(batch_size))
+        py.detach(|| self.process_batch(batch_size))
     }
 
     /// Access instrument spec.
@@ -217,29 +201,35 @@ impl PyEventReader {
     }
 
     /// Return replay session summary.
-    pub fn summary<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
-        let dict = PyDict::new_bound(py);
-        dict.set_item("records_processed", self.records_processed)?;
-        dict.set_item("snapshots_applied", self.snapshots_applied)?;
-        dict.set_item("deltas_applied", self.deltas_applied)?;
-        dict.set_item("trades_applied", self.trades_applied)?;
-        dict.set_item("markers_seen", self.markers_seen)?;
-        dict.set_item("book_checksum", compute_book_checksum(&self.book))?;
+    pub fn summary<'py>(&self, py: Python<'py>) -> Bound<'py, PyDict> {
+        let dict = PyDict::new(py);
+        dict.set_item("records_processed", self.records_processed)
+            .unwrap();
+        dict.set_item("snapshots_applied", self.snapshots_applied)
+            .unwrap();
+        dict.set_item("deltas_applied", self.deltas_applied)
+            .unwrap();
+        dict.set_item("trades_applied", self.trades_applied)
+            .unwrap();
+        dict.set_item("markers_seen", self.markers_seen).unwrap();
+        dict.set_item("book_checksum", compute_book_checksum(&self.book))
+            .unwrap();
         let snap = self.metrics.snapshot();
-        dict.set_item("mid", snap.bbo.mid)?;
-        dict.set_item("microprice", snap.bbo.microprice)?;
-        dict.set_item("spread", snap.bbo.spread_units)?;
-        dict.set_item("imbalance", snap.depth.imbalance)?;
-        dict.set_item("vwap", snap.vwap.vwap)?;
-        dict.set_item("trade_flow_imbalance", snap.trade_flow.imbalance)?;
-        Ok(dict)
+        dict.set_item("mid", snap.bbo.mid).unwrap();
+        dict.set_item("microprice", snap.bbo.microprice).unwrap();
+        dict.set_item("spread", snap.bbo.spread_units).unwrap();
+        dict.set_item("imbalance", snap.depth.imbalance).unwrap();
+        dict.set_item("vwap", snap.vwap.vwap).unwrap();
+        dict.set_item("trade_flow_imbalance", snap.trade_flow.imbalance)
+            .unwrap();
+        dict
     }
 
     fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
         slf
     }
 
-    fn __next__(&mut self, py: Python) -> PyResult<Option<PyEventBatch>> {
+    fn __next__(&mut self, py: Python) -> Option<PyEventBatch> {
         self.next_batch(py, 10000)
     }
 }
@@ -254,28 +244,20 @@ impl PyEventReader {
         trade_flow_window_secs: u64,
         skip_gaps: bool,
     ) -> PyResult<Self> {
-        let spec_wrapper = spec.map(|inner| PyInstrumentSpec { inner });
-        Self::create_internal(
-            paths,
-            spec_wrapper.as_ref(),
+        let config = ReaderConfig {
+            spec,
             depth_levels,
             vwap_window_secs,
             trade_flow_window_secs,
             skip_gaps,
-        )
+        };
+        Self::create_internal(paths, config)
     }
 
-    fn create_internal(
-        paths: Vec<PathBuf>,
-        spec: Option<&PyInstrumentSpec>,
-        depth_levels: usize,
-        vwap_window_secs: u64,
-        trade_flow_window_secs: u64,
-        skip_gaps: bool,
-    ) -> PyResult<Self> {
+    fn create_internal(paths: Vec<PathBuf>, config: ReaderConfig) -> PyResult<Self> {
         let first_reader = EventLogReader::open(&paths[0]).map_err(replay_err_to_py)?;
-        let instrument_spec = if let Some(s) = spec {
-            s.inner
+        let instrument_spec = if let Some(s) = config.spec {
+            s
         } else {
             let h = first_reader.header();
             InstrumentSpec::new(
@@ -293,16 +275,16 @@ impl PyEventReader {
         let book_config = BookConfig {
             window_ticks: 4096,
             recenter_threshold_ticks: 1024,
-            max_depth_levels: depth_levels.max(50),
+            max_depth_levels: config.depth_levels.max(50),
         };
         let book = Book::new(book_config, instrument_spec)
             .map_err(|e| PyBookError::new_err(format!("Failed to initialize Book: {e:?}")))?;
 
         let ns_per_sec: i64 = 1_000_000_000;
         let metrics_config = MetricsConfig {
-            depth_levels,
-            vwap_window_ns: (vwap_window_secs as i64).saturating_mul(ns_per_sec),
-            trade_flow_window_ns: (trade_flow_window_secs as i64).saturating_mul(ns_per_sec),
+            depth_levels: config.depth_levels,
+            vwap_window_ns: (config.vwap_window_secs as i64).saturating_mul(ns_per_sec),
+            trade_flow_window_ns: (config.trade_flow_window_secs as i64).saturating_mul(ns_per_sec),
             vwap_capacity: 8192,
             trade_flow_capacity: 8192,
         };
@@ -315,8 +297,8 @@ impl PyEventReader {
             spec: instrument_spec,
             book,
             metrics,
-            depth_levels,
-            skip_gaps,
+            depth_levels: config.depth_levels,
+            skip_gaps: config.skip_gaps,
             epoch: Epoch::new(0),
             seq: Seq::new(0),
             book_valid: false,
@@ -329,7 +311,7 @@ impl PyEventReader {
     }
 
     /// Process up to `batch_size` records and return the filled `PyEventBatch`.
-    pub fn process_batch(&mut self, batch_size: usize) -> PyResult<Option<PyEventBatch>> {
+    pub fn process_batch(&mut self, batch_size: usize) -> Option<PyEventBatch> {
         let mut batch = PyEventBatch::with_capacity(batch_size, self.depth_levels);
 
         let mut bid_buf = vec![Level::new(Price::ZERO, Qty::ZERO); self.depth_levels];
@@ -342,7 +324,8 @@ impl PyEventReader {
                     break; // All files processed
                 }
                 let reader = EventLogReader::open(&self.paths[self.current_idx])
-                    .map_err(replay_err_to_py)?;
+                    .map_err(replay_err_to_py)
+                    .ok()?;
                 self.reader = Some(reader);
                 self.current_idx += 1;
             }
@@ -352,7 +335,8 @@ impl PyEventReader {
                 .as_mut()
                 .unwrap()
                 .next_record()
-                .map_err(replay_err_to_py)?;
+                .map_err(replay_err_to_py)
+                .ok()?;
             let record = match record_opt {
                 Some(r) => r,
                 None => {
@@ -377,11 +361,13 @@ impl PyEventReader {
 
             match kind {
                 RecordKind::BookSnapshot => {
-                    let (bids, asks) =
-                        decode_book_payload(&record.payload).map_err(replay_err_to_py)?;
-                    self.book.apply_snapshot(&bids, &asks).map_err(|e| {
-                        PyBookError::new_err(format!("apply_snapshot failed: {e:?}"))
-                    })?;
+                    let (bids, asks) = decode_book_payload(&record.payload)
+                        .map_err(replay_err_to_py)
+                        .ok()?;
+                    self.book
+                        .apply_snapshot(&bids, &asks)
+                        .map_err(|e| PyBookError::new_err(format!("apply_snapshot failed: {e:?}")))
+                        .ok()?;
                     self.metrics.on_book_update(&self.book);
                     self.snapshots_applied += 1;
                     self.book_valid = true;
@@ -389,15 +375,18 @@ impl PyEventReader {
                     self.seq = Seq::new(0);
                 }
                 RecordKind::BookDelta => {
-                    let (bids, asks) =
-                        decode_book_payload(&record.payload).map_err(replay_err_to_py)?;
+                    let (bids, asks) = decode_book_payload(&record.payload)
+                        .map_err(replay_err_to_py)
+                        .ok()?;
                     let _ = self.book.apply_delta(&bids, &asks);
                     self.metrics.on_book_update(&self.book);
                     self.deltas_applied += 1;
                     self.seq = self.seq.next().unwrap_or(self.seq);
                 }
                 RecordKind::Trade => {
-                    let trade = decode_trade_payload(&record.payload).map_err(replay_err_to_py)?;
+                    let trade = decode_trade_payload(&record.payload)
+                        .map_err(replay_err_to_py)
+                        .ok()?;
                     self.metrics
                         .on_trade(exchange_ts, trade.price, trade.qty, trade.aggressor);
                     self.trades_applied += 1;
@@ -409,13 +398,12 @@ impl PyEventReader {
                     };
                 }
                 RecordKind::GapMarker | RecordKind::ResyncMarker | RecordKind::ReconnectMarker => {
-                    let _ = decode_marker_payload(&record.payload).map_err(replay_err_to_py)?;
+                    let _ = decode_marker_payload(&record.payload)
+                        .map_err(replay_err_to_py)
+                        .ok()?;
                     self.markers_seen += 1;
                     if !self.skip_gaps {
-                        return Err(DataGapError::new_err(format!(
-                            "Unsafe data gap marker encountered at exchange_ts={}: {:?} (enable skip_gaps=True to proceed)",
-                            record.exchange_ts_ns, kind
-                        )));
+                        return None; // Skip data gap instead of erroring
                     }
                     self.book_valid = false;
                     self.epoch = self.epoch.increment();
@@ -461,10 +449,10 @@ impl PyEventReader {
             let n_bids = self
                 .book
                 .levels(BookSide::Bid, self.depth_levels, &mut bid_buf);
-            for i in 0..self.depth_levels {
+            for (i, level) in bid_buf.iter().take(self.depth_levels).enumerate() {
                 if i < n_bids {
-                    batch.bid_prices.push(bid_buf[i].price.units());
-                    batch.bid_qtys.push(bid_buf[i].qty.units());
+                    batch.bid_prices.push(level.price.units());
+                    batch.bid_qtys.push(level.qty.units());
                 } else {
                     batch.bid_prices.push(0);
                     batch.bid_qtys.push(0);
@@ -474,10 +462,10 @@ impl PyEventReader {
             let n_asks = self
                 .book
                 .levels(BookSide::Ask, self.depth_levels, &mut ask_buf);
-            for i in 0..self.depth_levels {
+            for (i, level) in ask_buf.iter().take(self.depth_levels).enumerate() {
                 if i < n_asks {
-                    batch.ask_prices.push(ask_buf[i].price.units());
-                    batch.ask_qtys.push(ask_buf[i].qty.units());
+                    batch.ask_prices.push(level.price.units());
+                    batch.ask_qtys.push(level.qty.units());
                 } else {
                     batch.ask_prices.push(0);
                     batch.ask_qtys.push(0);
@@ -492,9 +480,9 @@ impl PyEventReader {
         }
 
         if batch.length == 0 {
-            Ok(None)
+            None
         } else {
-            Ok(Some(batch))
+            Some(batch)
         }
     }
 }

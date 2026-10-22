@@ -475,10 +475,11 @@ mod tests {
         }
     }
 
+    #[allow(clippy::inconsistent_digit_grouping)]
     fn dummy_levels() -> Vec<BroadcastLevel> {
         vec![BroadcastLevel {
-            price: 50000_00,
-            qty: 1_00000,
+            price: 50_000_00,
+            qty: 100_000,
         }]
     }
 

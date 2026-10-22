@@ -108,7 +108,7 @@ impl ReplayDriver {
         payload: &[u8],
         exchange_ts: TsNs,
     ) -> Result<()> {
-        self.records_processed += 1;
+        self.records_processed = self.records_processed.saturating_add(1);
         match kind {
             RecordKind::BookSnapshot => {
                 let (bids, asks) = decode_book_payload(payload)?;
@@ -117,28 +117,28 @@ impl ReplayDriver {
                     .map_err(|e| ReplayError::Book(format!("apply_snapshot failed: {e:?}")))?;
                 // Live code path: update metrics after book state changes
                 self.metrics.on_book_update(&self.book);
-                self.snapshots_applied += 1;
+                self.snapshots_applied = self.snapshots_applied.saturating_add(1);
             }
             RecordKind::BookDelta => {
                 let (bids, asks) = decode_book_payload(payload)?;
                 let _apply_res = self.book.apply_delta(&bids, &asks);
                 // Live code path: update metrics after delta
                 self.metrics.on_book_update(&self.book);
-                self.deltas_applied += 1;
+                self.deltas_applied = self.deltas_applied.saturating_add(1);
             }
             RecordKind::Trade => {
                 let trade = decode_trade_payload(payload)?;
                 // Live code path: pass trade to metrics engine with venue event time
                 self.metrics
                     .on_trade(exchange_ts, trade.price, trade.qty, trade.aggressor);
-                self.trades_applied += 1;
+                self.trades_applied = self.trades_applied.saturating_add(1);
             }
             RecordKind::GapMarker | RecordKind::ResyncMarker | RecordKind::ReconnectMarker => {
                 let _marker = decode_marker_payload(payload)?;
-                self.markers_seen += 1;
+                self.markers_seen = self.markers_seen.saturating_add(1);
                 // GapMarker explicitly signals data loss — count it
                 if matches!(kind, RecordKind::GapMarker) {
-                    self.gaps_detected += 1;
+                    self.gaps_detected = self.gaps_detected.saturating_add(1);
                 }
             }
             RecordKind::RawFrame => {
@@ -234,13 +234,11 @@ impl ReplayDriver {
             0u8.hash(&mut hasher);
         }
 
-        let p_zero = match sb_core::Price::from_units(0) {
-            Ok(p) => p,
-            Err(_) => return hasher.finish(),
+        let Ok(p_zero) = sb_core::Price::from_units(0) else {
+            return hasher.finish();
         };
-        let q_zero = match sb_core::Qty::from_units(0) {
-            Ok(q) => q,
-            Err(_) => return hasher.finish(),
+        let Ok(q_zero) = sb_core::Qty::from_units(0) else {
+            return hasher.finish();
         };
         let dummy = Level::new(p_zero, q_zero);
 

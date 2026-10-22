@@ -295,7 +295,7 @@ fn test_replay_parity_rust_server_and_pybook_at_every_event() {
 
     let mut py_event_idx = 0;
 
-    while let Some(batch) = py_reader.process_batch(10000).unwrap() {
+    while let Some(batch) = py_reader.process_batch(10000) {
         for i in 0..batch.length {
             let expected = &expected_events[py_event_idx];
 

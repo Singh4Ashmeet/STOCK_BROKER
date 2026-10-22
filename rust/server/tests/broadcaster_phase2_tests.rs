@@ -3,6 +3,8 @@
 //! Covers: subscriber queue saturation, conflation behavior, repeated
 //! conflation, dead subscriber cleanup, and concurrent publish patterns.
 
+#![allow(clippy::inconsistent_digit_grouping)]
+
 use sb_server::broadcaster::{BroadcastLevel, BroadcastTiming, Broadcaster, OutboundMsg};
 use std::sync::atomic::Ordering;
 

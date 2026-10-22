@@ -11,7 +11,7 @@ pub const SCHEMA_VERSION: u32 = 1;
 /// Minimum supported schema version for backwards compatibility.
 pub const MIN_SUPPORTED_SCHEMA_VERSION: u32 = 1;
 
-/// 4-byte magic header identifying a StockBroker event log file.
+/// 4-byte magic header identifying a `StockBroker` event log file.
 pub const MAGIC_BYTES: &[u8; 4] = b"SBEL";
 
 /// Types of records stored in the event log.

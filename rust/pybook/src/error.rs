@@ -1,5 +1,7 @@
 //! Python exception types and error mappings for `pybook`.
 
+#![allow(unexpected_cfgs)]
+
 use pyo3::create_exception;
 use pyo3::exceptions::PyException;
 use pyo3::PyErr;
