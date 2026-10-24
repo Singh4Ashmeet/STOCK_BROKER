@@ -14,7 +14,7 @@ import java.util.UUID;
  * Portfolio REST endpoints (positions, P&L, transaction history).
  */
 @RestController
-@RequestMapping("/api/v1")
+@RequestMapping("/v1")
 public class PortfolioController {
 
     private final PortfolioService portfolioService;

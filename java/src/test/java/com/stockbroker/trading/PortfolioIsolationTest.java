@@ -57,16 +57,16 @@ class PortfolioIsolationTest {
     void setup() {
         // Register and login User A
         AuthDtos.RegisterRequest regA = new AuthDtos.RegisterRequest("portfoliouserA@test.com", "SecurePass123!");
-        restTemplate.postForEntity("/api/v1/auth/register", regA, AuthDtos.RegisterResponse.class);
+        restTemplate.postForEntity("/v1/auth/register", regA, AuthDtos.RegisterResponse.class);
         AuthDtos.LoginRequest loginA = new AuthDtos.LoginRequest("portfoliouserA@test.com", "SecurePass123!");
-        ResponseEntity<AuthDtos.LoginResponse> loginRespA = restTemplate.postForEntity("/api/v1/auth/login", loginA, AuthDtos.LoginResponse.class);
+        ResponseEntity<AuthDtos.LoginResponse> loginRespA = restTemplate.postForEntity("/v1/auth/login", loginA, AuthDtos.LoginResponse.class);
         userAAccessToken = loginRespA.getBody().accessToken();
 
         // Register and login User B
         AuthDtos.RegisterRequest regB = new AuthDtos.RegisterRequest("portfoliouserB@test.com", "SecurePass123!");
-        restTemplate.postForEntity("/api/v1/auth/register", regB, AuthDtos.RegisterResponse.class);
+        restTemplate.postForEntity("/v1/auth/register", regB, AuthDtos.RegisterResponse.class);
         AuthDtos.LoginRequest loginB = new AuthDtos.LoginRequest("portfoliouserB@test.com", "SecurePass123!");
-        ResponseEntity<AuthDtos.LoginResponse> loginRespB = restTemplate.postForEntity("/api/v1/auth/login", loginB, AuthDtos.LoginResponse.class);
+        ResponseEntity<AuthDtos.LoginResponse> loginRespB = restTemplate.postForEntity("/v1/auth/login", loginB, AuthDtos.LoginResponse.class);
         userBAccessToken = loginRespB.getBody().accessToken();
 
         userAId = UUID.fromString(jwtTokenValidator.extractSubjectUnsafe(userAAccessToken));
@@ -87,12 +87,12 @@ class PortfolioIsolationTest {
         HttpHeaders headersA = new HttpHeaders();
         headersA.setBearerAuth(userAAccessToken);
         HttpEntity<?> entityA = new HttpEntity<>(headersA);
-        restTemplate.exchange("/api/v1/portfolio", HttpMethod.GET, entityA, TradingDtos.PortfolioResponse.class);
+        restTemplate.exchange("/v1/portfolio", HttpMethod.GET, entityA, TradingDtos.PortfolioResponse.class);
 
         HttpHeaders headersB = new HttpHeaders();
         headersB.setBearerAuth(userBAccessToken);
         HttpEntity<?> entityB = new HttpEntity<>(headersB);
-        restTemplate.exchange("/api/v1/portfolio", HttpMethod.GET, entityB, TradingDtos.PortfolioResponse.class);
+        restTemplate.exchange("/v1/portfolio", HttpMethod.GET, entityB, TradingDtos.PortfolioResponse.class);
     }
 
     @Test
@@ -102,7 +102,7 @@ class PortfolioIsolationTest {
         HttpEntity<?> entityA = new HttpEntity<>(headersA);
 
         ResponseEntity<TradingDtos.PortfolioResponse> response = restTemplate.exchange(
-                "/api/v1/portfolio", HttpMethod.GET, entityA, TradingDtos.PortfolioResponse.class);
+                "/v1/portfolio", HttpMethod.GET, entityA, TradingDtos.PortfolioResponse.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isNotNull();
@@ -116,7 +116,7 @@ class PortfolioIsolationTest {
         HttpEntity<?> entityA = new HttpEntity<>(headersA);
 
         ResponseEntity<TradingDtos.LedgerResponse> response = restTemplate.exchange(
-                "/api/v1/ledger", HttpMethod.GET, entityA, TradingDtos.LedgerResponse.class);
+                "/v1/ledger", HttpMethod.GET, entityA, TradingDtos.LedgerResponse.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isNotNull();
@@ -130,7 +130,7 @@ class PortfolioIsolationTest {
         HttpEntity<?> entityA = new HttpEntity<>(headersA);
 
         ResponseEntity<com.stockbroker.portfolio.api.PortfolioDtosExtended.WatchlistListResponse> response = restTemplate.exchange(
-                "/api/v1/watchlists", HttpMethod.GET, entityA, 
+                "/v1/watchlists", HttpMethod.GET, entityA, 
                 new org.springframework.core.ParameterizedTypeReference<com.stockbroker.portfolio.api.PortfolioDtosExtended.WatchlistListResponse>() {});
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -166,7 +166,7 @@ class PortfolioIsolationTest {
         );
 
         ResponseEntity<TradingDtos.PortfolioResponse> response = restTemplate.exchange(
-                "/api/v1/portfolio", HttpMethod.GET, entityA, TradingDtos.PortfolioResponse.class);
+                "/v1/portfolio", HttpMethod.GET, entityA, TradingDtos.PortfolioResponse.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         TradingDtos.PortfolioResponse portfolio = response.getBody();
@@ -210,7 +210,7 @@ class PortfolioIsolationTest {
         );
 
         ResponseEntity<TradingDtos.PortfolioResponse> response = restTemplate.exchange(
-                "/api/v1/portfolio", HttpMethod.GET, entityA, TradingDtos.PortfolioResponse.class);
+                "/v1/portfolio", HttpMethod.GET, entityA, TradingDtos.PortfolioResponse.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         TradingDtos.PortfolioResponse portfolio = response.getBody();
@@ -227,7 +227,7 @@ class PortfolioIsolationTest {
         HttpEntity<?> entityA = new HttpEntity<>(headersA);
 
         ResponseEntity<TradingDtos.LedgerResponse> response = restTemplate.exchange(
-                "/api/v1/ledger?limit=10", HttpMethod.GET, entityA, TradingDtos.LedgerResponse.class);
+                "/v1/ledger?limit=10", HttpMethod.GET, entityA, TradingDtos.LedgerResponse.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isNotNull();
@@ -235,7 +235,7 @@ class PortfolioIsolationTest {
         
         if (response.getBody().nextCursor() != null) {
             ResponseEntity<TradingDtos.LedgerResponse> response2 = restTemplate.exchange(
-                    "/api/v1/ledger?limit=10&cursor=" + response.getBody().nextCursor(), 
+                    "/v1/ledger?limit=10&cursor=" + response.getBody().nextCursor(), 
                     HttpMethod.GET, entityA, TradingDtos.LedgerResponse.class);
             assertThat(response2.getStatusCode()).isEqualTo(HttpStatus.OK);
         }
@@ -251,7 +251,7 @@ class PortfolioIsolationTest {
         String to = "2026-12-31T23:59:59Z";
 
         ResponseEntity<TradingDtos.LedgerResponse> response = restTemplate.exchange(
-                "/api/v1/ledger?from=" + from + "&to=" + to + "&limit=50", 
+                "/v1/ledger?from=" + from + "&to=" + to + "&limit=50", 
                 HttpMethod.GET, entityA, TradingDtos.LedgerResponse.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -266,7 +266,7 @@ class PortfolioIsolationTest {
 
         var watchlistRequest = new com.stockbroker.portfolio.api.PortfolioDtos.WatchlistRequest("Test Watchlist");
         ResponseEntity<com.stockbroker.portfolio.api.PortfolioDtos.WatchlistResponse> createResp = restTemplate.exchange(
-                "/api/v1/watchlists", HttpMethod.POST, new HttpEntity<>(watchlistRequest, headersA),
+                "/v1/watchlists", HttpMethod.POST, new HttpEntity<>(watchlistRequest, headersA),
                 com.stockbroker.portfolio.api.PortfolioDtos.WatchlistResponse.class);
 
         assertThat(createResp.getStatusCode()).isEqualTo(HttpStatus.CREATED);
@@ -274,7 +274,7 @@ class PortfolioIsolationTest {
 
         var itemRequest = new com.stockbroker.portfolio.api.PortfolioDtos.WatchlistItemRequest("BINANCE:BTC-USDT", 1);
         ResponseEntity<com.stockbroker.portfolio.api.PortfolioDtos.WatchlistItemResponse> itemResp = restTemplate.exchange(
-                "/api/v1/watchlists/" + watchlistId + "/items", HttpMethod.POST, 
+                "/v1/watchlists/" + watchlistId + "/items", HttpMethod.POST, 
                 new HttpEntity<>(itemRequest, headersA),
                 com.stockbroker.portfolio.api.PortfolioDtos.WatchlistItemResponse.class);
 
@@ -282,7 +282,7 @@ class PortfolioIsolationTest {
         assertThat(itemResp.getBody().currentPrice()).isNotNull();
 
         ResponseEntity<com.stockbroker.portfolio.api.PortfolioDtosExtended.WatchlistListResponse> listResp = restTemplate.exchange(
-                "/api/v1/watchlists", HttpMethod.GET, entityA,
+                "/v1/watchlists", HttpMethod.GET, entityA,
                 new org.springframework.core.ParameterizedTypeReference<com.stockbroker.portfolio.api.PortfolioDtosExtended.WatchlistListResponse>() {});
 
         assertThat(listResp.getStatusCode()).isEqualTo(HttpStatus.OK);

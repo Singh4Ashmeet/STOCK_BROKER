@@ -26,10 +26,10 @@ class AuthWebSocketTicketTest {
     void wsTicketCanBeCreatedAndValidated() {
         // Register and login
         AuthDtos.RegisterRequest reg = new AuthDtos.RegisterRequest("wstest@test.com", "SecurePass123!");
-        restTemplate.postForEntity("/api/v1/auth/register", reg, AuthDtos.RegisterResponse.class);
+        restTemplate.postForEntity("/v1/auth/register", reg, AuthDtos.RegisterResponse.class);
 
         AuthDtos.LoginRequest login = new AuthDtos.LoginRequest("wstest@test.com", "SecurePass123!");
-        ResponseEntity<AuthDtos.LoginResponse> loginResp = restTemplate.postForEntity("/api/v1/auth/login", login, AuthDtos.LoginResponse.class);
+        ResponseEntity<AuthDtos.LoginResponse> loginResp = restTemplate.postForEntity("/v1/auth/login", login, AuthDtos.LoginResponse.class);
 
         String accessToken = loginResp.getBody().accessToken();
 
@@ -39,7 +39,7 @@ class AuthWebSocketTicketTest {
         HttpEntity<?> entity = new HttpEntity<>(headers);
 
         ResponseEntity<AuthDtos.WsTicketResponse> ticketResp = restTemplate.exchange(
-                "/api/v1/auth/ws/ticket", HttpMethod.POST, entity, AuthDtos.WsTicketResponse.class);
+                "/v1/auth/ws/ticket", HttpMethod.POST, entity, AuthDtos.WsTicketResponse.class);
 
         assertThat(ticketResp.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(ticketResp.getBody()).isNotNull();
@@ -57,7 +57,7 @@ class AuthWebSocketTicketTest {
     void wsTicketRequiresAuthentication() {
         // Try to get ticket without auth
         ResponseEntity<String> response = restTemplate.postForEntity(
-                "/api/v1/auth/ws/ticket", null, String.class);
+                "/v1/auth/ws/ticket", null, String.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
     }

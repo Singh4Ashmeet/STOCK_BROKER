@@ -63,15 +63,13 @@ public class AlertService {
 
     public AlertsDtos.AlertResponse getAlert(UUID userId, UUID alertId) {
         Alert alert = alertRepository.findByIdAndUserId(alertId, userId)
-                .orElseThrow(() -> new BusinessProblem.ValidationFailed("Alert not found",
-                        java.util.Map.of("code", "ALERT_NOT_FOUND")));
+                .orElseThrow(() -> new BusinessProblem.AlertNotFound(alertId.toString()));
         return toAlertResponse(alert);
     }
 
     public AlertsDtos.AlertResponse updateAlert(UUID userId, UUID alertId, AlertsDtos.UpdateAlertRequest request) {
         Alert alert = alertRepository.findByIdAndUserId(alertId, userId)
-                .orElseThrow(() -> new BusinessProblem.ValidationFailed("Alert not found",
-                        java.util.Map.of("code", "ALERT_NOT_FOUND")));
+                .orElseThrow(() -> new BusinessProblem.AlertNotFound(alertId.toString()));
 
         if (request.status() != null) {
             alert.setStatus(request.status().name());
@@ -86,8 +84,7 @@ public class AlertService {
 
     public void deleteAlert(UUID userId, UUID alertId) {
         Alert alert = alertRepository.findByIdAndUserId(alertId, userId)
-                .orElseThrow(() -> new BusinessProblem.ValidationFailed("Alert not found",
-                        java.util.Map.of("code", "ALERT_NOT_FOUND")));
+                .orElseThrow(() -> new BusinessProblem.AlertNotFound(alertId.toString()));
         alertRepository.delete(alert);
     }
 
@@ -97,8 +94,7 @@ public class AlertService {
 
     public void triggerAlert(UUID alertId) {
         Alert alert = alertRepository.findById(alertId)
-                .orElseThrow(() -> new BusinessProblem.ValidationFailed("Alert not found",
-                        java.util.Map.of("code", "ALERT_NOT_FOUND")));
+                .orElseThrow(() -> new BusinessProblem.AlertNotFound(alertId.toString()));
         alert.setStatus("TRIGGERED");
         alert.setLastTriggeredAt(Instant.now());
         alertRepository.save(alert);

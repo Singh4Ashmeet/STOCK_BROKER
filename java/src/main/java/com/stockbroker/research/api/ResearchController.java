@@ -17,7 +17,7 @@ import java.util.UUID;
  * Research & Backtesting REST endpoints.
  */
 @RestController
-@RequestMapping("/api/v1")
+@RequestMapping("/v1")
 public class ResearchController {
 
     private final BacktestService backtestService;

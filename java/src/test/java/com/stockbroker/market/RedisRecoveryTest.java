@@ -39,10 +39,10 @@ class RedisRecoveryTest {
     void setup() {
         // Register and login
         AuthDtos.RegisterRequest reg = new AuthDtos.RegisterRequest("redistest@test.com", "SecurePass123!");
-        restTemplate.postForEntity("/api/v1/auth/register", reg, AuthDtos.RegisterResponse.class);
+        restTemplate.postForEntity("/v1/auth/register", reg, AuthDtos.RegisterResponse.class);
 
         AuthDtos.LoginRequest login = new AuthDtos.LoginRequest("redistest@test.com", "SecurePass123!");
-        ResponseEntity<AuthDtos.LoginResponse> loginResp = restTemplate.postForEntity("/api/v1/auth/login", login, AuthDtos.LoginResponse.class);
+        ResponseEntity<AuthDtos.LoginResponse> loginResp = restTemplate.postForEntity("/v1/auth/login", login, AuthDtos.LoginResponse.class);
         accessToken = loginResp.getBody().accessToken();
     }
 
@@ -54,7 +54,7 @@ class RedisRecoveryTest {
         HttpEntity<?> entity = new HttpEntity<>(headers);
 
         ResponseEntity<MarketDtos.BookUpdate> response = restTemplate.exchange(
-                "/api/v1/market/BINANCE:BTC-USDT/snapshot?depth=5", HttpMethod.GET, entity, MarketDtos.BookUpdate.class);
+                "/v1/market/BINANCE:BTC-USDT/snapshot?depth=5", HttpMethod.GET, entity, MarketDtos.BookUpdate.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
 
@@ -79,7 +79,7 @@ class RedisRecoveryTest {
         HttpEntity<?> entity = new HttpEntity<>(headers);
 
         ResponseEntity<MarketDtos.Metrics> response = restTemplate.exchange(
-                "/api/v1/market/BINANCE:BTC-USDT/metrics", HttpMethod.GET, entity, MarketDtos.Metrics.class);
+                "/v1/market/BINANCE:BTC-USDT/metrics", HttpMethod.GET, entity, MarketDtos.Metrics.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
 
@@ -98,7 +98,7 @@ class RedisRecoveryTest {
         HttpEntity<?> entity = new HttpEntity<>(headers);
 
         ResponseEntity<MarketDtos.ListInstrumentsResponse> response = restTemplate.exchange(
-                "/api/v1/instruments", HttpMethod.GET, entity, MarketDtos.ListInstrumentsResponse.class);
+                "/v1/instruments", HttpMethod.GET, entity, MarketDtos.ListInstrumentsResponse.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody().instruments()).isNotEmpty();
@@ -120,8 +120,8 @@ class RedisRecoveryTest {
         headers.setBearerAuth(accessToken);
         HttpEntity<?> entity = new HttpEntity<>(headers);
 
-        restTemplate.exchange("/api/v1/market/BINANCE:BTC-USDT/snapshot?depth=5", HttpMethod.GET, entity, MarketDtos.BookUpdate.class);
-        restTemplate.exchange("/api/v1/market/BINANCE:BTC-USDT/metrics", HttpMethod.GET, entity, MarketDtos.Metrics.class);
+        restTemplate.exchange("/v1/market/BINANCE:BTC-USDT/snapshot?depth=5", HttpMethod.GET, entity, MarketDtos.BookUpdate.class);
+        restTemplate.exchange("/v1/market/BINANCE:BTC-USDT/metrics", HttpMethod.GET, entity, MarketDtos.Metrics.class);
 
         stateManager.mirrorToRedis();
 

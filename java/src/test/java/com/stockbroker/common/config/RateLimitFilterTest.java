@@ -67,7 +67,7 @@ class RateLimitFilterTest {
     @Test
     void shouldAllowRequestWhenUnderLimit() throws Exception {
         // Given
-        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/market/symbols");
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/v1/market/symbols");
         MockHttpServletResponse response = new MockHttpServletResponse();
         MockFilterChain filterChain = new MockFilterChain();
 
@@ -84,7 +84,7 @@ class RateLimitFilterTest {
         // Given
         when(bucket.tryConsume(1)).thenReturn(false);
         
-        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/market/symbols");
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/v1/market/symbols");
         MockHttpServletResponse response = new MockHttpServletResponse();
         MockFilterChain filterChain = new MockFilterChain();
 
@@ -99,7 +99,7 @@ class RateLimitFilterTest {
     @Test
     void shouldUseAuthRateLimiterForAuthEndpoints() throws Exception {
         // Given
-        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/auth/login");
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/v1/auth/login");
         MockHttpServletResponse response = new MockHttpServletResponse();
         MockFilterChain filterChain = new MockFilterChain();
 
@@ -114,7 +114,7 @@ class RateLimitFilterTest {
     @Test
     void shouldUseMarketRateLimiterForMarketEndpoints() throws Exception {
         // Given
-        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/market/AAPL/book");
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/v1/market/AAPL/book");
         MockHttpServletResponse response = new MockHttpServletResponse();
         MockFilterChain filterChain = new MockFilterChain();
 
@@ -129,7 +129,7 @@ class RateLimitFilterTest {
     @Test
     void shouldUseTradingRateLimiterForTradingEndpoints() throws Exception {
         // Given
-        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/v1/orders/");
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/v1/orders/");
         MockHttpServletResponse response = new MockHttpServletResponse();
         MockFilterChain filterChain = new MockFilterChain();
 
@@ -144,7 +144,7 @@ class RateLimitFilterTest {
     @Test
     void shouldUseIpRateLimiterForAnonymousRequests() throws Exception {
         // Given - no authentication, request to non-market/trading/auth endpoint
-        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/unknown");
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/v1/unknown");
         MockHttpServletResponse response = new MockHttpServletResponse();
         MockFilterChain filterChain = new MockFilterChain();
 
@@ -161,7 +161,7 @@ class RateLimitFilterTest {
         // Given
         when(rateLimitProperties.isEnabled()).thenReturn(false);
         
-        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/market/symbols");
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/v1/market/symbols");
         MockHttpServletResponse response = new MockHttpServletResponse();
         MockFilterChain filterChain = new MockFilterChain();
 

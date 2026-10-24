@@ -15,9 +15,10 @@ export async function POST(request: NextRequest) {
         'Content-Type': 'application/json',
         ...(cookieHeader && { Cookie: cookieHeader }),
       },
+      body: refreshToken ? JSON.stringify({ refresh_token: refreshToken }) : undefined,
     });
 
-    const data = await response.json();
+    const data = response.status === 204 ? { success: true } : await response.json().catch(() => ({ success: true }));
 
     // Clear the refresh token cookie
     const nextResponse = NextResponse.json(data, { status: response.status });

@@ -25,7 +25,7 @@ export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Check if path is public
-  const isPublic = publicPaths.some(path => pathname.startsWith(path));
+  const isPublic = publicPaths.some(path => path === '/' ? pathname === '/' : pathname.startsWith(path));
   const isProtected = protectedPaths.some(path => pathname.startsWith(path));
 
   // Get refresh token from cookies

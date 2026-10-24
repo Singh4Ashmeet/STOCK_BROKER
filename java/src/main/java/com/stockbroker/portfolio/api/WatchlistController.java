@@ -13,7 +13,7 @@ import java.util.UUID;
  * Watchlist REST endpoints (CRUD for watchlists and items).
  */
 @RestController
-@RequestMapping("/api/v1/watchlists")
+@RequestMapping("/v1/watchlists")
 public class WatchlistController {
 
     private final WatchlistService watchlistService;

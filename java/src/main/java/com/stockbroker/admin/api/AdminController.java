@@ -11,7 +11,7 @@ import java.util.UUID;
  * Admin REST endpoints.
  */
 @RestController
-@RequestMapping("/api/v1")
+@RequestMapping("/v1")
 public class AdminController {
 
     private final AdminService adminService;

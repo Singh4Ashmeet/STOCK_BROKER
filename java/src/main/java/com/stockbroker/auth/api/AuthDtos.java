@@ -14,6 +14,7 @@ public final class AuthDtos {
 
     private AuthDtos() {}
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record RegisterRequest(
             @Email @NotBlank String email,
             @NotBlank @Size(min = 12, max = 128) @Pattern(regexp = ".*[A-Z].*") // At least one uppercase
@@ -31,6 +32,7 @@ public final class AuthDtos {
             @JsonProperty("created_at") String createdAt
     ) {}
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record LoginRequest(
             @Email @NotBlank String email,
             @NotBlank String password
@@ -43,16 +45,19 @@ public final class AuthDtos {
             @JsonProperty("refresh_token") String refreshToken
     ) {}
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record RefreshRequest(
             @JsonProperty("refresh_token") @NotBlank String refreshToken
     ) {}
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record RefreshResponse(
             @JsonProperty("access_token") String accessToken,
             @JsonProperty("expires_in") int expiresIn,
             @JsonProperty("refresh_token") String refreshToken
     ) {}
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record LogoutRequest(
             @JsonProperty("refresh_token") String refreshToken
     ) {}

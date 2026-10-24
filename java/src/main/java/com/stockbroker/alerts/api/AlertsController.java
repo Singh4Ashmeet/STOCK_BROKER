@@ -15,7 +15,7 @@ import java.util.UUID;
  * Alerts REST endpoints.
  */
 @RestController
-@RequestMapping("/api/v1")
+@RequestMapping("/v1")
 public class AlertsController {
 
     private final AlertService alertService;

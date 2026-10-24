@@ -53,22 +53,19 @@ public class WatchlistService {
 
     public PortfolioDtos.WatchlistResponse getWatchlist(UUID userId, UUID watchlistId) {
         Watchlist watchlist = watchlistRepository.findByIdAndUserId(watchlistId, userId)
-                .orElseThrow(() -> new BusinessProblem.ValidationFailed("Watchlist not found",
-                        java.util.Map.of("code", "WATCHLIST_NOT_FOUND")));
+                .orElseThrow(() -> new BusinessProblem.WatchlistNotFound(watchlistId.toString()));
         return toWatchlistResponse(watchlist);
     }
 
     public void deleteWatchlist(UUID userId, UUID watchlistId) {
         Watchlist watchlist = watchlistRepository.findByIdAndUserId(watchlistId, userId)
-                .orElseThrow(() -> new BusinessProblem.ValidationFailed("Watchlist not found",
-                        java.util.Map.of("code", "WATCHLIST_NOT_FOUND")));
+                .orElseThrow(() -> new BusinessProblem.WatchlistNotFound(watchlistId.toString()));
         watchlistRepository.delete(watchlist);
     }
 
     public PortfolioDtos.WatchlistItemResponse addItem(UUID userId, UUID watchlistId, PortfolioDtos.WatchlistItemRequest request) {
         watchlistRepository.findByIdAndUserId(watchlistId, userId)
-                .orElseThrow(() -> new BusinessProblem.ValidationFailed("Watchlist not found",
-                        java.util.Map.of("code", "WATCHLIST_NOT_FOUND")));
+                .orElseThrow(() -> new BusinessProblem.WatchlistNotFound(watchlistId.toString()));
 
         // Check if item already exists
         if (itemRepository.existsByWatchlistIdAndSymbol(watchlistId, request.symbol())) {
@@ -94,8 +91,7 @@ public class WatchlistService {
 
     public void removeItem(UUID userId, UUID watchlistId, String symbol) {
         watchlistRepository.findByIdAndUserId(watchlistId, userId)
-                .orElseThrow(() -> new BusinessProblem.ValidationFailed("Watchlist not found",
-                        java.util.Map.of("code", "WATCHLIST_NOT_FOUND")));
+                .orElseThrow(() -> new BusinessProblem.WatchlistNotFound(watchlistId.toString()));
 
         itemRepository.deleteByWatchlistIdAndSymbol(watchlistId, symbol);
     }

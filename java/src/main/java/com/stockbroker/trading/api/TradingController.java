@@ -17,7 +17,7 @@ import java.util.UUID;
  * Trading REST endpoints - orders, fills, preview.
  */
 @RestController
-@RequestMapping("/api/v1")
+@RequestMapping("/v1")
 public class TradingController {
 
     private final OrderService orderService;

@@ -45,6 +45,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private final Supplier<Bucket> authRateLimiter;
     private final Supplier<Bucket> marketRateLimiter;
     private final Supplier<Bucket> tradingRateLimiter;
+    @SuppressWarnings("unused")
     private final Supplier<Bucket> userRateLimiter;
     private final Supplier<Bucket> ipRateLimiter;
     private final ConcurrentMap<String, Bucket> buckets = new ConcurrentHashMap<>();
@@ -94,31 +95,34 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
     private Bucket selectRateLimiter(HttpServletRequest request, String path, String method) {
         String pathLower = path.toLowerCase();
+        if (pathLower.startsWith("/api/")) {
+            pathLower = pathLower.substring(4);
+        }
         
         // Auth endpoints - strict rate limiting (always per-IP)
-        if (pathLower.startsWith("/api/v1/auth/")) {
+        if (pathLower.startsWith("/v1/auth/")) {
             return bucketFor(request, "auth", authRateLimiter);
         }
         
         // Market data endpoints
-        if (pathLower.startsWith("/api/v1/market/") || pathLower.startsWith("/api/v1/instruments")) {
+        if (pathLower.startsWith("/v1/market/") || pathLower.startsWith("/v1/instruments")) {
             return bucketFor(request, "market", marketRateLimiter);
         }
         
         // Trading endpoints
-        if (pathLower.startsWith("/api/v1/orders/") || 
-            pathLower.startsWith("/api/v1/fills/") ||
-            pathLower.startsWith("/api/v1/portfolio/") ||
-            pathLower.startsWith("/api/v1/ledger/") ||
-            pathLower.startsWith("/api/v1/watchlists/") ||
-            pathLower.startsWith("/api/v1/alerts/") ||
-            pathLower.startsWith("/api/v1/backtests/") ||
-            pathLower.startsWith("/api/v1/strategies/")) {
+        if (pathLower.startsWith("/v1/orders/") || 
+            pathLower.startsWith("/v1/fills/") ||
+            pathLower.startsWith("/v1/portfolio/") ||
+            pathLower.startsWith("/v1/ledger/") ||
+            pathLower.startsWith("/v1/watchlists/") ||
+            pathLower.startsWith("/v1/alerts/") ||
+            pathLower.startsWith("/v1/backtests/") ||
+            pathLower.startsWith("/v1/strategies/")) {
             return bucketFor(request, "trading", tradingRateLimiter);
         }
         
         // WebSocket ticket
-        if (pathLower.startsWith("/api/v1/ws/ticket")) {
+        if (pathLower.startsWith("/v1/ws/ticket")) {
             return bucketFor(request, "ws", tradingRateLimiter);
         }
         

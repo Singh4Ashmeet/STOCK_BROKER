@@ -17,7 +17,7 @@ import java.util.UUID;
 @Repository
 public interface BacktestRepository extends JpaRepository<BacktestRun, UUID> {
 
-    @Query(value = "SELECT * FROM backtest_runs WHERE user_id = :userId ORDER BY created_at DESC LIMIT :limit OFFSET :offset", nativeQuery = true)
+    @Query(value = "SELECT * FROM backtest_runs WHERE user_id = :userId ORDER BY created_at DESC", nativeQuery = true)
     List<BacktestRun> findByUserId(@Param("userId") UUID userId, Pageable pageable);
 
     @Query(value = "SELECT * FROM backtest_runs WHERE id = :id AND user_id = :userId", nativeQuery = true)

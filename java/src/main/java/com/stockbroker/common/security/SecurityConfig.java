@@ -59,11 +59,11 @@ public class SecurityConfig {
     public SecurityFilterChain publicApiFilterChain(HttpSecurity http) throws Exception {
         http
                 .securityMatcher(
-                        "/api/v1/auth/register",
-                        "/api/v1/auth/login",
-                        "/api/v1/auth/refresh",
-                        "/api/v1/auth/logout",
-                        "/api/v1/system/health",
+                        "/v1/auth/register",
+                        "/v1/auth/login",
+                        "/v1/auth/refresh",
+                        "/v1/auth/logout",
+                        "/v1/system/health",
                         "/actuator/health",
                         "/actuator/info"
                 )
@@ -79,27 +79,27 @@ public class SecurityConfig {
     @Order(2)
     public SecurityFilterChain protectedApiFilterChain(HttpSecurity http) throws Exception {
         http
-                .securityMatcher("/api/v1/**")
+                .securityMatcher("/v1/**")
                 .csrf(csrf -> csrf.disable())
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers(HttpMethod.GET, "/api/v1/instruments").authenticated()
-                        .requestMatchers("/api/v1/auth/me").authenticated()
-                        .requestMatchers("/api/v1/auth/ws/ticket").authenticated()
-                        .requestMatchers("/api/v1/market/**").authenticated()
-                        .requestMatchers("/api/v1/orders/**").authenticated()
-                        .requestMatchers("/api/v1/fills/**").authenticated()
-                        .requestMatchers("/api/v1/portfolio/**").authenticated()
-                        .requestMatchers("/api/v1/ledger/**").authenticated()
-                        .requestMatchers("/api/v1/watchlists/**").authenticated()
-                        .requestMatchers("/api/v1/alerts/**").authenticated()
-                        .requestMatchers("/api/v1/backtests/**").authenticated()
-                        .requestMatchers("/api/v1/backtest-jobs/**").authenticated()
-                        .requestMatchers("/api/v1/strategies/**").authenticated()
-                        .requestMatchers("/api/v1/me").authenticated()
-                        .requestMatchers("/api/v1/ws/ticket").authenticated()
-                        .requestMatchers("/api/v1/system/latency").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/v1/instruments").authenticated()
+                        .requestMatchers("/v1/auth/me").authenticated()
+                        .requestMatchers("/v1/auth/ws/ticket").authenticated()
+                        .requestMatchers("/v1/market/**").authenticated()
+                        .requestMatchers("/v1/orders/**").authenticated()
+                        .requestMatchers("/v1/fills/**").authenticated()
+                        .requestMatchers("/v1/portfolio/**").authenticated()
+                        .requestMatchers("/v1/ledger/**").authenticated()
+                        .requestMatchers("/v1/watchlists/**").authenticated()
+                        .requestMatchers("/v1/alerts/**").authenticated()
+                        .requestMatchers("/v1/backtests/**").authenticated()
+                        .requestMatchers("/v1/backtest-jobs/**").authenticated()
+                        .requestMatchers("/v1/strategies/**").authenticated()
+                        .requestMatchers("/v1/me").authenticated()
+                        .requestMatchers("/v1/ws/ticket").authenticated()
+                        .requestMatchers("/v1/system/latency").hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )
                 .oauth2ResourceServer(oauth2 -> oauth2
@@ -113,6 +113,7 @@ public class SecurityConfig {
 
         return http.build();
     }
+
 
     @Bean
     @Order(3)

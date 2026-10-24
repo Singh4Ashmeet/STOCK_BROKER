@@ -3,7 +3,6 @@ package com.stockbroker.market;
 import com.stockbroker.common.LocalTestConfiguration;
 import com.stockbroker.auth.api.AuthDtos;
 import com.stockbroker.market.api.MarketDtos;
-import com.stockbroker.market.api.MarketDtosExtended;
 import com.stockbroker.market.state.MarketStateManager;
 import com.stockbroker.market.subscription.SubscriptionManager;
 import org.junit.jupiter.api.BeforeEach;
@@ -49,10 +48,10 @@ class FullGatewayTest {
     @BeforeEach
     void setup() {
         AuthDtos.RegisterRequest reg = new AuthDtos.RegisterRequest("fulltest@test.com", "SecurePass123!");
-        restTemplate.postForEntity("/api/v1/auth/register", reg, AuthDtos.RegisterResponse.class);
+        restTemplate.postForEntity("/v1/auth/register", reg, AuthDtos.RegisterResponse.class);
 
         AuthDtos.LoginRequest login = new AuthDtos.LoginRequest("fulltest@test.com", "SecurePass123!");
-        ResponseEntity<AuthDtos.LoginResponse> loginResp = restTemplate.postForEntity("/api/v1/auth/login", login, AuthDtos.LoginResponse.class);
+        ResponseEntity<AuthDtos.LoginResponse> loginResp = restTemplate.postForEntity("/v1/auth/login", login, AuthDtos.LoginResponse.class);
         accessToken = loginResp.getBody().accessToken();
     }
 
@@ -64,7 +63,7 @@ class FullGatewayTest {
 
         // 1. Get instruments
         ResponseEntity<MarketDtos.ListInstrumentsResponse> instResp = restTemplate.exchange(
-                "/api/v1/instruments", HttpMethod.GET, entity, MarketDtos.ListInstrumentsResponse.class);
+                "/v1/instruments", HttpMethod.GET, entity, MarketDtos.ListInstrumentsResponse.class);
         assertThat(instResp.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(instResp.getBody().instruments()).isNotEmpty();
 
@@ -72,13 +71,13 @@ class FullGatewayTest {
 
         // 2. Get snapshot
         ResponseEntity<MarketDtos.BookUpdate> snapResp = restTemplate.exchange(
-                "/api/v1/market/" + symbol + "/snapshot?depth=10", HttpMethod.GET, entity, MarketDtos.BookUpdate.class);
+                "/v1/market/" + symbol + "/snapshot?depth=10", HttpMethod.GET, entity, MarketDtos.BookUpdate.class);
         assertThat(snapResp.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(snapResp.getBody().symbol()).isEqualTo(symbol);
 
         // 3. Get metrics - verify they are forwarded from Rust, not recomputed
         ResponseEntity<MarketDtos.Metrics> metricsResp = restTemplate.exchange(
-                "/api/v1/market/" + symbol + "/metrics", HttpMethod.GET, entity, MarketDtos.Metrics.class);
+                "/v1/market/" + symbol + "/metrics", HttpMethod.GET, entity, MarketDtos.Metrics.class);
         assertThat(metricsResp.getStatusCode()).isEqualTo(HttpStatus.OK);
         MarketDtos.Metrics metrics = metricsResp.getBody();
         assertThat(metrics).isNotNull();
@@ -91,7 +90,7 @@ class FullGatewayTest {
 
         // 4. Get trades
         ResponseEntity<List<MarketDtos.Trade>> tradesResp = restTemplate.exchange(
-                "/api/v1/market/" + symbol + "/trades?limit=5", HttpMethod.GET, entity,
+                "/v1/market/" + symbol + "/trades?limit=5", HttpMethod.GET, entity,
                 new org.springframework.core.ParameterizedTypeReference<>() {});
         assertThat(tradesResp.getStatusCode()).isEqualTo(HttpStatus.OK);
 
@@ -162,8 +161,8 @@ class FullGatewayTest {
         headers.setBearerAuth(accessToken);
         HttpEntity<?> entity = new HttpEntity<>(headers);
 
-        restTemplate.exchange("/api/v1/market/" + symbol + "/snapshot?depth=5", HttpMethod.GET, entity, MarketDtos.BookUpdate.class);
-        restTemplate.exchange("/api/v1/market/" + symbol + "/metrics", HttpMethod.GET, entity, MarketDtos.Metrics.class);
+        restTemplate.exchange("/v1/market/" + symbol + "/snapshot?depth=5", HttpMethod.GET, entity, MarketDtos.BookUpdate.class);
+        restTemplate.exchange("/v1/market/" + symbol + "/metrics", HttpMethod.GET, entity, MarketDtos.Metrics.class);
 
         // Mirror to Redis
         stateManager.mirrorToRedis();
@@ -184,7 +183,7 @@ class FullGatewayTest {
         HttpEntity<?> entity = new HttpEntity<>(headers);
 
         ResponseEntity<String> response = restTemplate.exchange(
-                "/api/v1/system/latency", HttpMethod.GET, entity, String.class);
+                "/v1/system/latency", HttpMethod.GET, entity, String.class);
 
         // This requires ADMIN role, so expect 403
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);

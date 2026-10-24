@@ -42,17 +42,17 @@ class ConflationTest {
         // by creating a handler with a very small queue capacity
 
         AuthDtos.RegisterRequest reg = new AuthDtos.RegisterRequest("conflation@test.com", "SecurePass123!");
-        restTemplate.postForEntity("/api/v1/auth/register", reg, AuthDtos.RegisterResponse.class);
+        restTemplate.postForEntity("/v1/auth/register", reg, AuthDtos.RegisterResponse.class);
 
         AuthDtos.LoginRequest login = new AuthDtos.LoginRequest("conflation@test.com", "SecurePass123!");
-        ResponseEntity<AuthDtos.LoginResponse> loginResp = restTemplate.postForEntity("/api/v1/auth/login", login, AuthDtos.LoginResponse.class);
+        ResponseEntity<AuthDtos.LoginResponse> loginResp = restTemplate.postForEntity("/v1/auth/login", login, AuthDtos.LoginResponse.class);
         String accessToken = loginResp.getBody().accessToken();
 
         HttpHeaders headers = new HttpHeaders();
         headers.setBearerAuth(accessToken);
         HttpEntity<?> entity = new HttpEntity<>(headers);
         ResponseEntity<AuthDtos.WsTicketResponse> ticketResp = restTemplate.exchange(
-                "/api/v1/auth/ws/ticket", HttpMethod.POST, entity, AuthDtos.WsTicketResponse.class);
+                "/v1/auth/ws/ticket", HttpMethod.POST, entity, AuthDtos.WsTicketResponse.class);
         String ticket = ticketResp.getBody().ticket();
 
         int port = restTemplate.getRestTemplate().getUriTemplateHandler().expand("/").getPort();

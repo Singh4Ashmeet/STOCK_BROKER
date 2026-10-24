@@ -186,6 +186,20 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * Handles missing endpoints / static resources as 404 NOT_FOUND.
+     */
+    @ExceptionHandler(org.springframework.web.servlet.resource.NoResourceFoundException.class)
+    public ResponseEntity<Problem> handleNoResourceFound(org.springframework.web.servlet.resource.NoResourceFoundException ex, HttpServletRequest request) {
+        Problem problem = Problem.builder()
+                .withType(URI.create("urn:stockbroker:error:RESOURCE_NOT_FOUND"))
+                .withTitle("Resource not found")
+                .withStatus(Status.NOT_FOUND)
+                .withDetail("The requested endpoint or resource was not found: " + ex.getResourcePath())
+                .build();
+        return buildResponse(problem, request);
+    }
+
+    /**
      * Handles all other uncaught exceptions.
      */
     @ExceptionHandler(Exception.class)

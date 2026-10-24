@@ -20,7 +20,6 @@ import org.springframework.web.socket.WebSocketHttpHeaders;
 
 import java.net.URI;
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.*;
@@ -56,10 +55,10 @@ class WebSocketGatewayTest {
     void setup() throws Exception {
         // Register and login
         AuthDtos.RegisterRequest reg = new AuthDtos.RegisterRequest("wsgateway@test.com", "SecurePass123!");
-        restTemplate.postForEntity("/api/v1/auth/register", reg, AuthDtos.RegisterResponse.class);
+        restTemplate.postForEntity("/v1/auth/register", reg, AuthDtos.RegisterResponse.class);
 
         AuthDtos.LoginRequest login = new AuthDtos.LoginRequest("wsgateway@test.com", "SecurePass123!");
-        ResponseEntity<AuthDtos.LoginResponse> loginResp = restTemplate.postForEntity("/api/v1/auth/login", login, AuthDtos.LoginResponse.class);
+        ResponseEntity<AuthDtos.LoginResponse> loginResp = restTemplate.postForEntity("/v1/auth/login", login, AuthDtos.LoginResponse.class);
         accessToken = loginResp.getBody().accessToken();
 
         // Get WebSocket ticket
@@ -67,7 +66,7 @@ class WebSocketGatewayTest {
         headers.setBearerAuth(accessToken);
         HttpEntity<?> entity = new HttpEntity<>(headers);
         ResponseEntity<AuthDtos.WsTicketResponse> ticketResp = restTemplate.exchange(
-                "/api/v1/auth/ws/ticket", HttpMethod.POST, entity, AuthDtos.WsTicketResponse.class);
+                "/v1/auth/ws/ticket", HttpMethod.POST, entity, AuthDtos.WsTicketResponse.class);
         String ticket = ticketResp.getBody().ticket();
 
         // Build WebSocket URL
@@ -335,7 +334,7 @@ class WebSocketGatewayTest {
         headers.setBearerAuth(accessToken);
         HttpEntity<?> entity = new HttpEntity<>(headers);
         ResponseEntity<AuthDtos.WsTicketResponse> ticketResp = restTemplate.exchange(
-                "/api/v1/auth/ws/ticket", HttpMethod.POST, entity, AuthDtos.WsTicketResponse.class);
+                "/v1/auth/ws/ticket", HttpMethod.POST, entity, AuthDtos.WsTicketResponse.class);
         return ticketResp.getBody().ticket();
     }
 

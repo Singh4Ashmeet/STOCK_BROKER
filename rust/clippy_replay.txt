@@ -1,0 +1,489 @@
+﻿cargo :     Checking proptest v1.11.0
+At line:1 char:32
++ ... replay.txt; cargo clippy -p sb-replay --all-targets -- -D warnings 2> ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (    Checking proptest v1.11.0:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+    Checking sb-replay v0.1.0 (D:\dev\stock_broker\rust\replay)
+error: arithmetic operation that can potentially result in unexpected side-effects
+  --> replay\src\path.rs:36:17
+   |
+36 |         let z = days + 719_468;
+   |                 ^^^^^^^^^^^^^^
+   |
+   = help: for further information visit 
+https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#arithmetic_side_effects
+note: the lint level is defined here
+  --> replay\src\lib.rs:27:5
+   |
+27 |     clippy::arithmetic_side_effects
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error: arithmetic operation that can potentially result in unexpected side-effects
+  --> replay\src\path.rs:37:43
+   |
+37 |         let era = (if z >= 0 { z } else { z - 146_096 }) / 146_097;
+   |                                           ^^^^^^^^^^^
+   |
+   = help: for further information visit 
+https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#arithmetic_side_effects
+
+error: arithmetic operation that can potentially result in unexpected side-effects
+  --> replay\src\path.rs:38:19
+   |
+38 |         let doe = (z - era * 146_097) as u32;
+   |                   ^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit 
+https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#arithmetic_side_effects
+
+error: arithmetic operation that can potentially result in unexpected side-effects
+  --> replay\src\path.rs:39:19
+   |
+39 |         let yoe = (doe - doe / 1020 + doe / 1461 - doe / 146_096) / 365;
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit 
+https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#arithmetic_side_effects
+
+error: arithmetic operation that can potentially result in unexpected side-effects
+  --> replay\src\path.rs:40:17
+   |
+40 |         let y = yoe as i64 + era * 400;
+   |                 ^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit 
+https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#arithmetic_side_effects
+
+error: casts from `u32` to `i64` can be expressed infallibly using `From`
+  --> replay\src\path.rs:40:17
+   |
+40 |         let y = yoe as i64 + era * 400;
+   |                 ^^^^^^^^^^
+   |
+   = help: an `as` cast can become silently lossy if the types change in the future
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#cast_lossless
+   = note: `-D clippy::cast-lossless` implied by `-D warnings`
+   = help: to override `-D warnings` add `#[allow(clippy::cast_lossless)]`
+help: use `i64::from` instead
+   |
+40 -         let y = yoe as i64 + era * 400;
+40 +         let y = i64::from(yoe) + era * 400;
+   |
+
+error: arithmetic operation that can potentially result in unexpected side-effects
+  --> replay\src\path.rs:41:19
+   |
+41 |         let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit 
+https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#arithmetic_side_effects
+
+error: arithmetic operation that can potentially result in unexpected side-effects
+  --> replay\src\path.rs:42:18
+   |
+42 |         let mp = (5 * doy + 2) / 153;
+   |                  ^^^^^^^^^^^^^
+   |
+   = help: for further information visit 
+https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#arithmetic_side_effects
+
+error: arithmetic operation that can potentially result in unexpected side-effects
+  --> replay\src\path.rs:43:17
+   |
+43 |         let d = doy - (153 * mp + 2) / 5 + 1;
+   |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit 
+https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#arithmetic_side_effects
+
+error: arithmetic operation that can potentially result in unexpected side-effects
+  --> replay\src\path.rs:44:30
+   |
+44 |         let m = if mp < 10 { mp + 3 } else { mp - 9 };
+   |                              ^^^^^^
+   |
+   = help: for further information visit 
+https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#arithmetic_side_effects
+
+error: arithmetic operation that can potentially result in unexpected side-effects
+  --> replay\src\path.rs:44:46
+   |
+44 |         let m = if mp < 10 { mp + 3 } else { mp - 9 };
+   |                                              ^^^^^^
+   |
+   = help: for further information visit 
+https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#arithmetic_side_effects
+
+error: arithmetic operation that can potentially result in unexpected side-effects
+  --> replay\src\path.rs:45:33
+   |
+45 |         let year = (if m <= 2 { y + 1 } else { y }) as i32;
+   |                                 ^^^^^
+   |
+   = help: for further information visit 
+https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#arithmetic_side_effects
+
+error: variables can be used directly in the `format!` string
+  --> replay\src\path.rs:90:19
+   |
+90 |             .join(format!("symbol={}", symbol))
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit 
+https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#uninlined_format_args
+   = note: `-D clippy::uninlined-format-args` implied by `-D warnings`
+   = help: to override `-D warnings` add `#[allow(clippy::uninlined_format_args)]`
+help: change this to
+   |
+90 -             .join(format!("symbol={}", symbol))
+90 +             .join(format!("symbol={symbol}"))
+   |
+
+error: variables can be used directly in the `format!` string
+   --> replay\src\path.rs:100:19
+    |
+100 |             .join(format!("part-{:04}.pbz", part_idx))
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit 
+https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#uninlined_format_args
+help: change this to
+    |
+100 -             .join(format!("part-{:04}.pbz", part_idx))
+100 +             .join(format!("part-{part_idx:04}.pbz"))
+    |
+
+error: variables can be used directly in the `format!` string
+   --> replay\src\path.rs:108:19
+    |
+108 |             .join(format!("part-{:04}.pbz.part", part_idx))
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit 
+https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#uninlined_format_args
+help: change this to
+    |
+108 -             .join(format!("part-{:04}.pbz.part", part_idx))
+108 +             .join(format!("part-{part_idx:04}.pbz.part"))
+    |
+
+error: using a potentially dangerous silent `as` conversion
+  --> replay\src\reader.rs:44:26
+   |
+44 |         let header_len = u32::from_le_bytes(len_buf) as usize;
+   |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: consider using a safe wrapper for this conversion
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#as_conversions
+note: the lint level is defined here
+  --> replay\src\lib.rs:23:5
+   |
+23 |     clippy::as_conversions,
+   |     ^^^^^^^^^^^^^^^^^^^^^^
+
+error: using a potentially dangerous silent `as` conversion
+  --> replay\src\reader.rs:91:26
+   |
+91 |         let record_len = u32::from_le_bytes(len_buf) as usize;
+   |                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: consider using a safe wrapper for this conversion
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#as_conversions
+
+error: arithmetic operation that can potentially result in unexpected side-effects
+   --> replay\src\replay.rs:111:9
+    |
+111 |         self.records_processed += 1;
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit 
+https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#arithmetic_side_effects
+
+error: arithmetic operation that can potentially result in unexpected side-effects
+   --> replay\src\replay.rs:120:17
+    |
+120 |                 self.snapshots_applied += 1;
+    |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit 
+https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#arithmetic_side_effects
+
+error: arithmetic operation that can potentially result in unexpected side-effects
+   --> replay\src\replay.rs:127:17
+    |
+127 |                 self.deltas_applied += 1;
+    |                 ^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit 
+https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#arithmetic_side_effects
+
+error: arithmetic operation that can potentially result in unexpected side-effects
+   --> replay\src\replay.rs:134:17
+    |
+134 |                 self.trades_applied += 1;
+    |                 ^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit 
+https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#arithmetic_side_effects
+
+error: arithmetic operation that can potentially result in unexpected side-effects
+   --> replay\src\replay.rs:138:17
+    |
+138 |                 self.markers_seen += 1;
+    |                 ^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit 
+https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#arithmetic_side_effects
+
+error: arithmetic operation that can potentially result in unexpected side-effects
+   --> replay\src\replay.rs:141:21
+    |
+141 |                     self.gaps_detected += 1;
+    |                     ^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit 
+https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#arithmetic_side_effects
+
+error: this could be rewritten as `let...else`
+   --> replay\src\replay.rs:237:9
+    |
+237 | /         let p_zero = match sb_core::Price::from_units(0) {
+238 | |             Ok(p) => p,
+239 | |             Err(_) => return hasher.finish(),
+240 | |         };
+    | |__________^ help: consider writing: `let Ok(p_zero) = sb_core::Price::from_units(0) else { return 
+hasher.finish() };`
+    |
+    = help: for further information visit 
+https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#manual_let_else
+    = note: `-D clippy::manual-let-else` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::manual_let_else)]`
+
+error: this could be rewritten as `let...else`
+   --> replay\src\replay.rs:241:9
+    |
+241 | /         let q_zero = match sb_core::Qty::from_units(0) {
+242 | |             Ok(q) => q,
+243 | |             Err(_) => return hasher.finish(),
+244 | |         };
+    | |__________^ help: consider writing: `let Ok(q_zero) = sb_core::Qty::from_units(0) else { return hasher.finish() 
+};`
+    |
+    = help: for further information visit 
+https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#manual_let_else
+
+error: item in documentation is missing backticks
+  --> replay\src\schema.rs:14:39
+   |
+14 | /// 4-byte magic header identifying a StockBroker event log file.
+   |                                       ^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#doc_markdown
+   = note: `-D clippy::doc-markdown` implied by `-D warnings`
+   = help: to override `-D warnings` add `#[allow(clippy::doc_markdown)]`
+help: try
+   |
+14 - /// 4-byte magic header identifying a StockBroker event log file.
+14 + /// 4-byte magic header identifying a `StockBroker` event log file.
+   |
+
+error: this function has too many arguments (9/7)
+   --> replay\src\writer.rs:244:5
+    |
+244 | /     pub fn log_trade(
+245 | |         &self,
+246 | |         symbol: &str,
+247 | |         spec: &InstrumentSpec,
+...   |
+253 | |         trade_id: &str,
+254 | |     ) -> Result<()> {
+    | |___________________^
+    |
+    = help: for further information visit 
+https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#too_many_arguments
+    = note: `-D clippy::too-many-arguments` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::too_many_arguments)]`
+
+error: this function has too many arguments (8/7)
+   --> replay\src\writer.rs:260:5
+    |
+260 | /     pub fn log_gap(
+261 | |         &self,
+262 | |         symbol: &str,
+263 | |         spec: &InstrumentSpec,
+...   |
+268 | |         reason: &str,
+269 | |     ) -> Result<()> {
+    | |___________________^
+    |
+    = help: for further information visit 
+https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#too_many_arguments
+
+error: this function has too many lines (103/100)
+   --> replay\src\writer.rs:358:1
+    |
+358 | / fn run_writer_loop(
+359 | |     receiver: Receiver<WriterCommand>,
+360 | |     config: WriterConfig,
+361 | |     stats: Arc<WriterStats>,
+362 | | ) -> Result<()> {
+    | |_______________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#too_many_lines
+    = note: `-D clippy::too-many-lines` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::too_many_lines)]`
+
+error: this argument is passed by value, but not consumed in the function body
+   --> replay\src\writer.rs:359:15
+    |
+359 |     receiver: Receiver<WriterCommand>,
+    |               ^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit 
+https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#needless_pass_by_value
+    = note: `-D clippy::needless-pass-by-value` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::needless_pass_by_value)]`
+help: consider taking a reference instead
+    |
+359 |     receiver: &Receiver<WriterCommand>,
+    |               +
+
+error: this argument is passed by value, but not consumed in the function body
+   --> replay\src\writer.rs:360:13
+    |
+360 |     config: WriterConfig,
+    |             ^^^^^^^^^^^^
+    |
+    = help: for further information visit 
+https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#needless_pass_by_value
+help: consider taking a reference instead
+    |
+360 |     config: &WriterConfig,
+    |             +
+
+error: this argument is passed by value, but not consumed in the function body
+   --> replay\src\writer.rs:361:12
+    |
+361 |     stats: Arc<WriterStats>,
+    |            ^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit 
+https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#needless_pass_by_value
+help: consider taking a reference instead
+    |
+361 |     stats: &Arc<WriterStats>,
+    |            +
+
+error: this function's return value is unnecessary
+   --> replay\src\writer.rs:358:1
+    |
+358 | / fn run_writer_loop(
+359 | |     receiver: Receiver<WriterCommand>,
+360 | |     config: WriterConfig,
+361 | |     stats: Arc<WriterStats>,
+362 | | ) -> Result<()> {
+    | |_______________^
+    |
+    = help: for further information visit 
+https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#unnecessary_wraps
+    = note: `-D clippy::unnecessary-wraps` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::unnecessary_wraps)]`
+help: remove the return type...
+    |
+362 - ) -> Result<()> {
+362 + ) -> () {
+    |
+help: ...and then remove returned values
+    |
+476 -     Ok(())
+    |
+
+error: this `if` statement can be collapsed
+   --> replay\src\writer.rs:382:21
+    |
+382 | /                     if let Some(old_writer) = active_writer.take() {
+383 | |                         if let Ok(bytes) = old_writer.close() {
+384 | |                             stats.bytes_written.fetch_add(bytes, Ordering::Relaxed);
+385 | |                             stats.files_completed.fetch_add(1, Ordering::Relaxed);
+386 | |                         }
+387 | |                     }
+    | |_____________________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#collapsible_if
+    = note: `-D clippy::collapsible-if` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::collapsible_if)]`
+help: collapse nested if block
+    |
+382 ~                     if let Some(old_writer) = active_writer.take()
+383 ~                         && let Ok(bytes) = old_writer.close() {
+384 |                             stats.bytes_written.fetch_add(bytes, Ordering::Relaxed);
+385 |                             stats.files_completed.fetch_add(1, Ordering::Relaxed);
+386 ~                         }
+    |
+
+error: this `if` statement can be collapsed
+   --> replay\src\writer.rs:443:17
+    |
+443 | /                 if let Some(old) = active_writer.take() {
+444 | |                     if let Ok(bytes) = old.close() {
+445 | |                         stats.bytes_written.fetch_add(bytes, Ordering::Relaxed);
+446 | |                         stats.files_completed.fetch_add(1, Ordering::Relaxed);
+447 | |                     }
+448 | |                 }
+    | |_________________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#collapsible_if
+help: collapse nested if block
+    |
+443 ~                 if let Some(old) = active_writer.take()
+444 ~                     && let Ok(bytes) = old.close() {
+445 |                         stats.bytes_written.fetch_add(bytes, Ordering::Relaxed);
+446 |                         stats.files_completed.fetch_add(1, Ordering::Relaxed);
+447 ~                     }
+    |
+
+error: this `if` statement can be collapsed
+   --> replay\src\writer.rs:460:13
+    |
+460 | /             if let Some(w) = active_writer.as_mut() {
+461 | |                 if w.write_record(&record).is_ok() {
+462 | |                     stats.written_count.fetch_add(1, Ordering::Relaxed);
+463 | |                 }
+464 | |             }
+    | |_____________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#collapsible_if
+help: collapse nested if block
+    |
+460 ~             if let Some(w) = active_writer.as_mut()
+461 ~                 && w.write_record(&record).is_ok() {
+462 |                     stats.written_count.fetch_add(1, Ordering::Relaxed);
+463 ~                 }
+    |
+
+error: this `if` statement can be collapsed
+   --> replay\src\writer.rs:469:5
+    |
+469 | /     if let Some(writer) = active_writer.take() {
+470 | |         if let Ok(bytes) = writer.close() {
+471 | |             stats.bytes_written.fetch_add(bytes, Ordering::Relaxed);
+472 | |             stats.files_completed.fetch_add(1, Ordering::Relaxed);
+473 | |         }
+474 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#collapsible_if
+help: collapse nested if block
+    |
+469 ~     if let Some(writer) = active_writer.take()
+470 ~         && let Ok(bytes) = writer.close() {
+471 |             stats.bytes_written.fetch_add(bytes, Ordering::Relaxed);
+472 |             stats.files_completed.fetch_add(1, Ordering::Relaxed);
+473 ~         }
+    |
+
+error: could not compile `sb-replay` (lib) due to 37 previous errors
+warning: build failed, waiting for other jobs to finish...

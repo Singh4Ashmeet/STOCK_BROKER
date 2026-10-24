@@ -66,10 +66,10 @@ class LedgerIntegrationTest {
     void setup() {
         // Register and login
         AuthDtos.RegisterRequest reg = new AuthDtos.RegisterRequest("ledger@test.com", "SecurePass123!");
-        restTemplate.postForEntity("/api/v1/auth/register", reg, AuthDtos.RegisterResponse.class);
+        restTemplate.postForEntity("/v1/auth/register", reg, AuthDtos.RegisterResponse.class);
 
         AuthDtos.LoginRequest login = new AuthDtos.LoginRequest("ledger@test.com", "SecurePass123!");
-        ResponseEntity<AuthDtos.LoginResponse> loginResp = restTemplate.postForEntity("/api/v1/auth/login", login, AuthDtos.LoginResponse.class);
+        ResponseEntity<AuthDtos.LoginResponse> loginResp = restTemplate.postForEntity("/v1/auth/login", login, AuthDtos.LoginResponse.class);
         accessToken = loginResp.getBody().accessToken();
 
         userId = UUID.fromString(jwtTokenValidator.extractSubjectUnsafe(accessToken));

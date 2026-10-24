@@ -57,6 +57,9 @@ class AuthIsolationTest {
     @Autowired
     BacktestRepository backtestRepository;
 
+    @Autowired(required = false)
+    org.springframework.data.redis.core.StringRedisTemplate redisTemplate;
+
     private String userAAccessToken;
     private String userBAccessToken;
     private UUID userAOrderId;
@@ -70,20 +73,31 @@ class AuthIsolationTest {
 
     @BeforeEach
     void setup() {
-        // Register and login User A
-        AuthDtos.RegisterRequest regA = new AuthDtos.RegisterRequest("usera@test.com", "SecurePass123!");
-        restTemplate.postForEntity("/api/v1/auth/register", regA, AuthDtos.RegisterResponse.class);
+        if (redisTemplate != null) {
+            try {
+                var keys = redisTemplate.keys("login:fail:*");
+                if (keys != null && !keys.isEmpty()) {
+                    redisTemplate.delete(keys);
+                }
+            } catch (Exception ignored) {}
+        }
 
-        AuthDtos.LoginRequest loginA = new AuthDtos.LoginRequest("usera@test.com", "SecurePass123!");
-        ResponseEntity<AuthDtos.LoginResponse> loginResponseA = restTemplate.postForEntity("/api/v1/auth/login", loginA, AuthDtos.LoginResponse.class);
+        String userAEmail = "usera-" + UUID.randomUUID() + "@test.com";
+        // Register and login User A
+        AuthDtos.RegisterRequest regA = new AuthDtos.RegisterRequest(userAEmail, "SecurePass123!");
+        restTemplate.postForEntity("/v1/auth/register", regA, AuthDtos.RegisterResponse.class);
+
+        AuthDtos.LoginRequest loginA = new AuthDtos.LoginRequest(userAEmail, "SecurePass123!");
+        ResponseEntity<AuthDtos.LoginResponse> loginResponseA = restTemplate.postForEntity("/v1/auth/login", loginA, AuthDtos.LoginResponse.class);
         userAAccessToken = loginResponseA.getBody().accessToken();
 
+        String userBEmail = "userb-" + UUID.randomUUID() + "@test.com";
         // Register and login User B
-        AuthDtos.RegisterRequest regB = new AuthDtos.RegisterRequest("userb@test.com", "SecurePass123!");
-        restTemplate.postForEntity("/api/v1/auth/register", regB, AuthDtos.RegisterResponse.class);
+        AuthDtos.RegisterRequest regB = new AuthDtos.RegisterRequest(userBEmail, "SecurePass123!");
+        restTemplate.postForEntity("/v1/auth/register", regB, AuthDtos.RegisterResponse.class);
 
-        AuthDtos.LoginRequest loginB = new AuthDtos.LoginRequest("userb@test.com", "SecurePass123!");
-        ResponseEntity<AuthDtos.LoginResponse> loginResponseB = restTemplate.postForEntity("/api/v1/auth/login", loginB, AuthDtos.LoginResponse.class);
+        AuthDtos.LoginRequest loginB = new AuthDtos.LoginRequest(userBEmail, "SecurePass123!");
+        ResponseEntity<AuthDtos.LoginResponse> loginResponseB = restTemplate.postForEntity("/v1/auth/login", loginB, AuthDtos.LoginResponse.class);
         userBAccessToken = loginResponseB.getBody().accessToken();
 
         // Create test data for User A
@@ -109,14 +123,14 @@ class AuthIsolationTest {
                 "idem-" + suffix + "-order"
         );
         ResponseEntity<TradingDtos.OrderResponse> orderResp = restTemplate.exchange(
-                "/api/v1/orders", HttpMethod.POST, new HttpEntity<>(orderReq, headers), TradingDtos.OrderResponse.class);
+                "/v1/orders", HttpMethod.POST, new HttpEntity<>(orderReq, headers), TradingDtos.OrderResponse.class);
         if (suffix.equals("A")) userAOrderId = UUID.fromString(orderResp.getBody().orderId());
         else userBOrderId = UUID.fromString(orderResp.getBody().orderId());
 
         // Create watchlist
         PortfolioDtos.WatchlistRequest wlReq = new PortfolioDtos.WatchlistRequest("Test Watchlist " + suffix);
         ResponseEntity<PortfolioDtos.WatchlistResponse> wlResp = restTemplate.exchange(
-                "/api/v1/watchlists", HttpMethod.POST, new HttpEntity<>(wlReq, headers), PortfolioDtos.WatchlistResponse.class);
+                "/v1/watchlists", HttpMethod.POST, new HttpEntity<>(wlReq, headers), PortfolioDtos.WatchlistResponse.class);
         if (suffix.equals("A")) userAWatchlistId = UUID.fromString(wlResp.getBody().watchlistId());
         else userBWatchlistId = UUID.fromString(wlResp.getBody().watchlistId());
 
@@ -129,7 +143,7 @@ class AuthIsolationTest {
                 60
         );
         ResponseEntity<AlertsDtos.AlertResponse> alertResp = restTemplate.exchange(
-                "/api/v1/alerts", HttpMethod.POST, new HttpEntity<>(alertReq, headers), AlertsDtos.AlertResponse.class);
+                "/v1/alerts", HttpMethod.POST, new HttpEntity<>(alertReq, headers), AlertsDtos.AlertResponse.class);
         if (suffix.equals("A")) userAAlertId = UUID.fromString(alertResp.getBody().alertId());
         else userBAlertId = UUID.fromString(alertResp.getBody().alertId());
 
@@ -146,7 +160,7 @@ class AuthIsolationTest {
                 "git-commit-" + suffix
         );
         ResponseEntity<ResearchDtos.CreateBacktestResponse> btResp = restTemplate.exchange(
-                "/api/v1/backtests", HttpMethod.POST, new HttpEntity<>(btReq, headers), ResearchDtos.CreateBacktestResponse.class);
+                "/v1/backtests", HttpMethod.POST, new HttpEntity<>(btReq, headers), ResearchDtos.CreateBacktestResponse.class);
         if (suffix.equals("A")) userABacktestId = UUID.fromString(btResp.getBody().backtestId());
         else userBBacktestId = UUID.fromString(btResp.getBody().backtestId());
     }
@@ -159,7 +173,7 @@ class AuthIsolationTest {
 
         // User A tries to access User B's order directly by ID
         ResponseEntity<String> response = restTemplate.exchange(
-                "/api/v1/orders/" + userBOrderId, HttpMethod.GET, entity, String.class);
+                "/v1/orders/" + userBOrderId, HttpMethod.GET, entity, String.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
     }
@@ -171,7 +185,7 @@ class AuthIsolationTest {
         HttpEntity<?> entity = new HttpEntity<>(headers);
 
         ResponseEntity<String> response = restTemplate.exchange(
-                "/api/v1/orders/" + userBOrderId, HttpMethod.DELETE, entity, String.class);
+                "/v1/orders/" + userBOrderId, HttpMethod.DELETE, entity, String.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
     }
@@ -183,7 +197,7 @@ class AuthIsolationTest {
         HttpEntity<?> entity = new HttpEntity<>(headers);
 
         ResponseEntity<TradingDtosExtended.OrderListResponse> response = restTemplate.exchange(
-                "/api/v1/orders", HttpMethod.GET, entity, TradingDtosExtended.OrderListResponse.class);
+                "/v1/orders", HttpMethod.GET, entity, TradingDtosExtended.OrderListResponse.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isNotNull();
@@ -199,7 +213,7 @@ class AuthIsolationTest {
         HttpEntity<?> entity = new HttpEntity<>(headers);
 
         ResponseEntity<TradingDtosExtended.FillsResponse> response = restTemplate.exchange(
-                "/api/v1/fills", HttpMethod.GET, entity, TradingDtosExtended.FillsResponse.class);
+                "/v1/fills", HttpMethod.GET, entity, TradingDtosExtended.FillsResponse.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isNotNull();
@@ -214,7 +228,7 @@ class AuthIsolationTest {
         HttpEntity<?> entity = new HttpEntity<>(headers);
 
         ResponseEntity<String> response = restTemplate.exchange(
-                "/api/v1/watchlists/" + userBWatchlistId, HttpMethod.GET, entity, String.class);
+                "/v1/watchlists/" + userBWatchlistId, HttpMethod.GET, entity, String.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
     }
@@ -226,7 +240,7 @@ class AuthIsolationTest {
         HttpEntity<?> entity = new HttpEntity<>(headers);
 
         ResponseEntity<String> response = restTemplate.exchange(
-                "/api/v1/watchlists/" + userBWatchlistId, HttpMethod.DELETE, entity, String.class);
+                "/v1/watchlists/" + userBWatchlistId, HttpMethod.DELETE, entity, String.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
     }
@@ -238,7 +252,7 @@ class AuthIsolationTest {
 
         PortfolioDtos.WatchlistItemRequest itemReq = new PortfolioDtos.WatchlistItemRequest("BINANCE:ETH-USDT", 1);
         ResponseEntity<String> response = restTemplate.exchange(
-                "/api/v1/watchlists/" + userBWatchlistId + "/items", HttpMethod.POST, new HttpEntity<>(itemReq, headers), String.class);
+                "/v1/watchlists/" + userBWatchlistId + "/items", HttpMethod.POST, new HttpEntity<>(itemReq, headers), String.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
     }
@@ -250,7 +264,7 @@ class AuthIsolationTest {
         HttpEntity<?> entity = new HttpEntity<>(headers);
 
         ResponseEntity<PortfolioDtosExtended.WatchlistListResponse> response = restTemplate.exchange(
-                "/api/v1/watchlists", HttpMethod.GET, entity, PortfolioDtosExtended.WatchlistListResponse.class);
+                "/v1/watchlists", HttpMethod.GET, entity, PortfolioDtosExtended.WatchlistListResponse.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isNotNull();
@@ -265,7 +279,7 @@ class AuthIsolationTest {
         HttpEntity<?> entity = new HttpEntity<>(headers);
 
         ResponseEntity<String> response = restTemplate.exchange(
-                "/api/v1/alerts/" + userBAlertId, HttpMethod.GET, entity, String.class);
+                "/v1/alerts/" + userBAlertId, HttpMethod.GET, entity, String.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
     }
@@ -277,7 +291,7 @@ class AuthIsolationTest {
 
         AlertsDtos.UpdateAlertRequest updateReq = new AlertsDtos.UpdateAlertRequest(AlertsDtos.Status.DISABLED, 120);
         ResponseEntity<String> response = restTemplate.exchange(
-                "/api/v1/alerts/" + userBAlertId, HttpMethod.PATCH, new HttpEntity<>(updateReq, headers), String.class);
+                "/v1/alerts/" + userBAlertId, HttpMethod.PATCH, new HttpEntity<>(updateReq, headers), String.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
     }
@@ -289,7 +303,7 @@ class AuthIsolationTest {
         HttpEntity<?> entity = new HttpEntity<>(headers);
 
         ResponseEntity<String> response = restTemplate.exchange(
-                "/api/v1/alerts/" + userBAlertId, HttpMethod.DELETE, entity, String.class);
+                "/v1/alerts/" + userBAlertId, HttpMethod.DELETE, entity, String.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
     }
@@ -301,7 +315,7 @@ class AuthIsolationTest {
         HttpEntity<?> entity = new HttpEntity<>(headers);
 
         ResponseEntity<AlertsDtos.AlertListResponse> response = restTemplate.exchange(
-                "/api/v1/alerts", HttpMethod.GET, entity, AlertsDtos.AlertListResponse.class);
+                "/v1/alerts", HttpMethod.GET, entity, AlertsDtos.AlertListResponse.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isNotNull();
@@ -316,7 +330,7 @@ class AuthIsolationTest {
         HttpEntity<?> entity = new HttpEntity<>(headers);
 
         ResponseEntity<String> response = restTemplate.exchange(
-                "/api/v1/backtests/" + userBBacktestId, HttpMethod.GET, entity, String.class);
+                "/v1/backtests/" + userBBacktestId, HttpMethod.GET, entity, String.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
     }
@@ -328,7 +342,7 @@ class AuthIsolationTest {
         HttpEntity<?> entity = new HttpEntity<>(headers);
 
         ResponseEntity<String> response = restTemplate.exchange(
-                "/api/v1/backtests/" + userBBacktestId + "/result", HttpMethod.GET, entity, String.class);
+                "/v1/backtests/" + userBBacktestId + "/result", HttpMethod.GET, entity, String.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
     }
@@ -341,7 +355,7 @@ class AuthIsolationTest {
         HttpHeaders userBHeaders = new HttpHeaders();
         userBHeaders.setBearerAuth(userBAccessToken);
         ResponseEntity<ResearchDtos.JobResponse> created = restTemplate.exchange(
-                "/api/v1/backtest-jobs", HttpMethod.POST, new HttpEntity<>(request, userBHeaders),
+                "/v1/backtest-jobs", HttpMethod.POST, new HttpEntity<>(request, userBHeaders),
                 ResearchDtos.JobResponse.class);
         assertThat(created.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(created.getBody()).isNotNull();
@@ -350,9 +364,9 @@ class AuthIsolationTest {
         userAHeaders.setBearerAuth(userAAccessToken);
         String jobId = created.getBody().jobId();
         ResponseEntity<String> readOther = restTemplate.exchange(
-                "/api/v1/backtest-jobs/" + jobId, HttpMethod.GET, new HttpEntity<>(userAHeaders), String.class);
+                "/v1/backtest-jobs/" + jobId, HttpMethod.GET, new HttpEntity<>(userAHeaders), String.class);
         ResponseEntity<String> listOther = restTemplate.exchange(
-                "/api/v1/backtest-jobs", HttpMethod.GET, new HttpEntity<>(userAHeaders), String.class);
+                "/v1/backtest-jobs", HttpMethod.GET, new HttpEntity<>(userAHeaders), String.class);
 
         assertThat(readOther.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
         assertThat(listOther.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -366,7 +380,7 @@ class AuthIsolationTest {
         HttpEntity<?> entity = new HttpEntity<>(headers);
 
         ResponseEntity<ResearchDtos.BacktestListResponse> response = restTemplate.exchange(
-                "/api/v1/backtests", HttpMethod.GET, entity, ResearchDtos.BacktestListResponse.class);
+                "/v1/backtests", HttpMethod.GET, entity, ResearchDtos.BacktestListResponse.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isNotNull();
@@ -381,7 +395,7 @@ class AuthIsolationTest {
         HttpEntity<?> entity = new HttpEntity<>(headers);
 
         ResponseEntity<TradingDtos.PortfolioResponse> response = restTemplate.exchange(
-                "/api/v1/portfolio", HttpMethod.GET, entity, TradingDtos.PortfolioResponse.class);
+                "/v1/portfolio", HttpMethod.GET, entity, TradingDtos.PortfolioResponse.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isNotNull();
@@ -396,7 +410,7 @@ class AuthIsolationTest {
         HttpEntity<?> entity = new HttpEntity<>(headers);
 
         ResponseEntity<TradingDtos.LedgerResponse> response = restTemplate.exchange(
-                "/api/v1/ledger", HttpMethod.GET, entity, TradingDtos.LedgerResponse.class);
+                "/v1/ledger", HttpMethod.GET, entity, TradingDtos.LedgerResponse.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isNotNull();
@@ -409,21 +423,21 @@ class AuthIsolationTest {
         HttpEntity<?> entity = new HttpEntity<>(new HttpHeaders());
 
         // Test various endpoints
-        assertThat(restTemplate.exchange("/api/v1/orders", HttpMethod.GET, entity, String.class).getStatusCode())
+        assertThat(restTemplate.exchange("/v1/orders", HttpMethod.GET, entity, String.class).getStatusCode())
                 .isEqualTo(HttpStatus.UNAUTHORIZED);
-        assertThat(restTemplate.exchange("/api/v1/fills", HttpMethod.GET, entity, String.class).getStatusCode())
+        assertThat(restTemplate.exchange("/v1/fills", HttpMethod.GET, entity, String.class).getStatusCode())
                 .isEqualTo(HttpStatus.UNAUTHORIZED);
-        assertThat(restTemplate.exchange("/api/v1/portfolio", HttpMethod.GET, entity, String.class).getStatusCode())
+        assertThat(restTemplate.exchange("/v1/portfolio", HttpMethod.GET, entity, String.class).getStatusCode())
                 .isEqualTo(HttpStatus.UNAUTHORIZED);
-        assertThat(restTemplate.exchange("/api/v1/ledger", HttpMethod.GET, entity, String.class).getStatusCode())
+        assertThat(restTemplate.exchange("/v1/ledger", HttpMethod.GET, entity, String.class).getStatusCode())
                 .isEqualTo(HttpStatus.UNAUTHORIZED);
-        assertThat(restTemplate.exchange("/api/v1/watchlists", HttpMethod.GET, entity, String.class).getStatusCode())
+        assertThat(restTemplate.exchange("/v1/watchlists", HttpMethod.GET, entity, String.class).getStatusCode())
                 .isEqualTo(HttpStatus.UNAUTHORIZED);
-        assertThat(restTemplate.exchange("/api/v1/alerts", HttpMethod.GET, entity, String.class).getStatusCode())
+        assertThat(restTemplate.exchange("/v1/alerts", HttpMethod.GET, entity, String.class).getStatusCode())
                 .isEqualTo(HttpStatus.UNAUTHORIZED);
-        assertThat(restTemplate.exchange("/api/v1/backtests", HttpMethod.GET, entity, String.class).getStatusCode())
+        assertThat(restTemplate.exchange("/v1/backtests", HttpMethod.GET, entity, String.class).getStatusCode())
                 .isEqualTo(HttpStatus.UNAUTHORIZED);
-        assertThat(restTemplate.exchange("/api/v1/me", HttpMethod.GET, entity, String.class).getStatusCode())
+        assertThat(restTemplate.exchange("/v1/me", HttpMethod.GET, entity, String.class).getStatusCode())
                 .isEqualTo(HttpStatus.UNAUTHORIZED);
     }
 
@@ -435,25 +449,25 @@ class AuthIsolationTest {
 
         // User A can access their own order
         ResponseEntity<TradingDtos.OrderResponse> orderResp = restTemplate.exchange(
-                "/api/v1/orders/" + userAOrderId, HttpMethod.GET, entity, TradingDtos.OrderResponse.class);
+                "/v1/orders/" + userAOrderId, HttpMethod.GET, entity, TradingDtos.OrderResponse.class);
         assertThat(orderResp.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(orderResp.getBody().orderId()).isEqualTo(userAOrderId.toString());
 
         // User A can access their own watchlist
         ResponseEntity<PortfolioDtos.WatchlistResponse> wlResp = restTemplate.exchange(
-                "/api/v1/watchlists/" + userAWatchlistId, HttpMethod.GET, entity, PortfolioDtos.WatchlistResponse.class);
+                "/v1/watchlists/" + userAWatchlistId, HttpMethod.GET, entity, PortfolioDtos.WatchlistResponse.class);
         assertThat(wlResp.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(wlResp.getBody().watchlistId()).isEqualTo(userAWatchlistId.toString());
 
         // User A can access their own alert
         ResponseEntity<AlertsDtos.AlertResponse> alertResp = restTemplate.exchange(
-                "/api/v1/alerts/" + userAAlertId, HttpMethod.GET, entity, AlertsDtos.AlertResponse.class);
+                "/v1/alerts/" + userAAlertId, HttpMethod.GET, entity, AlertsDtos.AlertResponse.class);
         assertThat(alertResp.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(alertResp.getBody().alertId()).isEqualTo(userAAlertId.toString());
 
         // User A can access their own backtest
         ResponseEntity<ResearchDtos.BacktestResult> btResp = restTemplate.exchange(
-                "/api/v1/backtests/" + userABacktestId, HttpMethod.GET, entity, ResearchDtos.BacktestResult.class);
+                "/v1/backtests/" + userABacktestId, HttpMethod.GET, entity, ResearchDtos.BacktestResult.class);
         assertThat(btResp.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(btResp.getBody().backtestId()).isEqualTo(userABacktestId.toString());
     }
@@ -471,7 +485,7 @@ class AuthIsolationTest {
                 "50000"
         );
         ResponseEntity<TradingDtos.OrderPreviewResponse> response = restTemplate.exchange(
-                "/api/v1/orders/preview", HttpMethod.POST, new HttpEntity<>(previewReq, headers), TradingDtos.OrderPreviewResponse.class);
+                "/v1/orders/preview", HttpMethod.POST, new HttpEntity<>(previewReq, headers), TradingDtos.OrderPreviewResponse.class);
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     }
 }

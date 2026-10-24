@@ -56,10 +56,10 @@ class OrderExecutorTest {
     void setup() {
         // Register and login
         AuthDtos.RegisterRequest reg = new AuthDtos.RegisterRequest("orderexec@test.com", "SecurePass123!");
-        restTemplate.postForEntity("/api/v1/auth/register", reg, AuthDtos.RegisterResponse.class);
+        restTemplate.postForEntity("/v1/auth/register", reg, AuthDtos.RegisterResponse.class);
 
         AuthDtos.LoginRequest login = new AuthDtos.LoginRequest("orderexec@test.com", "SecurePass123!");
-        ResponseEntity<AuthDtos.LoginResponse> loginResp = restTemplate.postForEntity("/api/v1/auth/login", login, AuthDtos.LoginResponse.class);
+        ResponseEntity<AuthDtos.LoginResponse> loginResp = restTemplate.postForEntity("/v1/auth/login", login, AuthDtos.LoginResponse.class);
         String accessToken = loginResp.getBody().accessToken();
         
         this.accessToken = accessToken;
@@ -89,7 +89,7 @@ class OrderExecutorTest {
         );
 
         ResponseEntity<TradingDtos.OrderResponse> response = restTemplate.exchange(
-                "/api/v1/orders", HttpMethod.POST, entity, TradingDtos.OrderResponse.class);
+                "/v1/orders", HttpMethod.POST, entity, TradingDtos.OrderResponse.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         TradingDtos.OrderResponse order = response.getBody();
@@ -130,7 +130,7 @@ class OrderExecutorTest {
         );
 
         ResponseEntity<TradingDtos.OrderResponse> response = restTemplate.exchange(
-                "/api/v1/orders", HttpMethod.POST, entity, TradingDtos.OrderResponse.class);
+                "/v1/orders", HttpMethod.POST, entity, TradingDtos.OrderResponse.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         TradingDtos.OrderResponse order = response.getBody();
@@ -157,7 +157,7 @@ class OrderExecutorTest {
         );
 
         ResponseEntity<TradingDtos.OrderResponse> response = restTemplate.exchange(
-                "/api/v1/orders", HttpMethod.POST, entity, TradingDtos.OrderResponse.class);
+                "/v1/orders", HttpMethod.POST, entity, TradingDtos.OrderResponse.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         TradingDtos.OrderResponse order = response.getBody();
@@ -183,7 +183,7 @@ class OrderExecutorTest {
         );
 
         ResponseEntity<TradingDtos.OrderResponse> response = restTemplate.exchange(
-                "/api/v1/orders", HttpMethod.POST, entity, TradingDtos.OrderResponse.class);
+                "/v1/orders", HttpMethod.POST, entity, TradingDtos.OrderResponse.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         TradingDtos.OrderResponse order = response.getBody();
@@ -217,7 +217,7 @@ class OrderExecutorTest {
         );
 
         ResponseEntity<TradingDtos.OrderResponse> response = restTemplate.exchange(
-                "/api/v1/orders", HttpMethod.POST, entity, TradingDtos.OrderResponse.class);
+                "/v1/orders", HttpMethod.POST, entity, TradingDtos.OrderResponse.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         TradingDtos.OrderResponse order = response.getBody();
@@ -254,13 +254,13 @@ class OrderExecutorTest {
 
         // First request
         ResponseEntity<TradingDtos.OrderResponse> response1 = restTemplate.exchange(
-                "/api/v1/orders", HttpMethod.POST, entity, TradingDtos.OrderResponse.class);
+                "/v1/orders", HttpMethod.POST, entity, TradingDtos.OrderResponse.class);
         assertThat(response1.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         String orderId1 = response1.getBody().orderId();
 
         // Second request with same idempotency key - should return same order
         ResponseEntity<TradingDtos.OrderResponse> response2 = restTemplate.exchange(
-                "/api/v1/orders", HttpMethod.POST, entity, TradingDtos.OrderResponse.class);
+                "/v1/orders", HttpMethod.POST, entity, TradingDtos.OrderResponse.class);
         assertThat(response2.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         String orderId2 = response2.getBody().orderId();
         
@@ -281,7 +281,7 @@ class OrderExecutorTest {
         );
 
         ResponseEntity<String> response3 = restTemplate.exchange(
-                "/api/v1/orders", HttpMethod.POST, entity2, String.class);
+                "/v1/orders", HttpMethod.POST, entity2, String.class);
         assertThat(response3.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
         assertThat(response3.getBody()).contains("ORDER_DUPLICATE_KEY_MISMATCH");
     }
@@ -316,7 +316,7 @@ class OrderExecutorTest {
                             h
                     );
                     ResponseEntity<TradingDtos.OrderResponse> resp = restTemplate.exchange(
-                            "/api/v1/orders", HttpMethod.POST, e, TradingDtos.OrderResponse.class);
+                            "/v1/orders", HttpMethod.POST, e, TradingDtos.OrderResponse.class);
                     if (resp.getStatusCode() == HttpStatus.CREATED) {
                         successCount.incrementAndGet();
                     } else {
@@ -354,7 +354,7 @@ class OrderExecutorTest {
         );
 
         ResponseEntity<TradingDtos.OrderPreviewResponse> response = restTemplate.exchange(
-                "/api/v1/orders/preview", HttpMethod.POST, entity, TradingDtos.OrderPreviewResponse.class);
+                "/v1/orders/preview", HttpMethod.POST, entity, TradingDtos.OrderPreviewResponse.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         TradingDtos.OrderPreviewResponse preview = response.getBody();
@@ -383,7 +383,7 @@ class OrderExecutorTest {
         );
 
         ResponseEntity<TradingDtos.OrderResponse> response = restTemplate.exchange(
-                "/api/v1/orders", HttpMethod.POST, entity, TradingDtos.OrderResponse.class);
+                "/v1/orders", HttpMethod.POST, entity, TradingDtos.OrderResponse.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         // Golden vectors are saved to testdata/golden_fills/ as JSONL
@@ -410,7 +410,7 @@ class OrderExecutorTest {
         );
 
         ResponseEntity<TradingDtos.OrderResponse> response = restTemplate.exchange(
-                "/api/v1/orders", HttpMethod.POST, entity, TradingDtos.OrderResponse.class);
+                "/v1/orders", HttpMethod.POST, entity, TradingDtos.OrderResponse.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         TradingDtos.OrderResponse order = response.getBody();
@@ -440,13 +440,13 @@ class OrderExecutorTest {
         );
 
         ResponseEntity<TradingDtos.OrderResponse> createResp = restTemplate.exchange(
-                "/api/v1/orders", HttpMethod.POST, entity, TradingDtos.OrderResponse.class);
+                "/v1/orders", HttpMethod.POST, entity, TradingDtos.OrderResponse.class);
         assertThat(createResp.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         String orderId = createResp.getBody().orderId();
 
         // Cancel the order
         ResponseEntity<TradingDtos.OrderResponse> cancelResp = restTemplate.exchange(
-                "/api/v1/orders/" + orderId, HttpMethod.DELETE, 
+                "/v1/orders/" + orderId, HttpMethod.DELETE, 
                 new HttpEntity<>(headers), TradingDtos.OrderResponse.class);
 
         assertThat(cancelResp.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -477,7 +477,7 @@ class OrderExecutorTest {
         );
 
         ResponseEntity<TradingDtos.OrderResponse> crossResp = restTemplate.exchange(
-                "/api/v1/orders", HttpMethod.POST, crossEntity, TradingDtos.OrderResponse.class);
+                "/v1/orders", HttpMethod.POST, crossEntity, TradingDtos.OrderResponse.class);
         assertThat(crossResp.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         // Should fill with taker fee (5 bps)
         List<Fill> crossFills = fillRepository.findByOrderId(UUID.fromString(crossResp.getBody().orderId()));

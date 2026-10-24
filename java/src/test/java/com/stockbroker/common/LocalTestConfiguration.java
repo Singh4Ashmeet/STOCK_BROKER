@@ -9,4 +9,9 @@ import org.springframework.boot.test.context.TestConfiguration;
  */
 @TestConfiguration
 public class LocalTestConfiguration {
+
+    @org.springframework.context.annotation.Bean
+    public org.springframework.boot.web.client.RestTemplateCustomizer restTemplateCustomizer() {
+        return restTemplate -> restTemplate.setRequestFactory(new org.springframework.http.client.JdkClientHttpRequestFactory());
+    }
 }

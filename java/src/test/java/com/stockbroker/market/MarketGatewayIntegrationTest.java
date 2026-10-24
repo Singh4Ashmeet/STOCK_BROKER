@@ -42,10 +42,10 @@ class MarketGatewayIntegrationTest {
     void setup() {
         // Register and login
         AuthDtos.RegisterRequest reg = new AuthDtos.RegisterRequest("markettest@test.com", "SecurePass123!");
-        restTemplate.postForEntity("/api/v1/auth/register", reg, AuthDtos.RegisterResponse.class);
+        restTemplate.postForEntity("/v1/auth/register", reg, AuthDtos.RegisterResponse.class);
 
         AuthDtos.LoginRequest login = new AuthDtos.LoginRequest("markettest@test.com", "SecurePass123!");
-        ResponseEntity<AuthDtos.LoginResponse> loginResp = restTemplate.postForEntity("/api/v1/auth/login", login, AuthDtos.LoginResponse.class);
+        ResponseEntity<AuthDtos.LoginResponse> loginResp = restTemplate.postForEntity("/v1/auth/login", login, AuthDtos.LoginResponse.class);
         accessToken = loginResp.getBody().accessToken();
     }
 
@@ -56,7 +56,7 @@ class MarketGatewayIntegrationTest {
         HttpEntity<?> entity = new HttpEntity<>(headers);
 
         ResponseEntity<MarketDtos.ListInstrumentsResponse> response = restTemplate.exchange(
-                "/api/v1/instruments", HttpMethod.GET, entity, MarketDtos.ListInstrumentsResponse.class);
+                "/v1/instruments", HttpMethod.GET, entity, MarketDtos.ListInstrumentsResponse.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isNotNull();
@@ -70,7 +70,7 @@ class MarketGatewayIntegrationTest {
         HttpEntity<?> entity = new HttpEntity<>(headers);
 
         ResponseEntity<MarketDtos.BookUpdate> response = restTemplate.exchange(
-                "/api/v1/market/BINANCE:BTC-USDT/snapshot?depth=10", HttpMethod.GET, entity, MarketDtos.BookUpdate.class);
+                "/v1/market/BINANCE:BTC-USDT/snapshot?depth=10", HttpMethod.GET, entity, MarketDtos.BookUpdate.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isNotNull();
@@ -84,7 +84,7 @@ class MarketGatewayIntegrationTest {
         HttpEntity<?> entity = new HttpEntity<>(headers);
 
         ResponseEntity<MarketDtos.Metrics> response = restTemplate.exchange(
-                "/api/v1/market/BINANCE:BTC-USDT/metrics", HttpMethod.GET, entity, MarketDtos.Metrics.class);
+                "/v1/market/BINANCE:BTC-USDT/metrics", HttpMethod.GET, entity, MarketDtos.Metrics.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isNotNull();
@@ -98,7 +98,7 @@ class MarketGatewayIntegrationTest {
         HttpEntity<?> entity = new HttpEntity<>(headers);
 
         ResponseEntity<List<MarketDtos.Trade>> response = restTemplate.exchange(
-                "/api/v1/market/BINANCE:BTC-USDT/trades?limit=10", HttpMethod.GET, entity, 
+                "/v1/market/BINANCE:BTC-USDT/trades?limit=10", HttpMethod.GET, entity, 
                 new org.springframework.core.ParameterizedTypeReference<List<MarketDtos.Trade>>() {});
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -108,7 +108,7 @@ class MarketGatewayIntegrationTest {
     @Test
     void healthEndpointWorks() {
         ResponseEntity<MarketDtos.HealthResponse> response = restTemplate.getForEntity(
-                "/api/v1/system/health", MarketDtos.HealthResponse.class);
+                "/v1/system/health", MarketDtos.HealthResponse.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isNotNull();
@@ -122,7 +122,7 @@ class MarketGatewayIntegrationTest {
         HttpEntity<?> entity = new HttpEntity<>(headers);
 
         ResponseEntity<String> response = restTemplate.exchange(
-                "/api/v1/system/latency", HttpMethod.GET, entity, String.class);
+                "/v1/system/latency", HttpMethod.GET, entity, String.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
     }

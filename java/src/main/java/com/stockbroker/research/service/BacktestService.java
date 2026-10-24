@@ -88,8 +88,7 @@ public class BacktestService {
 
     public ResearchDtos.BacktestResult getBacktest(UUID userId, UUID runId) {
         BacktestRun run = backtestRepository.findByIdAndUserId(runId, userId)
-                .orElseThrow(() -> new BusinessProblem.ValidationFailed("Backtest not found",
-                        java.util.Map.of("code", "BACKTEST_NOT_FOUND")));
+                .orElseThrow(() -> new BusinessProblem.BacktestNotFound(runId.toString()));
         return toBacktestResult(run);
     }
 
@@ -99,8 +98,7 @@ public class BacktestService {
 
     public ResearchDtos.BacktestTradeLogResponse getTradeLog(UUID userId, UUID runId, int limit, String cursor) {
         backtestRepository.findByIdAndUserId(runId, userId)
-                .orElseThrow(() -> new BusinessProblem.ValidationFailed("Backtest not found",
-                        java.util.Map.of("code", "BACKTEST_NOT_FOUND")));
+                .orElseThrow(() -> new BusinessProblem.BacktestNotFound(runId.toString()));
 
         // TODO: Load trade log from artifact_path
         // For now, return empty

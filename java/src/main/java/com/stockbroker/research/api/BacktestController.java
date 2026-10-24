@@ -14,7 +14,7 @@ import java.util.List;
  * Provides submit, poll, fetch and artifact download for backtest jobs.
  */
 @RestController
-@RequestMapping("/api/v1/backtest-jobs")
+@RequestMapping("/v1/backtest-jobs")
 @PreAuthorize("isAuthenticated()")
 public class BacktestController {
 

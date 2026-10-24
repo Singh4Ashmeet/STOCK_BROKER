@@ -27,6 +27,7 @@ export async function POST(request: NextRequest) {
         'Content-Type': 'application/json',
         Cookie: `refresh_token=${refreshToken}`,
       },
+      body: JSON.stringify({ refresh_token: refreshToken }),
     });
 
     const data = await response.json();

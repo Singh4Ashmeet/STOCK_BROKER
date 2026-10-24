@@ -143,7 +143,7 @@ springdoc:
     operations-sorter: method
     tags-sorter: alpha
   packages-to-scan: com.stockbroker
-  paths-to-match: /api/v1/**
+  paths-to-match: /v1/**
 
 # Stock Broker specific configuration
 sb:

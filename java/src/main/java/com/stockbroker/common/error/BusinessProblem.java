@@ -153,6 +153,30 @@ public class BusinessProblem extends AbstractThrowableProblem {
         }
     }
 
+    public static class WatchlistNotFound extends BusinessProblem {
+        public WatchlistNotFound(String watchlistId) {
+            super("WATCHLIST_NOT_FOUND", Status.NOT_FOUND, "Watchlist not found",
+                  "Watchlist with id " + watchlistId + " does not exist",
+                  Map.of("watchlistId", watchlistId));
+        }
+    }
+
+    public static class AlertNotFound extends BusinessProblem {
+        public AlertNotFound(String alertId) {
+            super("ALERT_NOT_FOUND", Status.NOT_FOUND, "Alert not found",
+                  "Alert with id " + alertId + " does not exist",
+                  Map.of("alertId", alertId));
+        }
+    }
+
+    public static class BacktestNotFound extends BusinessProblem {
+        public BacktestNotFound(String backtestId) {
+            super("BACKTEST_NOT_FOUND", Status.NOT_FOUND, "Backtest not found",
+                  "Backtest with id " + backtestId + " does not exist",
+                  Map.of("backtestId", backtestId));
+        }
+    }
+
     /**
      * Instrument errors
      */

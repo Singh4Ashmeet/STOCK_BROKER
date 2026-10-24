@@ -14,7 +14,7 @@ import java.util.List;
  * Market data REST endpoints.
  */
 @RestController
-@RequestMapping("/api/v1")
+@RequestMapping("/v1")
 public class MarketController {
 
     private final MarketDataService marketDataService;

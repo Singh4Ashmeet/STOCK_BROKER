@@ -35,7 +35,7 @@ import java.util.UUID;
  * Implements login throttling, refresh token rotation with reuse detection.
  */
 @Service
-@Transactional
+@Transactional(noRollbackFor = com.stockbroker.common.error.BusinessProblem.class)
 public class AuthService {
 
     private static final String LOGIN_FAIL_PREFIX = "login:fail:";
@@ -115,14 +115,14 @@ public class AuthService {
         // Check IP-based throttling first
         checkIpThrottling(clientIp);
 
+        // Check account-based throttling
+        checkAccountThrottling(email);
+
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> {
                     recordLoginFailure(email, clientIp);
                     return new BusinessProblem.AuthInvalidCredentials();
                 });
-
-        // Check account-based throttling
-        checkAccountThrottling(user.getId());
 
         // Check if account is locked
         if ("LOCKED".equals(user.getStatus())) {
@@ -247,8 +247,9 @@ public class AuthService {
         return UUID.fromString(userIdStr);
     }
 
-    private void checkAccountThrottling(UUID userId) {
-        String key = LOGIN_FAIL_PREFIX + userId;
+    private void checkAccountThrottling(String email) {
+        String emailHash = hashEmail(email);
+        String key = LOGIN_FAIL_PREFIX + emailHash;
         String attempts = redisTemplate.opsForValue().get(key);
         if (attempts != null && Integer.parseInt(attempts) >= MAX_LOGIN_ATTEMPTS) {
             throw new BusinessProblem.RateLimited(LOCKOUT_MINUTES * 60);
@@ -258,7 +259,7 @@ public class AuthService {
     private void checkIpThrottling(String clientIp) {
         String key = LOGIN_FAIL_IP_PREFIX + clientIp;
         String attempts = redisTemplate.opsForValue().get(key);
-        if (attempts != null && Integer.parseInt(attempts) >= MAX_LOGIN_ATTEMPTS * 2) {
+        if (attempts != null && Integer.parseInt(attempts) >= (MAX_LOGIN_ATTEMPTS * 2 - 1)) {
             throw new BusinessProblem.RateLimited(LOCKOUT_MINUTES * 60);
         }
     }

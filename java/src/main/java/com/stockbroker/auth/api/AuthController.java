@@ -18,7 +18,7 @@ import java.util.UUID;
  * Authentication REST endpoints.
  */
 @RestController
-@RequestMapping("/api/v1/auth")
+@RequestMapping("/v1/auth")
 public class AuthController {
 
     private final AuthService authService;

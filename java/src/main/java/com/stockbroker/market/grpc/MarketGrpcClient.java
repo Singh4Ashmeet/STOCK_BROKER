@@ -60,10 +60,13 @@ public class MarketGrpcClient {
 
         this.channel = builder.build();
         this.asyncStub = com.stockbroker.market.v1.MarketDataGrpc.newStub(channel);
-        this.blockingStub = com.stockbroker.market.v1.MarketDataGrpc.newBlockingStub(channel)
-                .withDeadlineAfter(properties.getConnectTimeout().toMillis(), TimeUnit.MILLISECONDS);
+        this.blockingStub = com.stockbroker.market.v1.MarketDataGrpc.newBlockingStub(channel);
 
         connected.set(true);
+    }
+
+    private com.stockbroker.market.v1.MarketDataGrpc.MarketDataBlockingStub getBlockingStub() {
+        return blockingStub.withDeadlineAfter(properties.getConnectTimeout().toMillis(), TimeUnit.MILLISECONDS);
     }
 
     private ChannelCredentials getCredentials() {
@@ -74,7 +77,7 @@ public class MarketGrpcClient {
     }
 
     public List<String> listInstruments() {
-        com.stockbroker.market.v1.ListInstrumentsResponse response = blockingStub.listInstruments(
+        com.stockbroker.market.v1.ListInstrumentsResponse response = getBlockingStub().listInstruments(
                 com.stockbroker.market.v1.ListInstrumentsRequest.getDefaultInstance());
         return response.getInstrumentsList().stream()
                 .map(spec -> spec.getSymbol())
@@ -233,11 +236,11 @@ public class MarketGrpcClient {
                 .setSymbol(symbol)
                 .setDepthLevels(depthLevels)
                 .build();
-        return blockingStub.getSnapshot(request);
+        return getBlockingStub().getSnapshot(request);
     }
 
     public com.stockbroker.market.v1.HealthResponse healthCheck() {
-        return blockingStub.health(com.stockbroker.market.v1.HealthRequest.getDefaultInstance());
+        return getBlockingStub().health(com.stockbroker.market.v1.HealthRequest.getDefaultInstance());
     }
 
     private void handleSubscriptionError(String type, Throwable t) {

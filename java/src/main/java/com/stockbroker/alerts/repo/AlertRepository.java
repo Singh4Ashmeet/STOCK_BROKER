@@ -17,7 +17,7 @@ import java.util.UUID;
 @Repository
 public interface AlertRepository extends JpaRepository<Alert, UUID> {
 
-    @Query(value = "SELECT * FROM alerts WHERE user_id = :userId ORDER BY created_at DESC LIMIT :limit OFFSET :offset", nativeQuery = true)
+    @Query(value = "SELECT * FROM alerts WHERE user_id = :userId ORDER BY created_at DESC", nativeQuery = true)
     List<Alert> findByUserId(@Param("userId") UUID userId, Pageable pageable);
 
     @Query(value = "SELECT * FROM alerts WHERE id = :id AND user_id = :userId", nativeQuery = true)
