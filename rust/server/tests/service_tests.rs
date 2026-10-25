@@ -20,8 +20,8 @@ use tonic::transport::{Channel, Server};
 /// Helper: create a test server config.
 fn test_config() -> ServerConfig {
     ServerConfig {
-        listen_addr: "[::1]:0".to_owned(), // port 0 = OS picks
-        http_addr: "[::1]:0".to_owned(),
+        listen_addr: "127.0.0.1:0".to_owned(), // port 0 = OS picks
+        http_addr: "127.0.0.1:0".to_owned(),
         symbols: vec!["BINANCE:BTC-USDT".to_owned()],
         subscriber_queue_capacity: 4, // small for testing conflation
         max_subscribers: 100,
@@ -59,7 +59,7 @@ fn test_metrics_config() -> MetricsConfig {
 
 /// Start a test server and return a channel to it.
 async fn start_test_server(config: ServerConfig) -> (Channel, tokio::task::JoinHandle<()>) {
-    let listener = tokio::net::TcpListener::bind("[::1]:0").await.unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
 
     let svc = MarketDataService::new(config.clone());
@@ -112,7 +112,7 @@ async fn start_test_server(config: ServerConfig) -> (Channel, tokio::task::JoinH
     // Give the server a moment to start
     tokio::time::sleep(Duration::from_millis(50)).await;
 
-    let channel = Channel::from_shared(format!("http://[::1]:{}", addr.port()))
+    let channel = Channel::from_shared(format!("http://127.0.0.1:{}", addr.port()))
         .unwrap()
         .connect()
         .await
