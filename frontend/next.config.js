@@ -1,4 +1,6 @@
 /** @type {import('next').NextConfig} */
+const apiBaseUrl = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081';
+
 const nextConfig = {
   reactStrictMode: true,
   experimental: {
@@ -10,7 +12,7 @@ const nextConfig = {
     return [
       {
         source: '/api/backend/:path*',
-        destination: `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081'}/api/v1/:path*`,
+        destination: `${apiBaseUrl}/api/v1/:path*`,
       },
     ];
   },

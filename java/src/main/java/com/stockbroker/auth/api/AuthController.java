@@ -29,12 +29,13 @@ public class AuthController {
 
     @PostMapping("/register")
     public ResponseEntity<AuthDtos.RegisterResponse> register(@Valid @RequestBody AuthDtos.RegisterRequest request) {
-        var result = authService.register(request.email(), request.password());
+        var result = authService.register(request.email(), request.password(), request.name());
         return ResponseEntity.status(201).body(new AuthDtos.RegisterResponse(
                 result.userId().toString(),
                 result.email(),
                 result.role(),
-                result.createdAt().toString()
+                result.createdAt().toString(),
+                request.name()
         ));
     }
 
@@ -45,11 +46,11 @@ public class AuthController {
         String clientIp = getClientIp(httpRequest);
         var result = authService.login(request.email(), request.password(), clientIp);
 
-        // Set refresh token as HttpOnly cookie
+        // Set refresh token as HttpOnly cookie with path "/" so it's accessible from frontend
         ResponseCookie refreshCookie = ResponseCookie.from("refresh_token", result.refreshToken())
                 .httpOnly(true)
                 .secure(false) // Set to true in production with HTTPS
-                .path("/api/v1/auth/refresh")
+                .path("/")
                 .maxAge(Duration.ofDays(30))
                 .sameSite("Strict")
                 .build();
@@ -57,16 +58,16 @@ public class AuthController {
 
         return ResponseEntity.ok(new AuthDtos.LoginResponse(
                 result.accessToken(),
-                (int) Duration.ofMinutes(15).getSeconds(),
+                (int) Duration.ofMinutes(15).toSeconds(),
                 result.refreshToken()
         ));
     }
 
     @PostMapping("/refresh")
     public ResponseEntity<AuthDtos.RefreshResponse> refresh(
-                                                             @RequestBody(required = false) AuthDtos.RefreshRequest request,
-                                                             @CookieValue(value = "refresh_token", required = false) String refreshCookieValue,
-                                                             HttpServletResponse response) {
+                                                              @RequestBody(required = false) AuthDtos.RefreshRequest request,
+                                                              @CookieValue(value = "refresh_token", required = false) String refreshCookieValue,
+                                                              HttpServletResponse response) {
         String refreshToken = request != null && request.refreshToken() != null && !request.refreshToken().isBlank()
                 ? request.refreshToken() : refreshCookieValue;
         if (refreshToken == null || refreshToken.isBlank()) {
@@ -74,11 +75,11 @@ public class AuthController {
         }
         var result = authService.refresh(refreshToken);
 
-        // Set new refresh token as HttpOnly cookie (rotation)
+        // Set new refresh token as HttpOnly cookie (rotation) with path "/"
         ResponseCookie refreshCookie = ResponseCookie.from("refresh_token", result.refreshToken())
                 .httpOnly(true)
                 .secure(false)
-                .path("/api/v1/auth/refresh")
+                .path("/")
                 .maxAge(Duration.ofDays(30))
                 .sameSite("Strict")
                 .build();
@@ -86,7 +87,7 @@ public class AuthController {
 
         return ResponseEntity.ok(new AuthDtos.RefreshResponse(
                 result.accessToken(),
-                (int) Duration.ofMinutes(15).getSeconds(),
+                (int) Duration.ofMinutes(15).toSeconds(),
                 result.refreshToken()
         ));
     }
@@ -99,11 +100,11 @@ public class AuthController {
                 ? request.refreshToken() : refreshCookieValue;
         authService.logout(refreshToken);
 
-        // Clear refresh cookie
+        // Clear refresh cookie with path "/"
         ResponseCookie clearCookie = ResponseCookie.from("refresh_token", "")
                 .httpOnly(true)
                 .secure(false)
-                .path("/api/v1/auth/refresh")
+                .path("/")
                 .maxAge(0)
                 .sameSite("Strict")
                 .build();
@@ -122,7 +123,8 @@ public class AuthController {
                 user.getEmail(),
                 user.getRole(),
                 user.isEmailVerified(),
-                user.getCreatedAt().toString()
+                user.getCreatedAt().toString(),
+                user.getFullName()
         ));
     }
 

@@ -47,7 +47,7 @@ class FullGatewayTest {
 
     @BeforeEach
     void setup() {
-        AuthDtos.RegisterRequest reg = new AuthDtos.RegisterRequest("fulltest@test.com", "SecurePass123!");
+        AuthDtos.RegisterRequest reg = new AuthDtos.RegisterRequest("fulltest@test.com", "SecurePass123!", "Full Gateway User");
         restTemplate.postForEntity("/v1/auth/register", reg, AuthDtos.RegisterResponse.class);
 
         AuthDtos.LoginRequest login = new AuthDtos.LoginRequest("fulltest@test.com", "SecurePass123!");
@@ -134,7 +134,8 @@ class FullGatewayTest {
 
     @Test
     void gapDetectionWorks() {
-        String symbol = "BINANCE:BTC-USDT";
+        // Use unique symbol to avoid interference from mock feed background data
+        String symbol = "FULL_TEST:BTC-USDT";
 
         // Normal sequence
         subscriptionManager.onBookUpdate(symbol, 1, 10);

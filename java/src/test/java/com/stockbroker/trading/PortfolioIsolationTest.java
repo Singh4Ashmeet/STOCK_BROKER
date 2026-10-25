@@ -56,14 +56,14 @@ class PortfolioIsolationTest {
     @BeforeEach
     void setup() {
         // Register and login User A
-        AuthDtos.RegisterRequest regA = new AuthDtos.RegisterRequest("portfoliouserA@test.com", "SecurePass123!");
+        AuthDtos.RegisterRequest regA = new AuthDtos.RegisterRequest("portfoliouserA@test.com", "SecurePass123!", "Portfolio User A");
         restTemplate.postForEntity("/v1/auth/register", regA, AuthDtos.RegisterResponse.class);
         AuthDtos.LoginRequest loginA = new AuthDtos.LoginRequest("portfoliouserA@test.com", "SecurePass123!");
         ResponseEntity<AuthDtos.LoginResponse> loginRespA = restTemplate.postForEntity("/v1/auth/login", loginA, AuthDtos.LoginResponse.class);
         userAAccessToken = loginRespA.getBody().accessToken();
 
         // Register and login User B
-        AuthDtos.RegisterRequest regB = new AuthDtos.RegisterRequest("portfoliouserB@test.com", "SecurePass123!");
+        AuthDtos.RegisterRequest regB = new AuthDtos.RegisterRequest("portfoliouserB@test.com", "SecurePass123!", "Portfolio User B");
         restTemplate.postForEntity("/v1/auth/register", regB, AuthDtos.RegisterResponse.class);
         AuthDtos.LoginRequest loginB = new AuthDtos.LoginRequest("portfoliouserB@test.com", "SecurePass123!");
         ResponseEntity<AuthDtos.LoginResponse> loginRespB = restTemplate.postForEntity("/v1/auth/login", loginB, AuthDtos.LoginResponse.class);

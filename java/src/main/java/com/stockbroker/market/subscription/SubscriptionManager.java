@@ -43,8 +43,11 @@ public class SubscriptionManager {
 
     // Sequence tracking for gap detection
     private final ConcurrentHashMap<String, Long> lastBookSeq = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Long> lastBookEpoch = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Long> lastTradesSeq = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Long> lastTradesEpoch = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Long> lastMetricsSeq = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Long> lastMetricsEpoch = new ConcurrentHashMap<>();
 
     // Metrics
     private final Timer resyncTimer;
@@ -184,13 +187,14 @@ public class SubscriptionManager {
      */
     public void onBookUpdate(String symbol, long epoch, long seq) {
         // Check for epoch change (full resync)
-        Long lastEpoch = lastBookSeq.get(symbol);
+        Long lastEpoch = lastBookEpoch.get(symbol);
         if (lastEpoch != null && epoch != lastEpoch) {
             // Epoch changed - this is a resync, not a gap
             log.debug("Book epoch change for {}: {} -> {}", symbol, lastEpoch, epoch);
             totalResyncs.incrementAndGet();
             meterRegistry.counter("gateway.resync.epoch_change").increment();
-            lastBookSeq.put(symbol, epoch);
+            lastBookEpoch.put(symbol, epoch);
+            lastBookSeq.put(symbol, seq);
             return;
         }
 
@@ -208,6 +212,7 @@ public class SubscriptionManager {
             triggerResync(symbol, "book");
         }
 
+        lastBookEpoch.put(symbol, epoch);
         lastBookSeq.put(symbol, seq);
     }
 
@@ -215,6 +220,16 @@ public class SubscriptionManager {
      * Handles incoming trade - checks for gaps.
      */
     public void onTrade(String symbol, long epoch, long seq) {
+        Long lastEpoch = lastTradesEpoch.get(symbol);
+        if (lastEpoch != null && epoch != lastEpoch) {
+            log.debug("Trades epoch change for {}: {} -> {}", symbol, lastEpoch, epoch);
+            totalResyncs.incrementAndGet();
+            meterRegistry.counter("gateway.resync.epoch_change").increment();
+            lastTradesEpoch.put(symbol, epoch);
+            lastTradesSeq.put(symbol, seq);
+            return;
+        }
+
         Long lastSeq = lastTradesSeq.get(symbol);
         if (lastSeq != null && seq > lastSeq + 1) {
             long gap = seq - lastSeq - 1;
@@ -224,6 +239,7 @@ public class SubscriptionManager {
             meterRegistry.counter("gateway.gaps.detected", "type", "trades").increment();
             triggerResync(symbol, "trades");
         }
+        lastTradesEpoch.put(symbol, epoch);
         lastTradesSeq.put(symbol, seq);
     }
 
@@ -231,6 +247,16 @@ public class SubscriptionManager {
      * Handles incoming metrics - checks for gaps.
      */
     public void onMetrics(String symbol, long epoch, long seq) {
+        Long lastEpoch = lastMetricsEpoch.get(symbol);
+        if (lastEpoch != null && epoch != lastEpoch) {
+            log.debug("Metrics epoch change for {}: {} -> {}", symbol, lastEpoch, epoch);
+            totalResyncs.incrementAndGet();
+            meterRegistry.counter("gateway.resync.epoch_change").increment();
+            lastMetricsEpoch.put(symbol, epoch);
+            lastMetricsSeq.put(symbol, seq);
+            return;
+        }
+
         Long lastSeq = lastMetricsSeq.get(symbol);
         if (lastSeq != null && seq > lastSeq + 1) {
             long gap = seq - lastSeq - 1;
@@ -240,6 +266,7 @@ public class SubscriptionManager {
             meterRegistry.counter("gateway.gaps.detected", "type", "metrics").increment();
             triggerResync(symbol, "metrics");
         }
+        lastMetricsEpoch.put(symbol, epoch);
         lastMetricsSeq.put(symbol, seq);
     }
 
@@ -353,6 +380,8 @@ public class SubscriptionManager {
                 if (value != null) {
                     lastBookSeq.put(symbol, Long.parseLong(value));
                 }
+                // Initialize epoch map (epochs not persisted, will be set on first update)
+                lastBookEpoch.putIfAbsent(symbol, 0L);
             }
             // Restore trades sequences
             for (String symbol : tradesSubscriptions.keySet()) {
@@ -361,6 +390,7 @@ public class SubscriptionManager {
                 if (value != null) {
                     lastTradesSeq.put(symbol, Long.parseLong(value));
                 }
+                lastTradesEpoch.putIfAbsent(symbol, 0L);
             }
             // Restore metrics sequences
             for (String symbol : metricsSubscriptions.keySet()) {
@@ -369,6 +399,7 @@ public class SubscriptionManager {
                 if (value != null) {
                     lastMetricsSeq.put(symbol, Long.parseLong(value));
                 }
+                lastMetricsEpoch.putIfAbsent(symbol, 0L);
             }
             log.info("Restored sequence state from Redis for {} symbols", lastBookSeq.size());
         } catch (Exception e) {

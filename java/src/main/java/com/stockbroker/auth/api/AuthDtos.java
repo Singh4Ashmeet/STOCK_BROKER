@@ -21,7 +21,8 @@ public final class AuthDtos {
             @Pattern(regexp = ".*[a-z].*") // At least one lowercase
             @Pattern(regexp = ".*\\d.*") // At least one digit
             @Pattern(regexp = ".*[!@#$%^&*()_+\\-=\\[\\]{};':\"\\\\|,.<>/?].*") // At least one special char
-            String password
+            String password,
+            @Size(max = 100) String name
     ) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -29,7 +30,8 @@ public final class AuthDtos {
             @JsonProperty("user_id") String userId,
             String email,
             String role,
-            @JsonProperty("created_at") String createdAt
+            @JsonProperty("created_at") String createdAt,
+            @JsonProperty("full_name") String fullName
     ) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -67,7 +69,8 @@ public final class AuthDtos {
             String email,
             String role,
             @JsonProperty("email_verified") boolean emailVerified,
-            @JsonProperty("created_at") String createdAt
+            @JsonProperty("created_at") String createdAt,
+            @JsonProperty("full_name") String fullName
     ) {}
 
     public record WsTicketResponse(

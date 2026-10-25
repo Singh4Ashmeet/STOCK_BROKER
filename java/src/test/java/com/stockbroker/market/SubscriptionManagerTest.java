@@ -2,9 +2,11 @@ package com.stockbroker.market;
 
 import com.stockbroker.common.LocalTestConfiguration;
 import com.stockbroker.market.subscription.SubscriptionManager;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.ContextConfiguration;
 
@@ -16,10 +18,25 @@ import static org.assertj.core.api.Assertions.assertThat;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ContextConfiguration(classes = LocalTestConfiguration.class)
 @ActiveProfiles("test")
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_EACH_TEST_METHOD)
 class SubscriptionManagerTest {
 
     @Autowired
     SubscriptionManager subscriptionManager;
+
+    @BeforeEach
+    void resetCounters() {
+        try {
+            var gapsField = SubscriptionManager.class.getDeclaredField("totalGapsDetected");
+            gapsField.setAccessible(true);
+            ((java.util.concurrent.atomic.AtomicLong) gapsField.get(subscriptionManager)).set(0);
+            var resyncsField = SubscriptionManager.class.getDeclaredField("totalResyncs");
+            resyncsField.setAccessible(true);
+            ((java.util.concurrent.atomic.AtomicLong) resyncsField.get(subscriptionManager)).set(0);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to reset SubscriptionManager counters", e);
+        }
+    }
 
     @Test
     void subscriptionManagerTracksRefCounts() {
@@ -50,23 +67,24 @@ class SubscriptionManagerTest {
 
     @Test
     void gapDetectionIncrementsCounters() {
-        // Simulate sequence gap detection
-        subscriptionManager.onBookUpdate("BINANCE:BTC-USDT", 1, 10);
-        subscriptionManager.onBookUpdate("BINANCE:BTC-USDT", 1, 15); // Gap of 4
+        // Simulate sequence gap detection - use unique symbol to avoid mock feed interference
+        String symbol = "SUB_TEST:BTC-USDT";
+        subscriptionManager.onBookUpdate(symbol, 1, 10);
+        subscriptionManager.onBookUpdate(symbol, 1, 15); // Gap of 4
 
         assertThat(subscriptionManager.getTotalGapsDetected()).isEqualTo(1);
 
-        // Another gap
-        subscriptionManager.onBookUpdate("BINANCE:BTC-USDT", 1, 20);
-        subscriptionManager.onBookUpdate("BINANCE:BTC-USDT", 1, 25); // Gap of 4
+        // Another gap - jump from 15 to 25 (skip 20 to avoid intermediate gap)
+        subscriptionManager.onBookUpdate(symbol, 1, 25); // Gap of 9 (from 15 to 25)
 
         assertThat(subscriptionManager.getTotalGapsDetected()).isEqualTo(2);
     }
 
     @Test
     void epochChangeCountsAsResyncNotGap() {
-        subscriptionManager.onBookUpdate("BINANCE:BTC-USDT", 1, 10);
-        subscriptionManager.onBookUpdate("BINANCE:BTC-USDT", 2, 1); // New epoch, seq resets
+        String symbol = "SUB_TEST:BTC-USDT";
+        subscriptionManager.onBookUpdate(symbol, 1, 10);
+        subscriptionManager.onBookUpdate(symbol, 2, 1); // New epoch, seq resets
 
         // Should count as resync, not gap
         assertThat(subscriptionManager.getTotalResyncs()).isEqualTo(1);
@@ -75,9 +93,10 @@ class SubscriptionManagerTest {
 
     @Test
     void sequenceTrackingWorks() {
-        subscriptionManager.onTrade("BINANCE:BTC-USDT", 1, 100);
-        subscriptionManager.onTrade("BINANCE:BTC-USDT", 1, 101);
-        subscriptionManager.onTrade("BINANCE:BTC-USDT", 1, 103); // Gap
+        String symbol = "SUB_TEST:BTC-USDT";
+        subscriptionManager.onTrade(symbol, 1, 100);
+        subscriptionManager.onTrade(symbol, 1, 101);
+        subscriptionManager.onTrade(symbol, 1, 103); // Gap
 
         assertThat(subscriptionManager.getTotalGapsDetected()).isEqualTo(1);
     }

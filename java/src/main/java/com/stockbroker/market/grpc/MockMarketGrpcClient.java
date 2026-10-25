@@ -29,9 +29,12 @@ public class MockMarketGrpcClient extends MarketGrpcClient {
     private final MarketStateManager stateManager;
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
     private final AtomicBoolean running = new AtomicBoolean(false);
-    private final AtomicLong sequence = new AtomicLong(0);
     private final AtomicLong epoch = new AtomicLong(1);
     private final Set<String> subscribedSymbols = ConcurrentHashMap.newKeySet();
+    // Per-symbol sequence counters to avoid gaps in SubscriptionManager
+    private final ConcurrentHashMap<String, AtomicLong> bookSequences = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, AtomicLong> tradeSequences = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, AtomicLong> metricsSequences = new ConcurrentHashMap<>();
 
     public MockMarketGrpcClient(MarketGatewayProperties properties, MarketStateManager stateManager) {
         super(properties, stateManager);
@@ -44,10 +47,31 @@ public class MockMarketGrpcClient extends MarketGrpcClient {
         List<String> instruments = listInstruments();
         subscribedSymbols.addAll(instruments);
         for (String symbol : instruments) {
-            stateManager.onBookUpdate(createMockBookUpdate(symbol, epoch.get(), sequence.incrementAndGet()));
-            stateManager.onMetrics(createMockMetrics(symbol, epoch.get(), sequence.incrementAndGet()));
+            stateManager.updateInstrumentSpec(createInstrumentSpec(symbol));
+            long bookSeq = bookSequences.computeIfAbsent(symbol, k -> new AtomicLong(0)).incrementAndGet();
+            long metricsSeq = metricsSequences.computeIfAbsent(symbol, k -> new AtomicLong(0)).incrementAndGet();
+            stateManager.onBookUpdate(createMockBookUpdate(symbol, epoch.get(), bookSeq));
+            stateManager.onMetrics(createMockMetrics(symbol, epoch.get(), metricsSeq));
         }
         startMockDataGeneration();
+    }
+
+    private com.stockbroker.market.v1.InstrumentSpec createInstrumentSpec(String symbol) {
+        String[] parts = symbol.split(":");
+        String venue = parts.length > 0 ? parts[0] : "BINANCE";
+        String pair = parts.length > 1 ? parts[1] : "BTC-USDT";
+        String[] assets = pair.split("-");
+        return com.stockbroker.market.v1.InstrumentSpec.newBuilder()
+                .setSymbol(symbol)
+                .setVenue(venue)
+                .setBaseAsset(assets.length > 0 ? assets[0] : "BTC")
+                .setQuoteAsset(assets.length > 1 ? assets[1] : "USDT")
+                .setPriceScale(8)
+                .setQtyScale(8)
+                .setTickSize(1)
+                .setLotSize(1)
+                .setMinNotional(0)
+                .build();
     }
 
     @Override
@@ -63,6 +87,10 @@ public class MockMarketGrpcClient extends MarketGrpcClient {
 
     @Override
     public void subscribeBooks(List<String> symbols, int maxMessagesPerSymbol) {
+        for (String symbol : symbols) {
+            // Reset snapshot flag for new subscribers so they get a fresh snapshot
+            hasSentSnapshot.put(symbol, new AtomicBoolean(false));
+        }
         subscribedSymbols.addAll(symbols);
         startMockDataGeneration();
     }
@@ -94,7 +122,7 @@ public class MockMarketGrpcClient extends MarketGrpcClient {
         if (!running.get() || subscribedSymbols.isEmpty()) return;
 
         for (String symbol : subscribedSymbols) {
-            long seq = sequence.incrementAndGet();
+            long seq = bookSequences.computeIfAbsent(symbol, k -> new AtomicLong(0)).incrementAndGet();
             long currentEpoch = epoch.get();
 
             boolean sentSnap = hasSentSnapshot.computeIfAbsent(symbol, k -> new AtomicBoolean(false)).getAndSet(true);
@@ -146,7 +174,8 @@ public class MockMarketGrpcClient extends MarketGrpcClient {
 
         for (String symbol : subscribedSymbols) {
             if (Math.random() < 0.3) { // 30% chance per symbol
-                var trade = createMockTrade(symbol, epoch.get(), sequence.incrementAndGet());
+                long seq = tradeSequences.computeIfAbsent(symbol, k -> new AtomicLong(0)).incrementAndGet();
+                var trade = createMockTrade(symbol, epoch.get(), seq);
                 stateManager.onTrade(trade);
             }
         }
@@ -156,7 +185,8 @@ public class MockMarketGrpcClient extends MarketGrpcClient {
         if (!running.get() || subscribedSymbols.isEmpty()) return;
 
         for (String symbol : subscribedSymbols) {
-            var metrics = createMockMetrics(symbol, epoch.get(), sequence.incrementAndGet());
+            long seq = metricsSequences.computeIfAbsent(symbol, k -> new AtomicLong(0)).incrementAndGet();
+            var metrics = createMockMetrics(symbol, epoch.get(), seq);
             stateManager.onMetrics(metrics);
         }
     }
@@ -254,7 +284,8 @@ public class MockMarketGrpcClient extends MarketGrpcClient {
 
     @Override
     public com.stockbroker.market.v1.BookUpdate getSnapshot(String symbol, int depthLevels) {
-        return createMockBookUpdate(symbol, epoch.get(), sequence.incrementAndGet());
+        long seq = bookSequences.computeIfAbsent(symbol, k -> new AtomicLong(0)).incrementAndGet();
+        return createMockBookUpdate(symbol, epoch.get(), seq);
     }
 
     @Override
@@ -285,6 +316,23 @@ public class MockMarketGrpcClient extends MarketGrpcClient {
             Thread.currentThread().interrupt();
         }
         log.info("Mock feed shut down");
+    }
+
+    /**
+     * Reset mock feed state for test isolation.
+     * Clears per-symbol snapshot flags and sequence counters.
+     */
+    public void resetForTest() {
+        log.debug("Resetting mock feed state for test isolation");
+        hasSentSnapshot.clear();
+        bookSequences.clear();
+        tradeSequences.clear();
+        metricsSequences.clear();
+        subscribedSymbols.clear();
+        epoch.set(1);
+        running.set(false);
+        // Re-initialize with default instruments
+        init();
     }
 
     @Override

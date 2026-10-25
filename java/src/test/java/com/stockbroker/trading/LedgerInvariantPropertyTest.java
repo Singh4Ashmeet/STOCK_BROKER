@@ -91,7 +91,7 @@ class LedgerInvariantPropertyTest {
         // Generate a transaction with 2+ entries that balance to zero
         return Arbitraries.integers().between(2, 5)
                 .flatMap(numEntries -> {
-                    // Generate amounts that sum to zero
+                    // Generate amounts that sum to zero, ensuring the last amount is never zero
                     Arbitrary<List<BigDecimal>> amounts = Arbitraries.integers().between(-1000000, 1000000)
                             .filter(i -> i != 0)
                             .map(BigDecimal::valueOf)
@@ -100,8 +100,17 @@ class LedgerInvariantPropertyTest {
                             .map(list -> {
                                 BigDecimal sum = list.stream().reduce(BigDecimal.ZERO, BigDecimal::add);
                                 BigDecimal last = sum.negate(); // This will balance the sum to zero
+                                // If sum of first n-1 is zero, adjust the first amount to make sum non-zero
                                 if (last.compareTo(BigDecimal.ZERO) == 0) {
-                                    last = BigDecimal.ONE; // ensure non-zero
+                                    // Sum of first n-1 is zero - adjust the first amount to break the zero sum
+                                    BigDecimal first = list.get(0);
+                                    BigDecimal adjustedFirst = first.add(BigDecimal.ONE);
+                                    var adjustedList = new java.util.ArrayList<>(list);
+                                    adjustedList.set(0, adjustedFirst);
+                                    BigDecimal adjustedSum = adjustedList.stream().reduce(BigDecimal.ZERO, BigDecimal::add);
+                                    BigDecimal adjustedLast = adjustedSum.negate();
+                                    adjustedList.add(adjustedLast);
+                                    return adjustedList;
                                 }
                                 var newList = new java.util.ArrayList<>(list);
                                 newList.add(last);

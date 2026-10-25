@@ -3,6 +3,7 @@ package com.stockbroker.market;
 import com.stockbroker.common.LocalTestConfiguration;
 import com.stockbroker.market.subscription.SubscriptionManager;
 import com.stockbroker.market.state.MarketStateManager;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -25,9 +26,35 @@ class GapHandlingTest {
     @Autowired
     MarketStateManager stateManager;
 
+    @BeforeEach
+    void resetCounters() {
+        // Reset gap and resync counters to isolate tests
+        // Using reflection since fields are private
+        try {
+            var gapsField = SubscriptionManager.class.getDeclaredField("totalGapsDetected");
+            gapsField.setAccessible(true);
+            ((java.util.concurrent.atomic.AtomicLong) gapsField.get(subscriptionManager)).set(0);
+            var resyncsField = SubscriptionManager.class.getDeclaredField("totalResyncs");
+            resyncsField.setAccessible(true);
+            ((java.util.concurrent.atomic.AtomicLong) resyncsField.get(subscriptionManager)).set(0);
+            // Also clear sequence tracking maps
+            var bookSeqField = SubscriptionManager.class.getDeclaredField("lastBookSeq");
+            bookSeqField.setAccessible(true);
+            ((java.util.concurrent.ConcurrentHashMap<?, ?>) bookSeqField.get(subscriptionManager)).clear();
+            var tradesSeqField = SubscriptionManager.class.getDeclaredField("lastTradesSeq");
+            tradesSeqField.setAccessible(true);
+            ((java.util.concurrent.ConcurrentHashMap<?, ?>) tradesSeqField.get(subscriptionManager)).clear();
+            var metricsSeqField = SubscriptionManager.class.getDeclaredField("lastMetricsSeq");
+            metricsSeqField.setAccessible(true);
+            ((java.util.concurrent.ConcurrentHashMap<?, ?>) metricsSeqField.get(subscriptionManager)).clear();
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to reset SubscriptionManager counters", e);
+        }
+    }
+
     @Test
     void bookSequenceGapTriggersResync() {
-        String symbol = "BINANCE:BTC-USDT";
+        String symbol = "GAP_TEST:BTC-USDT";
 
         // Simulate normal sequence
         subscriptionManager.onBookUpdate(symbol, 1, 10);
@@ -47,7 +74,7 @@ class GapHandlingTest {
 
     @Test
     void tradeSequenceGapTriggersResync() {
-        String symbol = "BINANCE:BTC-USDT";
+        String symbol = "GAP_TEST:BTC-USDT";
 
         subscriptionManager.onTrade(symbol, 1, 100);
         subscriptionManager.onTrade(symbol, 1, 101);
@@ -58,7 +85,7 @@ class GapHandlingTest {
 
     @Test
     void metricsSequenceGapTriggersResync() {
-        String symbol = "BINANCE:BTC-USDT";
+        String symbol = "GAP_TEST:BTC-USDT";
 
         subscriptionManager.onMetrics(symbol, 1, 50);
         subscriptionManager.onMetrics(symbol, 1, 55); // Gap
@@ -68,7 +95,7 @@ class GapHandlingTest {
 
     @Test
     void epochChangeDoesNotCountAsGap() {
-        String symbol = "BINANCE:BTC-USDT";
+        String symbol = "GAP_TEST:BTC-USDT";
 
         subscriptionManager.onBookUpdate(symbol, 1, 100);
         subscriptionManager.onBookUpdate(symbol, 2, 1); // New epoch
@@ -79,7 +106,7 @@ class GapHandlingTest {
 
     @Test
     void consecutiveGapsCountSeparately() {
-        String symbol = "BINANCE:BTC-USDT";
+        String symbol = "GAP_TEST:BTC-USDT";
 
         subscriptionManager.onBookUpdate(symbol, 1, 10);
         subscriptionManager.onBookUpdate(symbol, 1, 15); // Gap 1
@@ -90,7 +117,7 @@ class GapHandlingTest {
 
     @Test
     void noGapWhenSequenceContinues() {
-        String symbol = "BINANCE:BTC-USDT";
+        String symbol = "GAP_TEST:BTC-USDT";
 
         subscriptionManager.onBookUpdate(symbol, 1, 10);
         subscriptionManager.onBookUpdate(symbol, 1, 11);

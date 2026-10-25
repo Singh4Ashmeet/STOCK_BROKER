@@ -105,11 +105,12 @@ public class MarketStateManager {
         try {
             log.info("Recovering market state from Redis...");
 
-            // Restore instrument specs
+            // Restore instrument specs (stored as DTOs for JSON Redis serialization)
             Set<String> keys = redisTemplate.keys("mkt:*:spec");
             if (keys != null) {
                 for (String key : keys) {
-                    com.stockbroker.market.v1.InstrumentSpec spec = (com.stockbroker.market.v1.InstrumentSpec) redisTemplate.opsForValue().get(key);
+                    Object raw = redisTemplate.opsForValue().get(key);
+                    com.stockbroker.market.v1.InstrumentSpec spec = coerceInstrumentSpec(raw);
                     if (spec != null) {
                         instrumentSpecs.put(spec.getSymbol(), spec);
                     }
@@ -167,10 +168,10 @@ public class MarketStateManager {
 
     public void updateInstrumentSpec(com.stockbroker.market.v1.InstrumentSpec spec) {
         instrumentSpecs.put(spec.getSymbol(), spec);
-        // Mirror to Redis
+        // Mirror a Jackson-friendly DTO (protobuf messages are not JSON-serializable).
         if (redisMirrorConfig.isEnabled()) {
             String key = "mkt:" + spec.getSymbol() + ":spec";
-            redisTemplate.opsForValue().set(key, spec);
+            redisTemplate.opsForValue().set(key, toInstrumentDto(spec));
         }
     }
 
@@ -241,34 +242,96 @@ public class MarketStateManager {
     }
 
     private BookState convertBookUpdate(com.stockbroker.market.v1.BookUpdate update) {
-        List<MarketDtos.Level> bids = update.getSnapshot() != null ?
-                update.getSnapshot().getBidsList().stream()
-                        .map(l -> new MarketDtos.Level(String.valueOf(l.getPrice()), String.valueOf(l.getQty())))
-                        .toList() :
-                update.getDelta().getBidsList().stream()
-                        .map(l -> new MarketDtos.Level(String.valueOf(l.getPrice()), String.valueOf(l.getQty())))
-                        .toList();
-
-        List<MarketDtos.Level> asks = update.getSnapshot() != null ?
-                update.getSnapshot().getAsksList().stream()
-                        .map(l -> new MarketDtos.Level(String.valueOf(l.getPrice()), String.valueOf(l.getQty())))
-                        .toList() :
-                update.getDelta().getAsksList().stream()
-                        .map(l -> new MarketDtos.Level(String.valueOf(l.getPrice()), String.valueOf(l.getQty())))
-                        .toList();
-
+        // Protobuf message getters never return null; use the oneof payload case.
         boolean isSnapshot = update.getPayloadCase() == com.stockbroker.market.v1.BookUpdate.PayloadCase.SNAPSHOT;
+        List<MarketDtos.Level> bids;
+        List<MarketDtos.Level> asks;
+        if (isSnapshot) {
+            bids = update.getSnapshot().getBidsList().stream()
+                    .map(l -> new MarketDtos.Level(String.valueOf(l.getPrice()), String.valueOf(l.getQty())))
+                    .toList();
+            asks = update.getSnapshot().getAsksList().stream()
+                    .map(l -> new MarketDtos.Level(String.valueOf(l.getPrice()), String.valueOf(l.getQty())))
+                    .toList();
+        } else {
+            bids = update.getDelta().getBidsList().stream()
+                    .map(l -> new MarketDtos.Level(String.valueOf(l.getPrice()), String.valueOf(l.getQty())))
+                    .toList();
+            asks = update.getDelta().getAsksList().stream()
+                    .map(l -> new MarketDtos.Level(String.valueOf(l.getPrice()), String.valueOf(l.getQty())))
+                    .toList();
+        }
+
         boolean bookValid = isSnapshot || update.getEpoch() > 0;
+
+        // Deltas replace only the levels they carry; merge onto the prior snapshot when present
+        // so REST/trading still see a full top-of-book after incremental updates.
+        MarketDtos.BookSnapshot snapshot;
+        MarketDtos.BookDelta delta;
+        if (isSnapshot) {
+            snapshot = new MarketDtos.BookSnapshot(bids, asks);
+            delta = null;
+        } else {
+            delta = new MarketDtos.BookDelta(bids, asks);
+            AtomicReference<BookState> existing = books.get(update.getSymbol());
+            BookState prior = existing != null ? existing.get() : null;
+            if (prior != null && prior.snapshot() != null) {
+                snapshot = mergeDeltaIntoSnapshot(prior.snapshot(), bids, asks);
+            } else {
+                snapshot = new MarketDtos.BookSnapshot(bids, asks);
+            }
+        }
 
         return new BookState(
                 update.getSymbol(),
                 update.getEpoch(),
                 update.getSeq(),
                 convertTiming(update.getTiming()),
-                new MarketDtos.BookSnapshot(bids, asks),
-                isSnapshot ? null : new MarketDtos.BookDelta(bids, asks),
+                snapshot,
+                delta,
                 bookValid
         );
+    }
+
+    /**
+     * Applies price-level updates onto an existing snapshot. Qty {@code 0} removes a level;
+     * otherwise the level is inserted or replaced and the book is kept price-ordered.
+     */
+    private MarketDtos.BookSnapshot mergeDeltaIntoSnapshot(
+            MarketDtos.BookSnapshot prior,
+            List<MarketDtos.Level> bidUpdates,
+            List<MarketDtos.Level> askUpdates) {
+        java.util.TreeMap<java.math.BigDecimal, String> bids = new java.util.TreeMap<>(java.util.Comparator.reverseOrder());
+        java.util.TreeMap<java.math.BigDecimal, String> asks = new java.util.TreeMap<>();
+        for (MarketDtos.Level level : prior.bids()) {
+            bids.put(new java.math.BigDecimal(level.price()), level.qty());
+        }
+        for (MarketDtos.Level level : prior.asks()) {
+            asks.put(new java.math.BigDecimal(level.price()), level.qty());
+        }
+        applyLevelUpdates(bids, bidUpdates);
+        applyLevelUpdates(asks, askUpdates);
+        List<MarketDtos.Level> mergedBids = bids.entrySet().stream()
+                .map(e -> new MarketDtos.Level(e.getKey().toPlainString(), e.getValue()))
+                .toList();
+        List<MarketDtos.Level> mergedAsks = asks.entrySet().stream()
+                .map(e -> new MarketDtos.Level(e.getKey().toPlainString(), e.getValue()))
+                .toList();
+        return new MarketDtos.BookSnapshot(mergedBids, mergedAsks);
+    }
+
+    private void applyLevelUpdates(
+            java.util.NavigableMap<java.math.BigDecimal, String> bookSide,
+            List<MarketDtos.Level> updates) {
+        for (MarketDtos.Level level : updates) {
+            java.math.BigDecimal price = new java.math.BigDecimal(level.price());
+            java.math.BigDecimal qty = new java.math.BigDecimal(level.qty());
+            if (qty.compareTo(java.math.BigDecimal.ZERO) == 0) {
+                bookSide.remove(price);
+            } else {
+                bookSide.put(price, level.qty());
+            }
+        }
     }
 
     private MetricsState convertMetrics(com.stockbroker.market.v1.Metrics m) {
@@ -377,14 +440,49 @@ public class MarketStateManager {
 
     public List<MarketDtos.InstrumentSpec> getAllInstruments() {
         return instrumentSpecs.values().stream()
-                .map(spec -> new MarketDtos.InstrumentSpec(
-                        spec.getSymbol(), spec.getVenue(), spec.getBaseAsset(), spec.getQuoteAsset(),
-                        spec.getPriceScale(), spec.getQtyScale(),
-                        String.valueOf(spec.getTickSize()), String.valueOf(spec.getLotSize()),
-                        spec.getMinNotional() > 0 ? String.valueOf(spec.getMinNotional()) : null,
-                        spec.getPriceScale() + spec.getQtyScale() <= 18
-                ))
+                .map(this::toInstrumentDto)
                 .toList();
+    }
+
+    private MarketDtos.InstrumentSpec toInstrumentDto(com.stockbroker.market.v1.InstrumentSpec spec) {
+        return new MarketDtos.InstrumentSpec(
+                spec.getSymbol(), spec.getVenue(), spec.getBaseAsset(), spec.getQuoteAsset(),
+                spec.getPriceScale(), spec.getQtyScale(),
+                String.valueOf(spec.getTickSize()), String.valueOf(spec.getLotSize()),
+                spec.getMinNotional() > 0 ? String.valueOf(spec.getMinNotional()) : null,
+                spec.getPriceScale() + spec.getQtyScale() <= 18
+        );
+    }
+
+    private com.stockbroker.market.v1.InstrumentSpec coerceInstrumentSpec(Object raw) {
+        if (raw instanceof com.stockbroker.market.v1.InstrumentSpec spec) {
+            return spec;
+        }
+        if (raw instanceof MarketDtos.InstrumentSpec dto) {
+            return com.stockbroker.market.v1.InstrumentSpec.newBuilder()
+                    .setSymbol(dto.symbol())
+                    .setVenue(dto.venue() != null ? dto.venue() : "")
+                    .setBaseAsset(dto.baseAsset() != null ? dto.baseAsset() : "")
+                    .setQuoteAsset(dto.quoteAsset() != null ? dto.quoteAsset() : "")
+                    .setPriceScale(dto.priceScale())
+                    .setQtyScale(dto.qtyScale())
+                    .setTickSize(parseLongOrZero(dto.tickSize()))
+                    .setLotSize(parseLongOrZero(dto.lotSize()))
+                    .setMinNotional(parseLongOrZero(dto.minNotional()))
+                    .build();
+        }
+        return null;
+    }
+
+    private long parseLongOrZero(String value) {
+        if (value == null || value.isBlank()) {
+            return 0L;
+        }
+        try {
+            return new java.math.BigDecimal(value).longValue();
+        } catch (NumberFormatException e) {
+            return 0L;
+        }
     }
 
     /**
@@ -411,10 +509,10 @@ public class MarketStateManager {
                 String key = "mkt:" + entry.getKey() + ":metrics";
                 redisTemplate.opsForValue().set(key, entry.getValue().get());
             }
-            // Mirror instrument specs
+            // Mirror instrument specs as DTOs (protobuf is not Jackson-friendly)
             for (var entry : instrumentSpecs.entrySet()) {
                 String key = "mkt:" + entry.getKey() + ":spec";
-                redisTemplate.opsForValue().set(key, entry.getValue());
+                redisTemplate.opsForValue().set(key, toInstrumentDto(entry.getValue()));
             }
 
             // Save sequence state for gap detection recovery

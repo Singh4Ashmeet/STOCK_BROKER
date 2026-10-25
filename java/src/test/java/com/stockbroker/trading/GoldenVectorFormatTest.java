@@ -10,6 +10,7 @@ import com.stockbroker.market.api.MarketDtos;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.ContextConfiguration;
 
@@ -46,11 +47,18 @@ class GoldenVectorFormatTest {
         Fill fill = createMockFill();
         MarketDtos.BookUpdate snapshot = createMockSnapshot();
 
+        // Clean up directory first
+        Path dir = Paths.get("testdata/golden_fills");
+        if (Files.exists(dir)) {
+            Files.list(dir).forEach(p -> {
+                try { Files.delete(p); } catch (IOException ignored) {}
+            });
+        }
+
         // Save the vector
         goldenVectorService.saveFillVector(fill, order, snapshot);
 
         // Read back the written file
-        Path dir = Paths.get("testdata/golden_fills");
         if (!Files.exists(dir)) {
             return; // Skip if no vectors written
         }
@@ -60,7 +68,21 @@ class GoldenVectorFormatTest {
             return;
         }
 
-        Path latestFile = files.get(files.size() - 1);
+        // Find most recently modified file
+        Path latestFile = files.stream()
+                .max((p1, p2) -> {
+                    try {
+                        return Files.getLastModifiedTime(p1).compareTo(Files.getLastModifiedTime(p2));
+                    } catch (IOException e) {
+                        return 0;
+                    }
+                })
+                .orElse(null);
+        
+        if (latestFile == null) {
+            return;
+        }
+        
         String content = Files.readString(latestFile);
 
         // Should be valid JSONL
@@ -96,6 +118,14 @@ class GoldenVectorFormatTest {
 
     @Test
     void previewVectorIsValidJson() throws IOException {
+        // Clean up directory first
+        Path dir = Paths.get("testdata/golden_fills");
+        if (Files.exists(dir)) {
+            Files.list(dir).forEach(p -> {
+                try { Files.delete(p); } catch (IOException ignored) {}
+            });
+        }
+
         OrderExecutor.OrderPreviewResult preview = new OrderExecutor.OrderPreviewResult(
                 "50000.00", "25.00", 5.5, true, 3
         );
@@ -111,7 +141,6 @@ class GoldenVectorFormatTest {
         
         goldenVectorService.savePreviewVector(preview, request, snapshot);
 
-        Path dir = Paths.get("testdata/golden_fills");
         if (!Files.exists(dir)) {
             return;
         }
@@ -157,7 +186,22 @@ class GoldenVectorFormatTest {
         // This test verifies the format matches what Python expects
         // Python expects: fillId, orderId, symbol, side, type, price, qty, feeAsset, feeAmount, liquidity, bookEpoch, bookSeq, filledAt, bookState
         
+        // Clean up directory first
         Path dir = Paths.get("testdata/golden_fills");
+        if (Files.exists(dir)) {
+            Files.list(dir).forEach(p -> {
+                try { Files.delete(p); } catch (IOException ignored) {}
+            });
+        }
+
+        // Create a mock fill and order
+        Order order = createMockOrder();
+        Fill fill = createMockFill();
+        MarketDtos.BookUpdate snapshot = createMockSnapshot();
+
+        // Save the vector
+        goldenVectorService.saveFillVector(fill, order, snapshot);
+
         if (!Files.exists(dir)) {
             return;
         }
@@ -167,7 +211,21 @@ class GoldenVectorFormatTest {
             return;
         }
 
-        Path latestFile = files.get(files.size() - 1);
+        // Find most recently modified file
+        Path latestFile = files.stream()
+                .max((p1, p2) -> {
+                    try {
+                        return Files.getLastModifiedTime(p1).compareTo(Files.getLastModifiedTime(p2));
+                    } catch (IOException e) {
+                        return 0;
+                    }
+                })
+                .orElse(null);
+        
+        if (latestFile == null) {
+            return;
+        }
+        
         String content = Files.readString(latestFile);
         String[] lines = content.trim().split("\n");
         

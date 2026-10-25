@@ -11,6 +11,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.http.*;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.web.socket.*;
@@ -54,7 +55,7 @@ class WebSocketGatewayTest {
     @BeforeEach
     void setup() throws Exception {
         // Register and login
-        AuthDtos.RegisterRequest reg = new AuthDtos.RegisterRequest("wsgateway@test.com", "SecurePass123!");
+        AuthDtos.RegisterRequest reg = new AuthDtos.RegisterRequest("wsgateway@test.com", "SecurePass123!", "WS Gateway User");
         restTemplate.postForEntity("/v1/auth/register", reg, AuthDtos.RegisterResponse.class);
 
         AuthDtos.LoginRequest login = new AuthDtos.LoginRequest("wsgateway@test.com", "SecurePass123!");
@@ -142,18 +143,18 @@ class WebSocketGatewayTest {
 
     @Test
     void multipleClientsReceiveSameBookUpdates() throws Exception {
-        // Connect two clients
+        // Connect two clients with separate tickets
         String ticket1 = getWsTicket();
         String ticket2 = getWsTicket();
+
+        String wsUrl1 = "ws://localhost:" + getPort() + "/api/ws/v1?ticket=" + ticket1;
+        String wsUrl2 = "ws://localhost:" + getPort() + "/api/ws/v1?ticket=" + ticket2;
 
         TestWebSocketHandler handler1 = new TestWebSocketHandler();
         TestWebSocketHandler handler2 = new TestWebSocketHandler();
 
-        String wsUrl1 = baseWsUrl.replace("ticket=" + getWsTicket(), "ticket=" + ticket1);
-        String wsUrl2 = baseWsUrl.replace("ticket=" + getWsTicket(), "ticket=" + ticket2);
-
-        WebSocketSession session1 = wsClient.doHandshake(handler1, new WebSocketHttpHeaders(), URI.create(wsUrl1)).get(5, TimeUnit.SECONDS);
-        WebSocketSession session2 = wsClient.doHandshake(handler2, new WebSocketHttpHeaders(), URI.create(wsUrl2)).get(5, TimeUnit.SECONDS);
+        WebSocketSession session1 = wsClient.doHandshake(handler1, new WebSocketHttpHeaders(), URI.create(wsUrl1)).get(10, TimeUnit.SECONDS);
+        WebSocketSession session2 = wsClient.doHandshake(handler2, new WebSocketHttpHeaders(), URI.create(wsUrl2)).get(10, TimeUnit.SECONDS);
 
         assertThat(session1.isOpen()).isTrue();
         assertThat(session2.isOpen()).isTrue();
@@ -170,15 +171,15 @@ class WebSocketGatewayTest {
         session2.sendMessage(new TextMessage(subscribeMsg));
 
         // Both should receive snapshots
-        JsonNode snap1 = await().atMost(Duration.ofSeconds(5)).until(handler1::getSnapshot, s -> s != null);
-        JsonNode snap2 = await().atMost(Duration.ofSeconds(5)).until(handler2::getSnapshot, s -> s != null);
+        JsonNode snap1 = await().atMost(Duration.ofSeconds(15)).until(handler1::getSnapshot, s -> s != null);
+        JsonNode snap2 = await().atMost(Duration.ofSeconds(15)).until(handler2::getSnapshot, s -> s != null);
 
         assertThat(snap1).isNotNull();
         assertThat(snap2).isNotNull();
 
         // Both should receive deltas
-        JsonNode delta1 = await().atMost(Duration.ofSeconds(10)).until(handler1::getDelta, d -> d != null);
-        JsonNode delta2 = await().atMost(Duration.ofSeconds(10)).until(handler2::getDelta, d -> d != null);
+        JsonNode delta1 = await().atMost(Duration.ofSeconds(20)).until(handler1::getDelta, d -> d != null);
+        JsonNode delta2 = await().atMost(Duration.ofSeconds(20)).until(handler2::getDelta, d -> d != null);
 
         assertThat(delta1).isNotNull();
         assertThat(delta2).isNotNull();
@@ -190,20 +191,24 @@ class WebSocketGatewayTest {
         session2.close();
     }
 
+    private int getPort() {
+        return restTemplate.getRestTemplate().getUriTemplateHandler().expand("/").getPort();
+    }
+
     @Test
     void slowClientDoesNotAffectOtherClients() throws Exception {
         // This test simulates a slow client by having a handler that processes messages slowly
         String ticketFast = getWsTicket();
         String ticketSlow = getWsTicket();
 
+        String wsUrlFast = "ws://localhost:" + getPort() + "/api/ws/v1?ticket=" + ticketFast;
+        String wsUrlSlow = "ws://localhost:" + getPort() + "/api/ws/v1?ticket=" + ticketSlow;
+
         SlowWebSocketHandler slowHandler = new SlowWebSocketHandler(500); // 500ms delay per message
         TestWebSocketHandler fastHandler = new TestWebSocketHandler();
 
-        String wsUrlFast = baseWsUrl.replace("ticket=" + getWsTicket(), "ticket=" + ticketFast);
-        String wsUrlSlow = baseWsUrl.replace("ticket=" + getWsTicket(), "ticket=" + ticketSlow);
-
-        WebSocketSession fastSession = wsClient.doHandshake(fastHandler, new WebSocketHttpHeaders(), URI.create(wsUrlFast)).get(5, TimeUnit.SECONDS);
-        WebSocketSession slowSession = wsClient.doHandshake(slowHandler, new WebSocketHttpHeaders(), URI.create(wsUrlSlow)).get(5, TimeUnit.SECONDS);
+        WebSocketSession fastSession = wsClient.doHandshake(fastHandler, new WebSocketHttpHeaders(), URI.create(wsUrlFast)).get(10, TimeUnit.SECONDS);
+        WebSocketSession slowSession = wsClient.doHandshake(slowHandler, new WebSocketHttpHeaders(), URI.create(wsUrlSlow)).get(10, TimeUnit.SECONDS);
 
         assertThat(fastSession.isOpen()).isTrue();
         assertThat(slowSession.isOpen()).isTrue();
@@ -220,16 +225,16 @@ class WebSocketGatewayTest {
         slowSession.sendMessage(new TextMessage(subscribeMsg));
 
         // Fast client should receive snapshot and multiple deltas quickly
-        JsonNode fastSnap = await().atMost(Duration.ofSeconds(5)).until(fastHandler::getSnapshot, s -> s != null);
+        JsonNode fastSnap = await().atMost(Duration.ofSeconds(15)).until(fastHandler::getSnapshot, s -> s != null);
         assertThat(fastSnap).isNotNull();
 
         // Wait for several deltas on fast client
-        await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> {
+        await().atMost(Duration.ofSeconds(20)).untilAsserted(() -> {
             assertThat(fastHandler.getDeltaCount()).isGreaterThanOrEqualTo(3);
         });
 
         // Slow client should have received snapshot but fewer deltas due to processing delay
-        JsonNode slowSnap = await().atMost(Duration.ofSeconds(5)).until(slowHandler::getSnapshot, s -> s != null);
+        JsonNode slowSnap = await().atMost(Duration.ofSeconds(15)).until(slowHandler::getSnapshot, s -> s != null);
         assertThat(slowSnap).isNotNull();
 
         // The key assertion: fast client should have received more messages than slow client

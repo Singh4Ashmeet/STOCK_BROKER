@@ -7,6 +7,7 @@ import io.grpc.stub.StreamObserver;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.util.*;
@@ -23,6 +24,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 @Component
 @ConditionalOnProperty(name = "sb.market.gateway.mock", havingValue = "false", matchIfMissing = true)
+@Profile("!test")
 public class MarketGrpcClient {
 
     private static final Logger log = LoggerFactory.getLogger(MarketGrpcClient.class);

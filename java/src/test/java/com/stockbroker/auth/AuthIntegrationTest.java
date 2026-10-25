@@ -3,6 +3,7 @@ package com.stockbroker.auth;
 import com.stockbroker.common.LocalTestConfiguration;
 import com.stockbroker.auth.api.AuthDtos;
 import com.stockbroker.auth.repo.UserRepository;
+import com.stockbroker.trading.api.TradingDtos;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -44,10 +45,11 @@ class AuthIntegrationTest {
     @Test
     void registerAndLogin() {
         String email = "test-" + java.util.UUID.randomUUID() + "@example.com";
-        // Register
+        // Register - password must meet backend requirements: min 12 chars, upper, lower, digit, special
         AuthDtos.RegisterRequest registerRequest = new AuthDtos.RegisterRequest(
                 email,
-                "SecurePass123!"
+                "SecurePass123!",
+                "Test User"
         );
 
         ResponseEntity<AuthDtos.RegisterResponse> registerResponse = restTemplate.postForEntity(
@@ -81,6 +83,24 @@ class AuthIntegrationTest {
         // Verify cookie is set
         HttpHeaders headers = loginResponse.getHeaders();
         assertThat(headers.getFirst(HttpHeaders.SET_COOKIE)).contains("refresh_token");
+
+        HttpHeaders authenticatedHeaders = new HttpHeaders();
+        authenticatedHeaders.setBearerAuth(loginResponse.getBody().accessToken());
+
+        ResponseEntity<AuthDtos.MeResponse> meResponse = restTemplate.exchange(
+                "/v1/auth/me", HttpMethod.GET, new HttpEntity<>(authenticatedHeaders), AuthDtos.MeResponse.class);
+        assertThat(meResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(meResponse.getBody()).isNotNull();
+        assertThat(meResponse.getBody().email()).isEqualTo(email);
+        assertThat(meResponse.getBody().fullName()).isEqualTo("Test User");
+
+        // A new user has no positions yet; the dashboard dependency returns a
+        // valid empty state rather than a missing-resource response.
+        ResponseEntity<TradingDtos.PortfolioResponse> portfolioResponse = restTemplate.exchange(
+                "/v1/portfolio", HttpMethod.GET, new HttpEntity<>(authenticatedHeaders), TradingDtos.PortfolioResponse.class);
+        assertThat(portfolioResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(portfolioResponse.getBody()).isNotNull();
+        assertThat(portfolioResponse.getBody().positions()).isEmpty();
     }
 
     @Test
@@ -88,7 +108,8 @@ class AuthIntegrationTest {
         String email = "dup-" + java.util.UUID.randomUUID() + "@example.com";
         AuthDtos.RegisterRequest request = new AuthDtos.RegisterRequest(
                 email,
-                "SecurePass123!"
+                "SecurePass123!",
+                "Duplicate User"
         );
 
         // First registration
@@ -128,7 +149,8 @@ class AuthIntegrationTest {
         String email = "weak-" + java.util.UUID.randomUUID() + "@example.com";
         AuthDtos.RegisterRequest request = new AuthDtos.RegisterRequest(
                 email,
-                "weak"
+                "weak",
+                "Weak User"
         );
 
         ResponseEntity<String> response = restTemplate.postForEntity(

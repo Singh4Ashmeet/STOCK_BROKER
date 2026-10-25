@@ -40,7 +40,7 @@ class AuthSecurityTest {
     @Test
     void refreshTokenRotationWorks() {
         // Register and login
-        AuthDtos.RegisterRequest reg = new AuthDtos.RegisterRequest("rotate@test.com", "SecurePass123!");
+        AuthDtos.RegisterRequest reg = new AuthDtos.RegisterRequest("rotate@test.com", "SecurePass123!", "Rotate User");
         restTemplate.postForEntity("/v1/auth/register", reg, AuthDtos.RegisterResponse.class);
 
         AuthDtos.LoginRequest login = new AuthDtos.LoginRequest("rotate@test.com", "SecurePass123!");
@@ -76,7 +76,7 @@ class AuthSecurityTest {
     @Test
     void refreshTokenReuseDetectionRevokesFamily() {
         // Register and login
-        AuthDtos.RegisterRequest reg = new AuthDtos.RegisterRequest("reuse@test.com", "SecurePass123!");
+        AuthDtos.RegisterRequest reg = new AuthDtos.RegisterRequest("reuse@test.com", "SecurePass123!", "Reuse User");
         restTemplate.postForEntity("/v1/auth/register", reg, AuthDtos.RegisterResponse.class);
 
         AuthDtos.LoginRequest login = new AuthDtos.LoginRequest("reuse@test.com", "SecurePass123!");
@@ -114,7 +114,7 @@ class AuthSecurityTest {
     @Test
     void logoutRevokesRefreshTokenFamily() {
         // Register and login
-        AuthDtos.RegisterRequest reg = new AuthDtos.RegisterRequest("logout@test.com", "SecurePass123!");
+        AuthDtos.RegisterRequest reg = new AuthDtos.RegisterRequest("logout@test.com", "SecurePass123!", "Logout User");
         restTemplate.postForEntity("/v1/auth/register", reg, AuthDtos.RegisterResponse.class);
 
         AuthDtos.LoginRequest login = new AuthDtos.LoginRequest("logout@test.com", "SecurePass123!");
@@ -142,7 +142,7 @@ class AuthSecurityTest {
 
     @Test
     void loginThrottlingPerAccount() {
-        AuthDtos.RegisterRequest reg = new AuthDtos.RegisterRequest("throttle@test.com", "SecurePass123!");
+        AuthDtos.RegisterRequest reg = new AuthDtos.RegisterRequest("throttle@test.com", "SecurePass123!", "Throttle User");
         restTemplate.postForEntity("/v1/auth/register", reg, AuthDtos.RegisterResponse.class);
 
         AuthDtos.LoginRequest badLogin = new AuthDtos.LoginRequest("throttle@test.com", "WrongPass123!");
@@ -166,10 +166,10 @@ class AuthSecurityTest {
 
     @Test
     void loginThrottlingPerIp() {
-        AuthDtos.RegisterRequest reg1 = new AuthDtos.RegisterRequest("ipthrottle1@test.com", "SecurePass123!");
+        AuthDtos.RegisterRequest reg1 = new AuthDtos.RegisterRequest("ipthrottle1@test.com", "SecurePass123!", "IP Throttle 1");
         restTemplate.postForEntity("/v1/auth/register", reg1, AuthDtos.RegisterResponse.class);
 
-        AuthDtos.RegisterRequest reg2 = new AuthDtos.RegisterRequest("ipthrottle2@test.com", "SecurePass123!");
+        AuthDtos.RegisterRequest reg2 = new AuthDtos.RegisterRequest("ipthrottle2@test.com", "SecurePass123!", "IP Throttle 2");
         restTemplate.postForEntity("/v1/auth/register", reg2, AuthDtos.RegisterResponse.class);
 
         HttpHeaders headers = new HttpHeaders();
@@ -209,7 +209,7 @@ class AuthSecurityTest {
 
     @Test
     void accessTokenHasCorrectExpiration() {
-        AuthDtos.RegisterRequest reg = new AuthDtos.RegisterRequest("exp@test.com", "SecurePass123!");
+        AuthDtos.RegisterRequest reg = new AuthDtos.RegisterRequest("exp@test.com", "SecurePass123!", "Exp User");
         restTemplate.postForEntity("/v1/auth/register", reg, AuthDtos.RegisterResponse.class);
 
         AuthDtos.LoginRequest login = new AuthDtos.LoginRequest("exp@test.com", "SecurePass123!");
@@ -223,7 +223,7 @@ class AuthSecurityTest {
     void passwordNeverLogged() {
         // This test verifies that passwords are not logged by checking
         // that the login endpoint doesn't echo back the password
-        AuthDtos.RegisterRequest reg = new AuthDtos.RegisterRequest("log@test.com", "SecurePass123!");
+        AuthDtos.RegisterRequest reg = new AuthDtos.RegisterRequest("log@test.com", "SecurePass123!", "Log User");
         restTemplate.postForEntity("/v1/auth/register", reg, AuthDtos.RegisterResponse.class);
 
         AuthDtos.LoginRequest login = new AuthDtos.LoginRequest("log@test.com", "SecurePass123!");
@@ -236,7 +236,7 @@ class AuthSecurityTest {
 
     @Test
     void refreshTokenNeverLogged() {
-        AuthDtos.RegisterRequest reg = new AuthDtos.RegisterRequest("logrt@test.com", "SecurePass123!");
+        AuthDtos.RegisterRequest reg = new AuthDtos.RegisterRequest("logrt@test.com", "SecurePass123!", "LogRT User");
         restTemplate.postForEntity("/v1/auth/register", reg, AuthDtos.RegisterResponse.class);
 
         AuthDtos.LoginRequest login = new AuthDtos.LoginRequest("logrt@test.com", "SecurePass123!");

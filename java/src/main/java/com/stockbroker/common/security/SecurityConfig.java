@@ -117,6 +117,19 @@ public class SecurityConfig {
 
     @Bean
     @Order(3)
+    public SecurityFilterChain webSocketFilterChain(HttpSecurity http) throws Exception {
+        http
+                .securityMatcher("/ws/**")
+                .csrf(csrf -> csrf.disable())
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .authorizeHttpRequests(auth -> auth.anyRequest().permitAll());
+
+        return http.build();
+    }
+
+    @Bean
+    @Order(4)
     public SecurityFilterChain actuatorFilterChain(HttpSecurity http) throws Exception {
         http
                 .securityMatcher("/actuator/**")

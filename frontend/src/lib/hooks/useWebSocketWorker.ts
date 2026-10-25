@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { useMarketStore, selectConnectionStatus, selectIsResyncing } from '@/lib/store';
+import { useAuth } from '@/lib/auth';
 
 interface UseWebSocketWorkerReturn {
   connect: () => void;
@@ -16,6 +17,7 @@ interface UseWebSocketWorkerReturn {
 
 export function useWebSocketWorker(): UseWebSocketWorkerReturn {
   const workerRef = useRef<Worker | null>(null);
+  const { accessToken } = useAuth();
   const connectionStatus = useMarketStore(selectConnectionStatus);
   const isResyncing = useCallback(
     (symbol: string) => useMarketStore.getState().isResyncing(symbol),
@@ -106,11 +108,14 @@ export function useWebSocketWorker(): UseWebSocketWorkerReturn {
 
   // Request ticket and connect
   const connect = useCallback(async () => {
-    if (!workerReady || workerRef.current) return;
+    if (!workerReady || !workerRef.current || !accessToken) return;
 
     try {
       const response = await fetch('/api/ws/ticket', {
         method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
         credentials: 'include',
       });
 
@@ -126,7 +131,7 @@ export function useWebSocketWorker(): UseWebSocketWorkerReturn {
       console.error('[WS] Connect error:', error);
       useMarketStore.getState().setConnectionStatus('error', 'Failed to connect');
     }
-  }, [workerReady]);
+  }, [accessToken, workerReady]);
 
   const disconnect = useCallback(() => {
     (workerRef.current as Worker | null)?.postMessage({ type: 'disconnect' });

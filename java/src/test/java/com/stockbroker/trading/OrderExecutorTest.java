@@ -55,7 +55,7 @@ class OrderExecutorTest {
     @BeforeEach
     void setup() {
         // Register and login
-        AuthDtos.RegisterRequest reg = new AuthDtos.RegisterRequest("orderexec@test.com", "SecurePass123!");
+        AuthDtos.RegisterRequest reg = new AuthDtos.RegisterRequest("orderexec@test.com", "SecurePass123!", "Order Exec User");
         restTemplate.postForEntity("/v1/auth/register", reg, AuthDtos.RegisterResponse.class);
 
         AuthDtos.LoginRequest login = new AuthDtos.LoginRequest("orderexec@test.com", "SecurePass123!");

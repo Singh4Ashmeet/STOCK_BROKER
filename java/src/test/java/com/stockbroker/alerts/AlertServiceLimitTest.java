@@ -119,7 +119,7 @@ class AlertServiceLimitTest {
 
         // When/Then
         assertThatThrownBy(() -> alertService.triggerAlert(alertId))
-                .isInstanceOf(BusinessProblem.ValidationFailed.class)
+                .isInstanceOf(BusinessProblem.AlertNotFound.class)
                 .hasMessageContaining("Alert not found");
     }
 }

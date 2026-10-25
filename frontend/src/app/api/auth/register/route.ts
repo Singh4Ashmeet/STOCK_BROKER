@@ -1,6 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081';
+// API_URL is server-only so a deployment does not have to expose its internal
+// API host to the browser. Keep NEXT_PUBLIC_API_URL as the local-development
+// fallback used by the existing client-side API helpers.
+const API_BASE = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081';
+
+function isConnectionRefused(error: unknown): boolean {
+  if (!(error instanceof Error) || !error.cause || typeof error.cause !== 'object') {
+    return false;
+  }
+
+  return 'code' in error.cause && error.cause.code === 'ECONNREFUSED';
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -48,44 +59,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(data, { status: response.status });
     }
 
-    // After registration, auto-login
-    const loginResponse = await fetch(`${API_BASE}/api/v1/auth/login`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ email, password }),
-    });
-
-    const loginData = await loginResponse.json();
-
-    if (!loginResponse.ok) {
+    // The client logs in after this response. Keeping registration and login
+    // as separate operations avoids issuing and immediately abandoning two
+    // refresh tokens for every newly registered user.
+    return NextResponse.json(data, { status: response.status });
+  } catch (error) {
+    console.error('Register error:', error);
+    if (isConnectionRefused(error)) {
       return NextResponse.json(
-        { ...data, message: 'Registered but auto-login failed. Please log in manually.' },
-        { status: 201 }
+        {
+          type: 'urn:stockbroker:error:UPSTREAM_UNAVAILABLE',
+          title: 'Authentication service unavailable',
+          status: 503,
+          detail: 'The authentication service is starting or unavailable. Please try again shortly.',
+          code: 'UPSTREAM_UNAVAILABLE',
+        },
+        { status: 503 }
       );
     }
 
-    const nextResponse = NextResponse.json({
-      accessToken: loginData.access_token,
-      expiresIn: loginData.expires_in,
-      tokenType: loginData.token_type,
-    });
-
-    const refreshToken = loginData.refresh_token;
-    if (refreshToken) {
-      nextResponse.cookies.set('refresh_token', refreshToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
-        maxAge: 30 * 24 * 60 * 60,
-        path: '/',
-      });
-    }
-
-    return nextResponse;
-  } catch (error) {
-    console.error('Register error:', error);
     return NextResponse.json(
       {
         type: 'urn:stockbroker:error:INTERNAL_ERROR',

@@ -8,6 +8,7 @@ import com.stockbroker.portfolio.api.PortfolioDtos;
 import com.stockbroker.portfolio.api.PortfolioDtosExtended;
 import com.stockbroker.alerts.api.AlertsDtos;
 import com.stockbroker.research.api.ResearchDtos;
+import com.stockbroker.market.grpc.MockMarketGrpcClient;
 import com.stockbroker.auth.repo.UserRepository;
 import com.stockbroker.trading.repo.OrderRepository;
 import com.stockbroker.trading.repo.FillRepository;
@@ -57,6 +58,9 @@ class AuthIsolationTest {
     @Autowired
     BacktestRepository backtestRepository;
 
+    @Autowired
+    MockMarketGrpcClient mockMarketGrpcClient;
+
     @Autowired(required = false)
     org.springframework.data.redis.core.StringRedisTemplate redisTemplate;
 
@@ -73,6 +77,7 @@ class AuthIsolationTest {
 
     @BeforeEach
     void setup() {
+        mockMarketGrpcClient.resetForTest();
         if (redisTemplate != null) {
             try {
                 var keys = redisTemplate.keys("login:fail:*");
@@ -84,7 +89,7 @@ class AuthIsolationTest {
 
         String userAEmail = "usera-" + UUID.randomUUID() + "@test.com";
         // Register and login User A
-        AuthDtos.RegisterRequest regA = new AuthDtos.RegisterRequest(userAEmail, "SecurePass123!");
+        AuthDtos.RegisterRequest regA = new AuthDtos.RegisterRequest(userAEmail, "SecurePass123!", "User A");
         restTemplate.postForEntity("/v1/auth/register", regA, AuthDtos.RegisterResponse.class);
 
         AuthDtos.LoginRequest loginA = new AuthDtos.LoginRequest(userAEmail, "SecurePass123!");
@@ -93,7 +98,7 @@ class AuthIsolationTest {
 
         String userBEmail = "userb-" + UUID.randomUUID() + "@test.com";
         // Register and login User B
-        AuthDtos.RegisterRequest regB = new AuthDtos.RegisterRequest(userBEmail, "SecurePass123!");
+        AuthDtos.RegisterRequest regB = new AuthDtos.RegisterRequest(userBEmail, "SecurePass123!", "User B");
         restTemplate.postForEntity("/v1/auth/register", regB, AuthDtos.RegisterResponse.class);
 
         AuthDtos.LoginRequest loginB = new AuthDtos.LoginRequest(userBEmail, "SecurePass123!");

@@ -40,8 +40,18 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
+  install-protoc:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Install protoc
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+          protoc --version
+
   fmt:
-    needs: detect
+    needs: [detect, install-protoc]
     if: needs.detect.outputs.exists == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -57,7 +67,7 @@ jobs:
         working-directory: rust
 
   clippy:
-    needs: detect
+    needs: [detect, install-protoc]
     if: needs.detect.outputs.exists == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -73,7 +83,7 @@ jobs:
         working-directory: rust
 
   test:
-    needs: detect
+    needs: [detect, install-protoc]
     if: needs.detect.outputs.exists == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -88,7 +98,7 @@ jobs:
         working-directory: rust
 
   audit:
-    needs: detect
+    needs: [detect, install-protoc]
     if: needs.detect.outputs.exists == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -110,7 +120,7 @@ jobs:
         working-directory: rust
 
   bench-smoke:
-    needs: detect
+    needs: [detect, install-protoc]
     if: needs.detect.outputs.exists == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15

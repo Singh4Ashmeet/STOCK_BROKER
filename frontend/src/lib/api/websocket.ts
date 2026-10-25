@@ -1,6 +1,7 @@
 'use client';
 
 import type { WsClientMessage, WsServerMessage, BookUpdate, Trade, Metrics } from '@/lib/api';
+import { authClient } from '@/lib/auth';
 
 type MessageHandler = (message: WsServerMessage) => void;
 
@@ -52,9 +53,16 @@ export class WebSocketClient {
   private async getTicket(): Promise<string> {
     if (this.ticket) return this.ticket;
 
-    const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081';
-    const response = await fetch(`${API_BASE}/api/v1/ws/ticket`, {
+    const accessToken = authClient.getAccessToken();
+    if (!accessToken) {
+      throw new Error('No access token available for WebSocket ticket');
+    }
+
+    const response = await fetch('/api/ws/ticket', {
       method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
       credentials: 'include',
     });
 
@@ -74,8 +82,9 @@ export class WebSocketClient {
 
     try {
       const ticket = await this.getTicket();
+      // Include context path /api for Java backend
       const WS_BASE = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8081';
-      const wsUrl = `${WS_BASE}/ws/v1?ticket=${ticket}`;
+      const wsUrl = `${WS_BASE}/api/ws/v1?ticket=${ticket}`;
 
       this.ws = new WebSocket(wsUrl);
 

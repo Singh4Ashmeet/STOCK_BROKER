@@ -5,6 +5,7 @@ import com.stockbroker.common.config.RateLimitProperties;
 import com.stockbroker.market.state.MarketStateManager;
 import com.stockbroker.market.subscription.SubscriptionManager;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
 import org.springframework.scheduling.TaskScheduler;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.web.socket.config.annotation.EnableWebSocket;
@@ -13,6 +14,7 @@ import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry
 
 /**
  * WebSocket configuration for real-time market data fan-out.
+ * Uses SockJS in production for fallback transports, raw WebSocket in tests.
  */
 @Configuration
 @EnableWebSocket
@@ -35,7 +37,12 @@ public class WebSocketConfig implements WebSocketConfigurer {
 
     @Override
     public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
+        // Raw WebSocket endpoint (for tests and native WebSocket clients)
         registry.addHandler(marketWebSocketHandler(), "/ws/v1")
+                .setAllowedOrigins("*");
+
+        // SockJS endpoint (for production browser clients with fallback)
+        registry.addHandler(marketWebSocketHandler(), "/ws/v1/sockjs")
                 .setAllowedOrigins("http://localhost:3000", "http://127.0.0.1:3000")
                 .withSockJS();
     }

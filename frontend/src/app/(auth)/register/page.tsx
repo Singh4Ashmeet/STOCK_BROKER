@@ -25,8 +25,29 @@ export default function RegisterPage() {
       return;
     }
 
-    if (password.length < 8) {
-      setError('Password must be at least 8 characters');
+    // Backend password requirements: min 12 chars, max 128, at least one uppercase, lowercase, digit, special char
+    if (password.length < 12) {
+      setError('Password must be at least 12 characters');
+      return;
+    }
+    if (password.length > 128) {
+      setError('Password must be at most 128 characters');
+      return;
+    }
+    if (!/[A-Z]/.test(password)) {
+      setError('Password must contain at least one uppercase letter');
+      return;
+    }
+    if (!/[a-z]/.test(password)) {
+      setError('Password must contain at least one lowercase letter');
+      return;
+    }
+    if (!/\d/.test(password)) {
+      setError('Password must contain at least one digit');
+      return;
+    }
+    if (!/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(password)) {
+      setError('Password must contain at least one special character');
       return;
     }
 
@@ -109,11 +130,11 @@ export default function RegisterPage() {
             type="password"
             autoComplete="new-password"
             required
-            minLength={8}
+            minLength={12}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className="w-full rounded-lg border border-surface-300 dark:border-surface-700 bg-white dark:bg-surface-800 px-4 py-2.5 text-surface-900 dark:text-surface-50 placeholder-surface-400 dark:placeholder-surface-600 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 transition-colors"
-            placeholder="••••••••"
+            placeholder="Min 12 chars, upper, lower, digit, special"
             disabled={isLoading}
           />
         </div>

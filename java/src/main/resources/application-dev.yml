@@ -5,7 +5,9 @@ spring:
   datasource:
     url: jdbc:postgresql://${SB_POSTGRES_HOST:localhost}:${SB_POSTGRES_PORT:5432}/${SB_POSTGRES_DB:stockbroker}
     username: ${SB_POSTGRES_USER:sb_app}
-    password: ${SB_POSTGRES_PASSWORD:${SB_POSTGRES_APP_PASSWORD:Bu59j3pD2y3GXnY3aHsxa5jFPjgPt3i1}}
+    # Local credentials belong in the ignored .env file (or the process environment),
+    # never as a fallback committed to source control.
+    password: ${SB_POSTGRES_PASSWORD:${SB_POSTGRES_APP_PASSWORD:}}
   data:
     redis:
       password: ${SB_REDIS_PASSWORD:}

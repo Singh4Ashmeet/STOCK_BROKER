@@ -13,7 +13,7 @@ import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
-import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -49,7 +49,7 @@ public class AuthService {
     private final RefreshTokenRepository refreshTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtProperties jwtProperties;
-    private final RedisTemplate<String, String> redisTemplate;
+    private final StringRedisTemplate redisTemplate;
     private final RSASSASigner signer;
 
     public AuthService(UserRepository userRepository,
@@ -57,7 +57,7 @@ public class AuthService {
                        PasswordEncoder passwordEncoder,
                        JwtProperties jwtProperties,
                        ResourceLoader resourceLoader,
-                       RedisTemplate<String, String> redisTemplate) {
+                       StringRedisTemplate redisTemplate) {
         this.userRepository = userRepository;
         this.refreshTokenRepository = refreshTokenRepository;
         this.passwordEncoder = passwordEncoder;
@@ -89,7 +89,7 @@ public class AuthService {
         }
     }
 
-    public RegisterResult register(String email, String password) {
+    public RegisterResult register(String email, String password, String name) {
         // Check if email exists
         if (userRepository.existsByEmail(email)) {
             throw new BusinessProblem.ValidationFailed("Email already registered",
@@ -102,6 +102,7 @@ public class AuthService {
         // Create user
         User user = new User();
         user.setEmail(email);
+        user.setFullName(name);
         user.setPasswordHash(passwordHash);
         user.setRole("USER");
         user.setStatus("ACTIVE");
@@ -240,7 +241,11 @@ public class AuthService {
 
     public UUID validateAndConsumeWsTicket(String ticket) {
         String key = WS_TICKET_PREFIX + ticket;
-        String userIdStr = redisTemplate.opsForValue().getAndDelete(key);
+        // Use GET + DEL instead of GETDEL (GETDEL requires Redis 6.2+)
+        String userIdStr = redisTemplate.opsForValue().get(key);
+        if (userIdStr != null) {
+            redisTemplate.delete(key);
+        }
         if (userIdStr == null) {
             return null;
         }

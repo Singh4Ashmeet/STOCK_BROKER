@@ -51,7 +51,7 @@ class OrderConcurrencyTest {
     @BeforeEach
     void setup() {
         // Register and login
-        AuthDtos.RegisterRequest reg = new AuthDtos.RegisterRequest("concurrency@test.com", "SecurePass123!");
+        AuthDtos.RegisterRequest reg = new AuthDtos.RegisterRequest("concurrency@test.com", "SecurePass123!", "Concurrency User");
         restTemplate.postForEntity("/v1/auth/register", reg, AuthDtos.RegisterResponse.class);
 
         AuthDtos.LoginRequest login = new AuthDtos.LoginRequest("concurrency@test.com", "SecurePass123!");

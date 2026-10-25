@@ -25,7 +25,7 @@ class AuthWebSocketTicketTest {
     @Test
     void wsTicketCanBeCreatedAndValidated() {
         // Register and login
-        AuthDtos.RegisterRequest reg = new AuthDtos.RegisterRequest("wstest@test.com", "SecurePass123!");
+        AuthDtos.RegisterRequest reg = new AuthDtos.RegisterRequest("wstest@test.com", "SecurePass123!", "WS Test User");
         restTemplate.postForEntity("/v1/auth/register", reg, AuthDtos.RegisterResponse.class);
 
         AuthDtos.LoginRequest login = new AuthDtos.LoginRequest("wstest@test.com", "SecurePass123!");

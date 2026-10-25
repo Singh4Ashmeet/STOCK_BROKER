@@ -41,7 +41,7 @@ class ConflationTest {
         // This test directly tests the SessionContext's queue behavior
         // by creating a handler with a very small queue capacity
 
-        AuthDtos.RegisterRequest reg = new AuthDtos.RegisterRequest("conflation@test.com", "SecurePass123!");
+        AuthDtos.RegisterRequest reg = new AuthDtos.RegisterRequest("conflation@test.com", "SecurePass123!", "Conflation User");
         restTemplate.postForEntity("/v1/auth/register", reg, AuthDtos.RegisterResponse.class);
 
         AuthDtos.LoginRequest login = new AuthDtos.LoginRequest("conflation@test.com", "SecurePass123!");

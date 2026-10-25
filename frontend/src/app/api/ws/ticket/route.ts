@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081';
+const API_BASE = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081';
 
 export async function POST(request: NextRequest) {
   try {
@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Forward to Java API
-    const response = await fetch(`${API_BASE}/api/v1/ws/ticket`, {
+    const response = await fetch(`${API_BASE}/api/v1/auth/ws/ticket`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

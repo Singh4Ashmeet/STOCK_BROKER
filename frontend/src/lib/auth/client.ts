@@ -37,7 +37,7 @@ class AuthClient {
     return data;
   }
 
-  async register(data: RegisterRequest): Promise<User> {
+  async register(data: RegisterRequest): Promise<void> {
     const response = await fetch(`${AUTH_BASE}/register`, {
       method: 'POST',
       headers: {
@@ -52,7 +52,9 @@ class AuthClient {
       throw new Error(error.detail || 'Registration failed');
     }
 
-    return response.json();
+    // Registration deliberately does not create a session. AuthProvider follows
+    // with the single login request that establishes the refresh-token cookie.
+    await response.json();
   }
 
   async logout(): Promise<void> {
@@ -110,7 +112,21 @@ class AuthClient {
       return null;
     }
 
-    return response.json();
+    const user: {
+      user_id: string;
+      email: string;
+      role: string;
+      full_name: string;
+      created_at: string;
+    } = await response.json();
+
+    return {
+      id: user.user_id,
+      email: user.email,
+      name: user.full_name,
+      roles: [user.role],
+      createdAt: user.created_at,
+    };
   }
 
   async requestWithAuth<T>(

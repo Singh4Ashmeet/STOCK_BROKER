@@ -3,6 +3,7 @@ package com.stockbroker.market;
 import com.stockbroker.common.LocalTestConfiguration;
 import com.stockbroker.auth.api.AuthDtos;
 import com.stockbroker.market.api.MarketDtos;
+import com.stockbroker.market.grpc.MockMarketGrpcClient;
 import com.stockbroker.market.state.MarketStateManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -33,12 +34,16 @@ class RedisRecoveryTest {
     @Autowired
     RedisTemplate<String, Object> redisTemplate;
 
+    @Autowired
+    MockMarketGrpcClient mockMarketGrpcClient;
+
     private String accessToken;
 
     @BeforeEach
     void setup() {
+        mockMarketGrpcClient.resetForTest();
         // Register and login
-        AuthDtos.RegisterRequest reg = new AuthDtos.RegisterRequest("redistest@test.com", "SecurePass123!");
+        AuthDtos.RegisterRequest reg = new AuthDtos.RegisterRequest("redistest@test.com", "SecurePass123!", "Redis Test User");
         restTemplate.postForEntity("/v1/auth/register", reg, AuthDtos.RegisterResponse.class);
 
         AuthDtos.LoginRequest login = new AuthDtos.LoginRequest("redistest@test.com", "SecurePass123!");
@@ -110,7 +115,8 @@ class RedisRecoveryTest {
         String specKey = "mkt:" + spec.symbol() + ":spec";
         Object specState = redisTemplate.opsForValue().get(specKey);
         assertThat(specState).isNotNull();
-        assertThat(specState).isInstanceOf(com.stockbroker.market.v1.InstrumentSpec.class);
+        // Specs are mirrored as Jackson-friendly DTOs (protobuf messages are not JSON-serializable).
+        assertThat(specState).isInstanceOf(MarketDtos.InstrumentSpec.class);
     }
 
     @Test
