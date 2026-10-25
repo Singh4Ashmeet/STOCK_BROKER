@@ -1,4 +1,8 @@
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let protoc = protoc_bin_vendored::protoc_bin_path()?;
+    // Use a known compiler for local development and CI, independent of PATH.
+    unsafe { std::env::set_var("PROTOC", protoc) };
+
     let manifest_dir = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR")?);
     let proto_path = manifest_dir
         .join("..")
