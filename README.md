@@ -46,9 +46,11 @@ git clone <repo> && cd stock_broker
 # 2. Install the project dependencies
 python main.py install
 
-# 3. Start the native API and web UI
+# 3. Start Rust, Python, Java, and Next.js together
 # PostgreSQL and Redis must already be installed and running locally.
-python main.py start --with-feed
+python main.py start
+# Local service dashboard: http://127.0.0.1:8080
+# JSON status: http://127.0.0.1:8080/api/status
 
 # 4. Verify CI configuration (action pins)
 make ci-lint
@@ -60,7 +62,7 @@ make proto
 pre-commit install --install-hooks -t pre-commit -t commit-msg
 pre-commit run --all-files
 
-# 7. Stop when done
+# 7. Stop when done (Ctrl+C also stops services)
 python main.py stop
 ```
 
