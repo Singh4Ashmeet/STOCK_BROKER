@@ -98,12 +98,12 @@ jobs:
         continue-on-error: true
         run: |
           set -o pipefail
-          cargo test --all -- --nocapture 2>&1 | tee "$RUNNER_TEMP/cargo-test.log"
+          cargo test --all --jobs 1 -- --nocapture 2>&1 | tee "$RUNNER_TEMP/cargo-test.log"
         working-directory: rust
       - name: Surface test failure
         if: steps.cargo_test.outcome == 'failure'
         run: |
-          detail="$(grep -E 'test .* \.\.\. FAILED|panicked at|assertion .* failed|error:' "$RUNNER_TEMP/cargo-test.log" | tail -n 1 || true)"
+          detail="$(grep -E 'test .* \.\.\. FAILED|panicked at|assertion .* failed|collect2:|ld:|error:' "$RUNNER_TEMP/cargo-test.log" | tail -n 1 || true)"
           echo "::error title=Rust test failure::${detail:-cargo test failed; see the step output for details}"
           exit 1
 
