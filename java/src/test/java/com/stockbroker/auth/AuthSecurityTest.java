@@ -2,12 +2,32 @@ package com.stockbroker.auth;
 
 import com.stockbroker.common.LocalTestConfiguration;
 import com.stockbroker.auth.api.AuthDtos;
+import com.nimbusds.jose.JWSAlgorithm;
+import com.nimbusds.jose.JWSHeader;
+import com.nimbusds.jose.crypto.RSASSASigner;
+import com.nimbusds.jwt.JWTClaimsSet;
+import com.nimbusds.jwt.SignedJWT;
+import com.stockbroker.common.config.JwtProperties;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.ResourceLoader;
 import org.springframework.http.*;
 import org.springframework.test.context.ContextConfiguration;
+
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.security.KeyFactory;
+import java.security.interfaces.RSAPrivateKey;
+import java.security.spec.PKCS8EncodedKeySpec;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Base64;
+import java.util.Date;
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -24,6 +44,12 @@ class AuthSecurityTest {
 
     @Autowired(required = false)
     org.springframework.data.redis.core.StringRedisTemplate redisTemplate;
+
+    @Autowired
+    JwtProperties jwtProperties;
+
+    @Autowired
+    ResourceLoader resourceLoader;
 
     @org.junit.jupiter.api.BeforeEach
     void cleanup() {
@@ -141,6 +167,62 @@ class AuthSecurityTest {
     }
 
     @Test
+    void logoutImmediatelyRevokesOnlyTheLoggedOutAccessTokenSession() throws Exception {
+        String email = "logout-revocation-" + UUID.randomUUID() + "@test.com";
+        AuthDtos.RegisterRequest registration = new AuthDtos.RegisterRequest(
+                email, "SecurePass123!", "Logout Revocation User");
+        assertThat(restTemplate.postForEntity("/v1/auth/register", registration,
+                AuthDtos.RegisterResponse.class).getStatusCode()).isEqualTo(HttpStatus.CREATED);
+
+        AuthDtos.LoginResponse loggedOutSession = login(email);
+        AuthDtos.LoginResponse sameUserOtherSession = login(email);
+
+        String otherEmail = "logout-revocation-other-" + UUID.randomUUID() + "@test.com";
+        AuthDtos.RegisterRequest otherRegistration = new AuthDtos.RegisterRequest(
+                otherEmail, "SecurePass123!", "Other User");
+        assertThat(restTemplate.postForEntity("/v1/auth/register", otherRegistration,
+                AuthDtos.RegisterResponse.class).getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        AuthDtos.LoginResponse otherUserSession = login(otherEmail);
+
+        assertThat(protectedPortfolio(loggedOutSession.accessToken()).getStatusCode()).isEqualTo(HttpStatus.OK);
+
+        ResponseEntity<Void> logoutResponse = restTemplate.exchange("/v1/auth/logout", HttpMethod.POST,
+                jsonEntity(new AuthDtos.LogoutRequest(loggedOutSession.refreshToken())), Void.class);
+        assertThat(logoutResponse.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+
+        // The exact bearer used before logout no longer authenticates.
+        assertThat(protectedPortfolio(loggedOutSession.accessToken()).getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+
+        ResponseEntity<String> refreshResponse = restTemplate.exchange("/v1/auth/refresh", HttpMethod.POST,
+                jsonEntity(new AuthDtos.RefreshRequest(loggedOutSession.refreshToken())), String.class);
+        assertThat(refreshResponse.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+
+        // The refresh-token family is the session boundary, not the user boundary.
+        assertThat(protectedPortfolio(sameUserOtherSession.accessToken()).getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(protectedPortfolio(otherUserSession.accessToken()).getStatusCode()).isEqualTo(HttpStatus.OK);
+
+        ResponseEntity<String> revokedTicketResponse = restTemplate.exchange("/v1/auth/ws/ticket", HttpMethod.POST,
+                bearerEntity(loggedOutSession.accessToken()), String.class);
+        assertThat(revokedTicketResponse.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+
+        assertThat(protectedPortfolio("not-a-jwt").getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(protectedPortfolio(expiredAccessToken()).getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+
+        AuthDtos.LoginResponse newSession = login(email);
+        assertThat(protectedPortfolio(newSession.accessToken()).getStatusCode()).isEqualTo(HttpStatus.OK);
+
+        assertThat(redisTemplate).isNotNull();
+        UUID sessionId = UUID.fromString(SignedJWT.parse(loggedOutSession.accessToken())
+                .getJWTClaimsSet().getStringClaim("sid"));
+        Long ttlSeconds = redisTemplate.getExpire("auth:revoked-session:" + sessionId, TimeUnit.SECONDS);
+        Instant accessTokenExpiry = SignedJWT.parse(loggedOutSession.accessToken())
+                .getJWTClaimsSet().getExpirationTime().toInstant();
+        long secondsUntilAccessExpiry = Duration.between(Instant.now(), accessTokenExpiry).toSeconds();
+        assertThat(ttlSeconds).isNotNull().isPositive()
+                .isLessThanOrEqualTo(secondsUntilAccessExpiry);
+    }
+
+    @Test
     void loginThrottlingPerAccount() {
         AuthDtos.RegisterRequest reg = new AuthDtos.RegisterRequest("throttle@test.com", "SecurePass123!", "Throttle User");
         restTemplate.postForEntity("/v1/auth/register", reg, AuthDtos.RegisterResponse.class);
@@ -255,5 +337,62 @@ class AuthSecurityTest {
         // but we can verify the response structure doesn't leak it in unexpected ways)
         assertThat(refreshResp.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(refreshResp.getBody().refreshToken()).isNotEqualTo(refreshToken); // Should be rotated
+    }
+
+    private AuthDtos.LoginResponse login(String email) {
+        ResponseEntity<AuthDtos.LoginResponse> loginResponse = restTemplate.postForEntity("/v1/auth/login",
+                new AuthDtos.LoginRequest(email, "SecurePass123!"), AuthDtos.LoginResponse.class);
+        assertThat(loginResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(loginResponse.getBody()).isNotNull();
+        return loginResponse.getBody();
+    }
+
+    private ResponseEntity<String> protectedPortfolio(String accessToken) {
+        return restTemplate.exchange("/v1/portfolio", HttpMethod.GET, bearerEntity(accessToken), String.class);
+    }
+
+    private HttpEntity<?> bearerEntity(String accessToken) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(accessToken);
+        return new HttpEntity<>(headers);
+    }
+
+    private HttpEntity<?> jsonEntity(Object body) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        return new HttpEntity<>(body, headers);
+    }
+
+    private String expiredAccessToken() throws Exception {
+        Resource resource = resourceLoader.getResource(jwtProperties.getPrivateKeyPath());
+        StringBuilder pem = new StringBuilder();
+        try (InputStreamReader reader = new InputStreamReader(resource.getInputStream(), StandardCharsets.UTF_8)) {
+            char[] buffer = new char[1024];
+            int read;
+            while ((read = reader.read(buffer)) != -1) {
+                pem.append(buffer, 0, read);
+            }
+        }
+        byte[] decoded = Base64.getDecoder().decode(pem.toString()
+                .replace("-----BEGIN PRIVATE KEY-----", "")
+                .replace("-----END PRIVATE KEY-----", "")
+                .replaceAll("\\s", ""));
+        RSAPrivateKey privateKey = (RSAPrivateKey) KeyFactory.getInstance("RSA")
+                .generatePrivate(new PKCS8EncodedKeySpec(decoded));
+
+        Instant now = Instant.now();
+        JWTClaimsSet claims = new JWTClaimsSet.Builder()
+                .subject(UUID.randomUUID().toString())
+                .issuer(jwtProperties.getIssuer())
+                .audience(jwtProperties.getAudience())
+                .issueTime(Date.from(now.minus(Duration.ofMinutes(5))))
+                .expirationTime(Date.from(now.minus(Duration.ofMinutes(2))))
+                .claim("role", "USER")
+                .claim("sid", UUID.randomUUID().toString())
+                .jwtID(UUID.randomUUID().toString())
+                .build();
+        SignedJWT token = new SignedJWT(new JWSHeader(JWSAlgorithm.RS256), claims);
+        token.sign(new RSASSASigner(privateKey));
+        return token.serialize();
     }
 }

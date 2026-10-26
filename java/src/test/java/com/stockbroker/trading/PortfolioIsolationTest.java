@@ -11,11 +11,13 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.*;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.ContextConfiguration;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -107,6 +109,80 @@ class PortfolioIsolationTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isNotNull();
         // Should only see User A's data (empty in test)
+    }
+
+    @Test
+    void newlyRegisteredUserWithoutLedgerActivityGetsEmptyBalancesAndPositions() {
+        String email = "new-balance-user-" + UUID.randomUUID() + "@test.com";
+        AuthDtos.RegisterRequest registration = new AuthDtos.RegisterRequest(
+                email, "SecurePass123!", "New Balance User");
+        ResponseEntity<AuthDtos.RegisterResponse> registrationResponse = restTemplate.postForEntity(
+                "/v1/auth/register", registration, AuthDtos.RegisterResponse.class);
+        assertThat(registrationResponse.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+
+        AuthDtos.LoginRequest login = new AuthDtos.LoginRequest(email, "SecurePass123!");
+        ResponseEntity<AuthDtos.LoginResponse> loginResponse = restTemplate.postForEntity(
+                "/v1/auth/login", login, AuthDtos.LoginResponse.class);
+        String accessToken = loginResponse.getBody().accessToken();
+
+        ResponseEntity<List<TradingDtos.AssetBalanceResponse>> balances = getBalances(accessToken,
+                "/v1/portfolio/balances");
+        ResponseEntity<TradingDtos.PortfolioResponse> portfolio = restTemplate.exchange(
+                "/v1/portfolio", HttpMethod.GET, authorizedEntity(accessToken),
+                TradingDtos.PortfolioResponse.class);
+
+        assertThat(balances.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(balances.getBody()).isEmpty();
+        assertThat(portfolio.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(portfolio.getBody().positions()).isEmpty();
+    }
+
+    @Test
+    void balancesAreDerivedFromLedgerEntries() {
+        ledgerService.createDeposit(userAAccountId, userAId, "USDT", new BigDecimal("100.25"));
+        ledgerService.createDeposit(userAAccountId, userAId, "BTC", new BigDecimal("0.5"));
+
+        ResponseEntity<List<TradingDtos.AssetBalanceResponse>> response = getBalances(userAAccessToken,
+                "/v1/portfolio/balances");
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).containsExactly(
+                new TradingDtos.AssetBalanceResponse("BTC", "0.5"),
+                new TradingDtos.AssetBalanceResponse("USDT", "100.25"));
+    }
+
+    @Test
+    void balancesAreIsolatedByAuthenticatedUserAndCannotSelectForeignAccount() {
+        ledgerService.createDeposit(userAAccountId, userAId, "USDT", new BigDecimal("100"));
+        ledgerService.createDeposit(userBAccountId, userBId, "BTC", new BigDecimal("2"));
+
+        ResponseEntity<List<TradingDtos.AssetBalanceResponse>> responseA = getBalances(userAAccessToken,
+                "/v1/portfolio/balances?accountId=" + userBAccountId);
+        ResponseEntity<List<TradingDtos.AssetBalanceResponse>> responseB = getBalances(userBAccessToken,
+                "/v1/portfolio/balances");
+
+        assertThat(responseA.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(responseA.getBody()).containsExactly(new TradingDtos.AssetBalanceResponse("USDT", "100"));
+        assertThat(responseB.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(responseB.getBody()).containsExactly(new TradingDtos.AssetBalanceResponse("BTC", "2"));
+    }
+
+    @Test
+    void balancesRequireAuthentication() {
+        ResponseEntity<String> response = restTemplate.getForEntity("/v1/portfolio/balances", String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    private HttpEntity<?> authorizedEntity(String token) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(token);
+        return new HttpEntity<>(headers);
+    }
+
+    private ResponseEntity<List<TradingDtos.AssetBalanceResponse>> getBalances(String token, String path) {
+        return restTemplate.exchange(path, HttpMethod.GET, authorizedEntity(token),
+                new ParameterizedTypeReference<>() {});
     }
 
     @Test

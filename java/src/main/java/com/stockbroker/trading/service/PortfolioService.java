@@ -95,6 +95,15 @@ public class PortfolioService {
         );
     }
 
+    public List<TradingDtos.AssetBalanceResponse> getBalances(UUID userId) {
+        Account account = accountService.getOrCreateDefaultAccount(userId);
+        return ledgerService.getAllBalances(account.getId()).entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .map(entry -> new TradingDtos.AssetBalanceResponse(
+                        entry.getKey(), entry.getValue().stripTrailingZeros().toPlainString()))
+                .collect(Collectors.toList());
+    }
+
     private TradingDtos.PositionResponse enrichPositionWithLiveData(Position pos) {
         // Get live price from market data
         var snapshot = marketDataService.getSnapshot(pos.getSymbol(), 1);

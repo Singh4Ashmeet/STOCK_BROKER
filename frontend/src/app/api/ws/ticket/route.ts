@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { isUpstreamUnavailable, upstreamUnavailableResponse } from '@/lib/api/upstream';
 
 const API_BASE = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081';
 
@@ -36,6 +37,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(data, { status: response.status });
   } catch (error) {
     console.error('WS ticket error:', error);
+    if (isUpstreamUnavailable(error)) {
+      return upstreamUnavailableResponse();
+    }
     return NextResponse.json(
       {
         type: 'urn:stockbroker:error:INTERNAL_ERROR',

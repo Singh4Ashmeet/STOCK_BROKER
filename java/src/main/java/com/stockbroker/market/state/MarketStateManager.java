@@ -121,11 +121,15 @@ public class MarketStateManager {
             keys = redisTemplate.keys("mkt:*:book");
             if (keys != null) {
                 for (String key : keys) {
-                    String symbol = key.substring(5, key.length() - 5); // "mkt:" + ":book"
+                    Optional<String> symbol = symbolFromStateKey(key, ":book");
+                    if (symbol.isEmpty()) {
+                        log.warn("Skipping malformed Redis book-state key: {}", key);
+                        continue;
+                    }
                     BookState state = (BookState) redisTemplate.opsForValue().get(key);
                     if (state != null) {
-                        books.computeIfAbsent(symbol, k -> new AtomicReference<>()).set(state);
-                        log.debug("Restored book for {} from Redis (epoch={}, seq={})", symbol, state.epoch(), state.seq());
+                        books.computeIfAbsent(symbol.get(), k -> new AtomicReference<>()).set(state);
+                        log.debug("Restored book for {} from Redis (epoch={}, seq={})", symbol.get(), state.epoch(), state.seq());
                     }
                 }
             }
@@ -134,11 +138,15 @@ public class MarketStateManager {
             keys = redisTemplate.keys("mkt:*:trades");
             if (keys != null) {
                 for (String key : keys) {
-                    String symbol = key.substring(5, key.length() - 7); // "mkt:" + ":trades"
+                    Optional<String> symbol = symbolFromStateKey(key, ":trades");
+                    if (symbol.isEmpty()) {
+                        log.warn("Skipping malformed Redis trades-state key: {}", key);
+                        continue;
+                    }
                     TradesState state = (TradesState) redisTemplate.opsForValue().get(key);
                     if (state != null) {
-                        trades.computeIfAbsent(symbol, k -> new AtomicReference<>()).set(state);
-                        log.debug("Restored trades for {} from Redis ({} trades)", symbol, state.recentTrades().size());
+                        trades.computeIfAbsent(symbol.get(), k -> new AtomicReference<>()).set(state);
+                        log.debug("Restored trades for {} from Redis ({} trades)", symbol.get(), state.recentTrades().size());
                     }
                 }
             }
@@ -147,11 +155,15 @@ public class MarketStateManager {
             keys = redisTemplate.keys("mkt:*:metrics");
             if (keys != null) {
                 for (String key : keys) {
-                    String symbol = key.substring(5, key.length() - 8); // "mkt:" + ":metrics"
+                    Optional<String> symbol = symbolFromStateKey(key, ":metrics");
+                    if (symbol.isEmpty()) {
+                        log.warn("Skipping malformed Redis metrics-state key: {}", key);
+                        continue;
+                    }
                     MetricsState state = (MetricsState) redisTemplate.opsForValue().get(key);
                     if (state != null) {
-                        metrics.computeIfAbsent(symbol, k -> new AtomicReference<>()).set(state);
-                        log.debug("Restored metrics for {} from Redis", symbol);
+                        metrics.computeIfAbsent(symbol.get(), k -> new AtomicReference<>()).set(state);
+                        log.debug("Restored metrics for {} from Redis", symbol.get());
                     }
                 }
             }
@@ -173,6 +185,15 @@ public class MarketStateManager {
             String key = "mkt:" + spec.getSymbol() + ":spec";
             redisTemplate.opsForValue().set(key, toInstrumentDto(spec));
         }
+    }
+
+    static Optional<String> symbolFromStateKey(String key, String suffix) {
+        String prefix = "mkt:";
+        if (key == null || !key.startsWith(prefix) || !key.endsWith(suffix)) {
+            return Optional.empty();
+        }
+        String symbol = key.substring(prefix.length(), key.length() - suffix.length());
+        return symbol.isBlank() ? Optional.empty() : Optional.of(symbol);
     }
 
     public void onBookUpdate(com.stockbroker.market.v1.BookUpdate update) {

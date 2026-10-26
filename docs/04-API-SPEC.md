@@ -46,12 +46,13 @@ Symbols are canonical: `VENUE:BASE-QUOTE`, for example `BINANCE:BTC-USDT`.
 
 | Method | Path | Notes |
 |---|---|---|
-| POST | `/orders` | **Requires `Idempotency-Key`.** Body: `{symbol, side, type: MARKET|LIMIT, qty, limit_price?, tif: GTC|IOC}` |
+| POST | `/orders` | **Requires `Idempotency-Key`.** Body: `{symbol, side, type: MARKET|LIMIT, qty, limitPrice?, tif: GTC|IOC}` |
 | GET | `/orders?status=&symbol=` | Paginated |
 | GET | `/orders/{id}` | |
 | DELETE | `/orders/{id}` | Cancel; idempotent |
 | GET | `/fills` | Paginated |
 | GET | `/portfolio` | Cash, positions, equity, realized and unrealized P&L at the current mid/mark |
+| GET | `/portfolio/balances` | Current user's default account; ledger-derived nonzero net balance per asset as a decimal string. Returns `[]` when there are no nonzero balances. There is no separate locked-balance model. |
 | GET | `/ledger?from=&to=` | Paginated ledger entries |
 | POST | `/orders/preview` | Slippage preview: walks the current book without placing an order |
 | GET/POST/DELETE | `/watchlists`, `/watchlists/{id}/items` | |

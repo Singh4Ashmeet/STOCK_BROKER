@@ -365,6 +365,7 @@
                 <version>${maven-compiler-plugin.version}</version>
                 <configuration>
                     <release>21</release>
+                    <parameters>true</parameters>
                     <compilerArgs>
                         <arg>-Xlint:all</arg>
                         <arg>-Xlint:-serial</arg>
@@ -551,7 +552,7 @@
                         <exclude>**/*IntegrationTest.java</exclude>
                         <exclude>**/*ArchitectureTest.java</exclude>
                     </excludes>
-                    <argLine>@{argLine} --enable-preview</argLine>
+                    <argLine>@{argLine} -Xmx768m -XX:ActiveProcessorCount=2 -XX:+UseSerialGC -Xss512k --enable-preview</argLine>
                 </configuration>
             </plugin>
 
@@ -564,7 +565,7 @@
                     <includes>
                         <include>**/*IntegrationTest.java</include>
                     </includes>
-                    <argLine>@{argLine} --enable-preview</argLine>
+                    <argLine>@{argLine} -Xmx768m -XX:ActiveProcessorCount=2 -XX:+UseSerialGC -Xss512k --enable-preview</argLine>
                 </configuration>
                 <executions>
                     <execution>

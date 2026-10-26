@@ -3,51 +3,25 @@
 @tailwind utilities;
 
 @layer base {
-  :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-    --primary: 142 76% 36%;
-    --primary-foreground: 355.7 100% 97.3%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 142 76% 36%;
-    --radius: 0.5rem;
-  }
-
-  .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --primary: 142 76% 36%;
-    --primary-foreground: 355.7 100% 97.3%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 142 76% 36%;
-  }
-}
-
-@layer base {
-  * { border-color: hsl(var(--border)); }
+  * { border-color: #383a32; }
+  html { background: #171916; color-scheme: dark; }
   body {
-    background-color: hsl(var(--background));
-    color: hsl(var(--foreground));
+    background-color: #171916;
+    color: #f0eee7;
     font-feature-settings: "rlig" 1, "calt" 1;
   }
+  :focus-visible { outline: 2px solid #c2a46d; outline-offset: 2px; }
+  ::selection { background: #c2a46d; color: #171916; }
+}
+
+@layer components {
+  .terminal-panel { @apply border border-surface-600 bg-surface-800; }
+  .terminal-panel-raised { @apply border border-surface-500 bg-surface-700; }
+  .terminal-label { @apply font-mono text-[11px] font-medium uppercase tracking-[0.12em] text-surface-300; }
+  .terminal-value { @apply font-mono tabular-nums text-surface-50; }
+  .terminal-input { @apply w-full border border-surface-500 bg-surface-950 px-3 py-2.5 font-mono text-sm text-surface-50 placeholder:text-surface-400 transition-colors focus:border-primary-400 focus:outline-none; }
+  .terminal-button { @apply inline-flex min-h-10 items-center justify-center border border-primary-500 bg-primary-500 px-4 py-2 text-sm font-semibold text-surface-950 transition-colors hover:bg-primary-400 disabled:cursor-not-allowed disabled:border-surface-600 disabled:bg-surface-700 disabled:text-surface-400; }
+  .terminal-button-secondary { @apply inline-flex min-h-10 items-center justify-center border border-surface-500 bg-surface-800 px-4 py-2 text-sm font-semibold text-surface-100 transition-colors hover:border-surface-400 hover:bg-surface-700 disabled:cursor-not-allowed disabled:opacity-50; }
 }
 
 @layer utilities {
@@ -58,4 +32,5 @@
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
   }
+  .terminal-scrollbar { scrollbar-color: #505247 #171916; scrollbar-width: thin; }
 }

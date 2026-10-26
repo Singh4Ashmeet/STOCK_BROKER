@@ -6,6 +6,7 @@ import com.stockbroker.auth.repo.UserRepository;
 import com.stockbroker.auth.repo.RefreshTokenRepository;
 import com.stockbroker.common.config.JwtProperties;
 import com.stockbroker.common.error.BusinessProblem;
+import com.stockbroker.common.security.jwt.AccessTokenRevocationService;
 import com.nimbusds.jose.JWSAlgorithm;
 import com.nimbusds.jose.JWSHeader;
 import com.nimbusds.jose.crypto.RSASSASigner;
@@ -50,6 +51,7 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtProperties jwtProperties;
     private final StringRedisTemplate redisTemplate;
+    private final AccessTokenRevocationService accessTokenRevocationService;
     private final RSASSASigner signer;
 
     public AuthService(UserRepository userRepository,
@@ -57,12 +59,14 @@ public class AuthService {
                        PasswordEncoder passwordEncoder,
                        JwtProperties jwtProperties,
                        ResourceLoader resourceLoader,
-                       StringRedisTemplate redisTemplate) {
+                       StringRedisTemplate redisTemplate,
+                       AccessTokenRevocationService accessTokenRevocationService) {
         this.userRepository = userRepository;
         this.refreshTokenRepository = refreshTokenRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtProperties = jwtProperties;
         this.redisTemplate = redisTemplate;
+        this.accessTokenRevocationService = accessTokenRevocationService;
 
         try {
             Resource resource = resourceLoader.getResource(jwtProperties.getPrivateKeyPath());
@@ -161,8 +165,8 @@ public class AuthService {
         clearLoginFailures(email, clientIp);
 
         // Generate tokens
-        String accessToken = generateAccessToken(user);
         var refreshToken = createRefreshToken(user.getId());
+        String accessToken = generateAccessToken(user, refreshToken.getFamilyId());
 
         return new LoginResult(accessToken, refreshToken.getToken());
     }
@@ -208,7 +212,7 @@ public class AuthService {
         var newRefreshToken = createRefreshToken(user.getId(), storedToken.getFamilyId());
 
         // Generate new access token
-        String accessToken = generateAccessToken(user);
+        String accessToken = generateAccessToken(user, storedToken.getFamilyId());
 
         return new RefreshResult(accessToken, newRefreshToken.getToken());
     }
@@ -299,7 +303,7 @@ public class AuthService {
         }
     }
 
-    private String generateAccessToken(User user) {
+    private String generateAccessToken(User user, UUID sessionId) {
         try {
             Instant now = Instant.now();
             Instant expiresAt = now.plus(jwtProperties.getAccessTokenExpiration());
@@ -312,11 +316,13 @@ public class AuthService {
                     .expirationTime(Date.from(expiresAt))
                     .claim("role", user.getRole())
                     .claim("email", user.getEmail())
+                    .claim("sid", sessionId.toString())
                     .jwtID(UUID.randomUUID().toString())
                     .build();
 
             SignedJWT signedJWT = new SignedJWT(new JWSHeader(JWSAlgorithm.RS256), claims);
             signedJWT.sign(signer);
+            accessTokenRevocationService.recordSessionAccessExpiry(sessionId, expiresAt);
             return signedJWT.serialize();
 
         } catch (Exception e) {
@@ -340,6 +346,10 @@ public class AuthService {
     }
 
     private void revokeFamily(UUID familyId) {
+        // Write shared access-token revocation state first. If Redis is
+        // unavailable, logout/reuse handling fails rather than falsely
+        // reporting a completed revocation while active JWTs remain accepted.
+        accessTokenRevocationService.revokeSession(familyId);
         refreshTokenRepository.findByFamilyId(familyId).forEach(token -> {
             if (token.getRevokedAt() == null) {
                 token.setRevokedAt(Instant.now());

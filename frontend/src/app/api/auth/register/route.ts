@@ -1,17 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { isUpstreamUnavailable, upstreamUnavailableResponse } from '@/lib/api/upstream';
 
 // API_URL is server-only so a deployment does not have to expose its internal
 // API host to the browser. Keep NEXT_PUBLIC_API_URL as the local-development
 // fallback used by the existing client-side API helpers.
 const API_BASE = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081';
-
-function isConnectionRefused(error: unknown): boolean {
-  if (!(error instanceof Error) || !error.cause || typeof error.cause !== 'object') {
-    return false;
-  }
-
-  return 'code' in error.cause && error.cause.code === 'ECONNREFUSED';
-}
 
 export async function POST(request: NextRequest) {
   try {
@@ -65,17 +58,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(data, { status: response.status });
   } catch (error) {
     console.error('Register error:', error);
-    if (isConnectionRefused(error)) {
-      return NextResponse.json(
-        {
-          type: 'urn:stockbroker:error:UPSTREAM_UNAVAILABLE',
-          title: 'Authentication service unavailable',
-          status: 503,
-          detail: 'The authentication service is starting or unavailable. Please try again shortly.',
-          code: 'UPSTREAM_UNAVAILABLE',
-        },
-        { status: 503 }
-      );
+    if (isUpstreamUnavailable(error)) {
+      return upstreamUnavailableResponse();
     }
 
     return NextResponse.json(

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth';
 import { useWebSocketWorker } from '@/lib/hooks/useWebSocketWorker';
 import { useMarketStore } from '@/lib/store';
@@ -14,6 +14,7 @@ import {
 } from '@/components/charts';
 import Link from 'next/link';
 import { formatCurrency, formatPercent, formatTimestamp } from '@/lib/utils';
+import { portfolioApi, type PortfolioResponse } from '@/lib/api';
 
 const WATCHLIST_SYMBOLS = ['BINANCE:BTC-USDT', 'BINANCE:ETH-USDT', 'BINANCE:SOL-USDT', 'BINANCE:BNB-USDT'];
 const DEFAULT_SYMBOL = 'BINANCE:BTC-USDT';
@@ -35,6 +36,7 @@ export default function DashboardPage() {
   const metrics = useMarketStore((state) => state.metrics);
   const [activeSymbol, setActiveSymbol] = useState(DEFAULT_SYMBOL);
   const [showLatency, setShowLatency] = useState(true);
+  const [portfolio, setPortfolio] = useState<PortfolioResponse | null>(null);
 
   useEffect(() => {
     connect();
@@ -65,6 +67,16 @@ export default function DashboardPage() {
       // });
     };
   }, [connect, subscribe]);
+
+  const loadPortfolio = useCallback(async () => {
+    try {
+      setPortfolio(await portfolioApi.getPortfolio());
+    } catch {
+      setPortfolio(null);
+    }
+  }, []);
+
+  useEffect(() => { void loadPortfolio(); }, [loadPortfolio]);
 
   const activeBook = books.get(activeSymbol);
   const activeTrades = trades.get(activeSymbol) || [];
@@ -140,31 +152,31 @@ export default function DashboardPage() {
         {/* Portfolio Summary Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <StatCard
-            title="Total Value"
-            value="$125,432.10"
-            change="+2.34%"
-            changePositive={true}
+            title="Account Value"
+            value={portfolio ? formatCurrency(portfolio.total_value, portfolio.currency) : '—'}
+            change={portfolio ? 'Reported by portfolio service' : 'Portfolio data unavailable'}
+            changePositive={false}
             icon={<DollarSignIcon />}
           />
           <StatCard
-            title="Day P&L"
-            value="+$1,234.56"
-            change="+1.89%"
-            changePositive={true}
+            title="Total P&L"
+            value={portfolio ? formatCurrency(portfolio.total_pnl, portfolio.currency) : '—'}
+            change={portfolio ? 'Reported by portfolio service' : 'Portfolio data unavailable'}
+            changePositive={Number(portfolio?.total_pnl) > 0}
             icon={<TrendingUpIcon />}
           />
           <StatCard
             title="Open Positions"
-            value="12"
-            change="3 new today"
-            changePositive={true}
+            value={portfolio ? String(portfolio.positions.length) : '—'}
+            change={portfolio ? 'Reported by portfolio service' : 'Portfolio data unavailable'}
+            changePositive={false}
             icon={<BriefcaseIcon />}
           />
           <StatCard
-            title="Win Rate"
-            value="68.5%"
-            change="vs 65% avg"
-            changePositive={true}
+            title="Market Feed"
+            value={connectionStatus.status === 'connected' ? 'Connected' : 'Unavailable'}
+            change={connectionStatus.status === 'connected' ? 'WebSocket state' : 'Check system health'}
+            changePositive={connectionStatus.status === 'connected'}
             icon={<ChartBarIcon />}
           />
         </div>

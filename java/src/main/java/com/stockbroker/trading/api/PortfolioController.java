@@ -8,6 +8,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -28,6 +29,13 @@ public class PortfolioController {
     public ResponseEntity<TradingDtos.PortfolioResponse> getPortfolio() {
         UUID userId = CurrentUser.getUserId();
         return ResponseEntity.ok(portfolioService.getPortfolio(userId));
+    }
+
+    @GetMapping("/portfolio/balances")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<List<TradingDtos.AssetBalanceResponse>> getBalances() {
+        UUID userId = CurrentUser.getUserId();
+        return ResponseEntity.ok(portfolioService.getBalances(userId));
     }
 
     @GetMapping("/ledger")

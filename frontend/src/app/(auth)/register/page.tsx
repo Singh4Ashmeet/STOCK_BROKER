@@ -8,7 +8,6 @@ import { useAuth } from '@/lib/auth';
 export default function RegisterPage() {
   const router = useRouter();
   const { register } = useAuth();
-
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -16,182 +15,42 @@ export default function RegisterPage() {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const validatePassword = (value: string) => {
+    if (value.length < 12 || value.length > 128) return 'Password must be between 12 and 128 characters.';
+    if (!/[A-Z]/.test(value) || !/[a-z]/.test(value) || !/\d/.test(value) || !/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(value)) return 'Password needs uppercase, lowercase, number, and special characters.';
+    return null;
+  };
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
     setError('');
-
-    if (password !== confirmPassword) {
-      setError('Passwords do not match');
-      return;
-    }
-
-    // Backend password requirements: min 12 chars, max 128, at least one uppercase, lowercase, digit, special char
-    if (password.length < 12) {
-      setError('Password must be at least 12 characters');
-      return;
-    }
-    if (password.length > 128) {
-      setError('Password must be at most 128 characters');
-      return;
-    }
-    if (!/[A-Z]/.test(password)) {
-      setError('Password must contain at least one uppercase letter');
-      return;
-    }
-    if (!/[a-z]/.test(password)) {
-      setError('Password must contain at least one lowercase letter');
-      return;
-    }
-    if (!/\d/.test(password)) {
-      setError('Password must contain at least one digit');
-      return;
-    }
-    if (!/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(password)) {
-      setError('Password must contain at least one special character');
-      return;
-    }
-
+    if (password !== confirmPassword) { setError('Passwords do not match.'); return; }
+    const passwordError = validatePassword(password);
+    if (passwordError) { setError(passwordError); return; }
     setIsLoading(true);
-
     try {
       await register(email, password, name);
-      router.push('/app/dashboard');
+      router.replace('/app/dashboard');
       router.refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Registration failed');
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Account creation could not be completed.');
     } finally {
       setIsLoading(false);
     }
   };
 
-  return (
-    <div className="bg-white dark:bg-surface-900 rounded-xl border border-surface-200 dark:border-surface-800 p-8 shadow-sm">
-      <div className="text-center mb-8">
-        <a href="/" className="inline-flex items-center gap-2 text-2xl font-bold text-primary-600 dark:text-primary-400 mb-6">
-          <svg className="h-10 w-10" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
-          </svg>
-          Stock Broker
-        </a>
-        <h1 className="text-2xl font-bold text-surface-900 dark:text-surface-50">Create your account</h1>
-        <p className="mt-2 text-surface-600 dark:text-surface-400">Start paper trading in seconds</p>
-      </div>
-
-      {error && (
-        <div className="mb-6 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-4 text-red-700 dark:text-red-300 text-sm" role="alert">
-          {error}
-        </div>
-      )}
-
-      <form onSubmit={handleSubmit} className="space-y-6">
-        <div>
-          <label htmlFor="name" className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">
-            Full Name
-          </label>
-          <input
-            id="name"
-            name="name"
-            type="text"
-            autoComplete="name"
-            required
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="w-full rounded-lg border border-surface-300 dark:border-surface-700 bg-white dark:bg-surface-800 px-4 py-2.5 text-surface-900 dark:text-surface-50 placeholder-surface-400 dark:placeholder-surface-600 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 transition-colors"
-            placeholder="John Doe"
-            disabled={isLoading}
-          />
-        </div>
-
-        <div>
-          <label htmlFor="email" className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">
-            Email
-          </label>
-          <input
-            id="email"
-            name="email"
-            type="email"
-            autoComplete="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="w-full rounded-lg border border-surface-300 dark:border-surface-700 bg-white dark:bg-surface-800 px-4 py-2.5 text-surface-900 dark:text-surface-50 placeholder-surface-400 dark:placeholder-surface-600 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 transition-colors"
-            placeholder="you@example.com"
-            disabled={isLoading}
-          />
-        </div>
-
-        <div>
-          <label htmlFor="password" className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">
-            Password
-          </label>
-          <input
-            id="password"
-            name="password"
-            type="password"
-            autoComplete="new-password"
-            required
-            minLength={12}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full rounded-lg border border-surface-300 dark:border-surface-700 bg-white dark:bg-surface-800 px-4 py-2.5 text-surface-900 dark:text-surface-50 placeholder-surface-400 dark:placeholder-surface-600 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 transition-colors"
-            placeholder="Min 12 chars, upper, lower, digit, special"
-            disabled={isLoading}
-          />
-        </div>
-
-        <div>
-          <label htmlFor="confirmPassword" className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1.5">
-            Confirm Password
-          </label>
-          <input
-            id="confirmPassword"
-            name="confirmPassword"
-            type="password"
-            autoComplete="new-password"
-            required
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            className="w-full rounded-lg border border-surface-300 dark:border-surface-700 bg-white dark:bg-surface-800 px-4 py-2.5 text-surface-900 dark:text-surface-50 placeholder-surface-400 dark:placeholder-surface-600 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 transition-colors"
-            placeholder="••••••••"
-            disabled={isLoading}
-          />
-        </div>
-
-        <div className="flex items-start gap-2">
-          <input
-            type="checkbox"
-            id="terms"
-            required
-            className="mt-1 h-4 w-4 rounded border-surface-300 dark:border-surface-700 text-primary-600 focus:ring-primary-500"
-          />
-          <label htmlFor="terms" className="text-sm text-surface-600 dark:text-surface-400">
-            I agree to the{' '}
-            <Link href="/terms" className="text-primary-600 hover:text-primary-500 underline">
-              Terms of Service
-            </Link>{' '}
-            and{' '}
-            <Link href="/privacy" className="text-primary-600 hover:text-primary-500 underline">
-              Privacy Policy
-            </Link>
-            . This is a paper trading platform only. No real money involved.
-          </label>
-        </div>
-
-        <button
-          type="submit"
-          disabled={isLoading}
-          className="w-full rounded-lg bg-primary-600 py-2.5 text-base font-medium text-white hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {isLoading ? 'Creating account...' : 'Create account'}
-        </button>
-      </form>
-
-      <p className="mt-6 text-center text-sm text-surface-600 dark:text-surface-400">
-        Already have an account?{' '}
-        <Link href="/login" className="font-medium text-primary-600 hover:text-primary-500">
-          Sign in
-        </Link>
-      </p>
-    </div>
-  );
+  return <section className="terminal-panel p-6 sm:p-8">
+    <Link href="/" className="inline-flex items-center gap-2 lg:hidden"><span className="grid h-7 w-7 place-items-center border border-primary-500 bg-primary-500 font-display text-xs font-bold text-surface-950">SB</span><span className="font-mono text-xs font-bold tracking-[0.16em] text-primary-400">STOCK_BROKER</span></Link>
+    <header className="mt-7 lg:mt-0"><p className="terminal-label text-primary-400">Paper trading access</p><h1 className="mt-2 font-display text-3xl font-semibold tracking-tight text-surface-50">Create account</h1><p className="mt-2 text-sm leading-6 text-surface-300">Set up a workspace for simulated orders and market-data tools.</p></header>
+    {error ? <div role="alert" className="mt-6 border border-negative/60 bg-negative/10 p-3 text-sm text-surface-100">{error}</div> : null}
+    <form onSubmit={handleSubmit} className="mt-7 space-y-5">
+      <div><label htmlFor="name" className="terminal-label mb-1.5 block">Full name</label><input id="name" name="name" type="text" autoComplete="name" required value={name} onChange={(event) => setName(event.target.value)} className="terminal-input" placeholder="Your name" disabled={isLoading} /></div>
+      <div><label htmlFor="email" className="terminal-label mb-1.5 block">Email address</label><input id="email" name="email" type="email" autoComplete="email" required value={email} onChange={(event) => setEmail(event.target.value)} className="terminal-input" placeholder="you@example.com" disabled={isLoading} /></div>
+      <div><label htmlFor="password" className="terminal-label mb-1.5 block">Password</label><input id="password" name="password" type="password" autoComplete="new-password" required minLength={12} value={password} onChange={(event) => setPassword(event.target.value)} className="terminal-input" placeholder="12+ characters" disabled={isLoading} /><p className="mt-2 text-xs leading-5 text-surface-300">Use uppercase, lowercase, a number, and a special character.</p></div>
+      <div><label htmlFor="confirmPassword" className="terminal-label mb-1.5 block">Confirm password</label><input id="confirmPassword" name="confirmPassword" type="password" autoComplete="new-password" required value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} className="terminal-input" placeholder="Repeat password" disabled={isLoading} /></div>
+      <label className="flex items-start gap-3 border border-surface-600 bg-surface-900 p-3 text-sm leading-5 text-surface-200"><input type="checkbox" required className="mt-0.5 h-4 w-4 border-surface-500 bg-surface-950 accent-primary-500" /><span>I understand this is a paper-trading platform. No real-money custody or order routing is available.</span></label>
+      <button type="submit" disabled={isLoading} className="terminal-button w-full py-3">{isLoading ? 'Creating account…' : 'Create paper-trading account'}</button>
+    </form>
+    <p className="mt-6 border-t border-surface-600 pt-5 text-sm text-surface-300">Already have an account? <Link href="/login" className="font-semibold text-primary-300 hover:text-primary-200">Sign in</Link></p>
+  </section>;
 }

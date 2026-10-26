@@ -17,7 +17,6 @@ import type {
   FillsResponse,
   PortfolioResponse,
   LedgerResponse,
-  Balance,
   CreateAlertRequest,
   UpdateAlertRequest,
   AlertResponse,
@@ -28,6 +27,7 @@ import type {
   BacktestTradeLogResponse,
   BacktestSummary,
 } from './types';
+import { parseBalancesResponse } from './balances';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081';
 
@@ -43,7 +43,7 @@ export const marketApi = {
   listInstruments: () => request<ListInstrumentsResponse>('/instruments'),
 
   getSnapshot: (symbol: string, depth = 20) =>
-    request<BookUpdate>(`/market/${encodeURIComponent(symbol)}/book?depth=${depth}`),
+    request<BookUpdate>(`/market/${encodeURIComponent(symbol)}/snapshot?depth=${depth}`),
 
   getMetrics: (symbol: string) =>
     request<Metrics>(`/market/${encodeURIComponent(symbol)}/metrics`),
@@ -51,7 +51,7 @@ export const marketApi = {
   getTrades: (symbol: string, limit = 50) =>
     request<Trade[]>(`/market/${encodeURIComponent(symbol)}/trades?limit=${limit}`),
 
-  getHealth: () => request<HealthResponse>('/market/health'),
+  getHealth: () => request<HealthResponse>('/system/health'),
 };
 
 // Trading
@@ -104,13 +104,13 @@ export const tradingApi = {
 // Portfolio
 export const portfolioApi = {
   getPortfolio: () => request<PortfolioResponse>('/portfolio'),
-  getBalances: () => request<Balance[]>('/portfolio/balances'),
+  getBalances: async () => parseBalancesResponse(await request<unknown>('/portfolio/balances')),
   getLedger: (params?: { asset?: string; limit?: number; cursor?: string }) => {
     const search = new URLSearchParams();
     if (params?.asset) search.set('asset', params.asset);
     if (params?.limit) search.set('limit', params.limit.toString());
     if (params?.cursor) search.set('cursor', params.cursor);
-    return request<LedgerResponse>(`/portfolio/ledger?${search.toString()}`);
+    return request<LedgerResponse>(`/ledger?${search.toString()}`);
   },
 };
 
@@ -199,7 +199,7 @@ export const researchApi = {
 // WebSocket ticket
 export const wsApi = {
   getTicket: () =>
-    request<{ ticket: string }>('/ws/ticket', {
+    request<{ ticket: string }>('/auth/ws/ticket', {
       method: 'POST',
     }),
 };

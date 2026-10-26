@@ -1,92 +1,76 @@
 'use client';
 
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { usePathname, useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth';
 
-export default function AppLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+const navigation = [
+  { href: '/app/dashboard', label: 'Overview' },
+  { href: '/app/trading', label: 'Trading' },
+  { href: '/app/portfolio', label: 'Portfolio' },
+  { href: '/app/research', label: 'Research' },
+  { href: '/app/alerts', label: 'Alerts' },
+  { href: '/app/health', label: 'System health' },
+];
+
+export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
+  const pathname = usePathname();
   const router = useRouter();
+  const [isSigningOut, setIsSigningOut] = useState(false);
 
   useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
-      router.push('/login');
-    }
+    if (!isLoading && !isAuthenticated) router.replace('/login');
   }, [isAuthenticated, isLoading, router]);
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary-600 border-t-transparent"></div>
-      </div>
-    );
-  }
+  const signOut = async () => {
+    setIsSigningOut(true);
+    try {
+      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+    } finally {
+      router.replace('/login');
+      router.refresh();
+    }
+  };
 
-  if (!isAuthenticated) {
-    return null;
+  if (isLoading) {
+    return <div className="grid min-h-screen place-items-center bg-surface-950"><span className="h-7 w-7 animate-spin border-2 border-primary-400 border-t-transparent" aria-label="Loading application" /></div>;
   }
+  if (!isAuthenticated) return null;
 
   return (
-    <div className="min-h-screen bg-surface-50 dark:bg-surface-950">
-      <header className="border-b border-surface-200 dark:border-surface-800 bg-white/80 dark:bg-surface-950/80 backdrop-blur-sm sticky top-0 z-50">
-        <nav className="mx-auto max-w-full px-4 sm:px-6 lg:px-8" aria-label="App navigation">
-          <div className="flex h-14 items-center justify-between">
-            <div className="flex items-center gap-8">
-              <a href="/app/dashboard" className="flex items-center gap-2 text-xl font-bold text-primary-600 dark:text-primary-400">
-                <svg className="h-8 w-8" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
-                </svg>
-                Stock Broker
-              </a>
-              <div className="hidden md:flex md:gap-6">
-                <a href="/app/dashboard" className="text-sm font-medium text-surface-600 dark:text-surface-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors">
-                  Dashboard
-                </a>
-                <a href="/app/trading" className="text-sm font-medium text-surface-600 dark:text-surface-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors">
-                  Trading
-                </a>
-                <a href="/app/portfolio" className="text-sm font-medium text-surface-600 dark:text-surface-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors">
-                  Portfolio
-                </a>
-                <a href="/app/research" className="text-sm font-medium text-surface-600 dark:text-surface-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors">
-                  Research
-                </a>
-                <a href="/app/alerts" className="text-sm font-medium text-surface-600 dark:text-surface-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors">
-                  Alerts
-                </a>
-              </div>
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="hidden sm:flex sm:items-center sm:gap-2">
-                <span className="text-sm text-surface-600 dark:text-surface-400">Paper Trading</span>
-                <span className="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800 dark:bg-green-900/30 dark:text-green-400">
-                  <span className="relative flex h-1.5 w-1.5">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-green-500"></span>
-                  </span>
-                  Live
-                </span>
-              </div>
-              <button
-                onClick={() => {
-                  // Handle logout
-                  fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
-                  router.push('/login');
-                  router.refresh();
-                }}
-                className="rounded-lg border border-surface-300 dark:border-surface-700 px-4 py-2 text-sm font-medium text-surface-700 dark:text-surface-300 hover:bg-surface-100 dark:hover:bg-surface-800 transition-colors"
-              >
-                Sign out
-              </button>
-            </div>
+    <div className="min-h-screen bg-surface-950 text-surface-50">
+      <header className="sticky top-0 z-50 border-b border-surface-600 bg-surface-950">
+        <div className="flex h-14 items-center justify-between gap-4 px-4 sm:px-6">
+          <Link href="/app/dashboard" className="flex shrink-0 items-center gap-2" aria-label="Stock Broker overview">
+            <span className="grid h-7 w-7 place-items-center border border-primary-500 bg-primary-500 font-display text-xs font-bold text-surface-950">SB</span>
+            <span className="hidden font-mono text-xs font-bold tracking-[0.18em] text-primary-400 sm:block">STOCK_BROKER</span>
+          </Link>
+
+          <div className="hidden items-center gap-2 border-x border-surface-600 px-4 xl:flex" aria-label="Environment">
+            <span className="h-1.5 w-1.5 bg-positive" aria-hidden="true" />
+            <span className="font-mono text-[11px] uppercase tracking-[0.1em] text-surface-200">Paper environment</span>
           </div>
+
+          <div className="flex items-center gap-3">
+            <span className="hidden font-mono text-[11px] text-surface-300 md:block">AUTHENTICATED SESSION</span>
+            <button onClick={() => void signOut()} disabled={isSigningOut} className="terminal-button-secondary min-h-8 px-3 py-1.5 text-xs">
+              {isSigningOut ? 'Signing out…' : 'Sign out'}
+            </button>
+          </div>
+        </div>
+        <nav className="terminal-scrollbar flex overflow-x-auto border-t border-surface-700 px-2 sm:px-4" aria-label="Application navigation">
+          {navigation.map((item) => {
+            const active = pathname === item.href;
+            return <Link key={item.href} href={item.href} aria-current={active ? 'page' : undefined}
+              className={`shrink-0 border-b-2 px-3 py-2.5 text-sm transition-colors ${active ? 'border-primary-400 bg-surface-800 font-semibold text-primary-300' : 'border-transparent text-surface-300 hover:bg-surface-800 hover:text-surface-50'}`}>
+              {item.label}
+            </Link>;
+          })}
         </nav>
       </header>
-      <main className="flex-1">{children}</main>
+      <main>{children}</main>
     </div>
   );
 }

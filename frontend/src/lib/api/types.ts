@@ -102,7 +102,7 @@ export interface SymbolHealth {
 export interface HealthResponse {
   connected: boolean;
   symbols: SymbolHealth[];
-  build_version: string;
+  buildVersion: string;
 }
 
 export interface SubscribeRequest {
@@ -122,17 +122,15 @@ export interface CreateOrderRequest {
   side: OrderSide;
   type: OrderType;
   qty: string;
-  limit_price?: string;
+  limitPrice?: string;
   tif: TimeInForce;
 }
 
 export interface OrderPreviewRequest {
   symbol: string;
   side: OrderSide;
-  type: OrderType;
   qty: string;
-  limit_price?: string;
-  tif: TimeInForce;
+  limitPrice?: string;
 }
 
 export interface OrderPreviewResponse {
@@ -168,7 +166,7 @@ export interface OrderResponse {
   status: OrderStatus;
   qty: string;
   filled_qty: string;
-  avg_fill_price?: string;
+  avg_price?: string;
   limit_price?: string;
   tif: TimeInForce;
   reject_reason?: string;
@@ -207,8 +205,6 @@ export interface PortfolioResponse {
 
 export interface Balance {
   asset: string;
-  available: string;
-  locked: string;
   total: string;
 }
 

@@ -1,0 +1,2 @@
+{"symbol":"BINANCE:BTC-USDT","side":"BUY","type":"MARKET","qty":"0.1","limitPrice":null,"estFillPrice":"50000.00","estFees":"25.00","estSlippageBps":5.5,"bookValid":true,"levelsConsumed":3,"bookEpoch":12345,"bookSeq":100,"timestamp":"2026-10-26T08:46:18.507609Z"}
+{"symbol":"BINANCE:BTC-USDT","side":"BUY","type":"MARKET","qty":"0.1","limitPrice":null,"estFillPrice":"50000010000.000000000000000000","estFees":"2500000.500000000000000000","estSlippageBps":0.002,"bookValid":true,"levelsConsumed":1,"bookEpoch":1,"bookSeq":130,"timestamp":"2026-10-26T08:46:23.702200300Z"}

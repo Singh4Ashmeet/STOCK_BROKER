@@ -2,7 +2,12 @@ import type { Metadata, Viewport } from 'next';
 import { Providers } from './providers';
 import './globals.css';
 
+// Deployments must set NEXT_PUBLIC_APP_URL to their public HTTPS origin. The
+// documented localhost value keeps local builds and social metadata deterministic.
+const metadataBase = new URL(process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000');
+
 export const metadata: Metadata = {
+  metadataBase,
   title: {
     default: 'Stock Broker - Paper Trading Platform',
     template: '%s | Stock Broker',
@@ -16,7 +21,7 @@ export const metadata: Metadata = {
   openGraph: {
     type: 'website',
     locale: 'en_US',
-    url: 'https://stockbroker.example.com',
+    url: '/',
     siteName: 'Stock Broker',
     title: 'Stock Broker - Paper Trading Platform',
     description: 'Professional paper trading platform with real-time market data, advanced charting, and backtesting.',
@@ -45,8 +50,8 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#ffffff' },
-    { media: '(prefers-color-scheme: dark)', color: '#0f0f0f' },
+    { media: '(prefers-color-scheme: light)', color: '#171916' },
+    { media: '(prefers-color-scheme: dark)', color: '#171916' },
   ],
   width: 'device-width',
   initialScale: 1,
@@ -59,7 +64,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className="antialiased">
+  <html lang="en" className="dark antialiased">
       <body className="min-h-screen bg-surface-50 dark:bg-surface-950 text-surface-900 dark:text-surface-50">
         <Providers>{children}</Providers>
       </body>

@@ -1,17 +1,15 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useAuth } from '@/lib/auth';
 import { useMarketStore, selectBook } from '@/lib/store';
 import { useWebSocketWorker } from '@/lib/hooks/useWebSocketWorker';
 import { OrderBookCanvas, DepthChartCanvas, TradesTapeCanvas, CandlesCanvas, MetricsPanel, LatencyOverlay } from '@/components/charts';
-import { tradingApi, marketApi, wsApi } from '@/lib/api';
+import { tradingApi } from '@/lib/api';
 import { generateIdempotencyKey, formatCurrency, formatNumber, formatPercent } from '@/lib/utils';
 
 const WATCHLIST_SYMBOLS = ['BINANCE:BTC-USDT', 'BINANCE:ETH-USDT', 'BINANCE:SOL-USDT', 'BINANCE:BNB-USDT'];
 
 export default function TradingPage() {
-  const { user } = useAuth();
   const { connect, subscribe, unsubscribe, resync, connectionStatus } = useWebSocketWorker();
   const [activeSymbol, setActiveSymbol] = useState(WATCHLIST_SYMBOLS[0]);
   const [showLatency, setShowLatency] = useState(true);
@@ -23,6 +21,7 @@ export default function TradingPage() {
     tif: 'GTC',
   });
   const [preview, setPreview] = useState<OrderPreviewResponse | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState<Toast | null>(null);
@@ -57,15 +56,15 @@ export default function TradingPage() {
       const result = await tradingApi.previewOrder({
         symbol: activeSymbol,
         side: orderForm.side,
-        type: orderForm.type,
         qty: orderForm.qty,
-        limit_price: orderForm.limitPrice || undefined,
-        tif: orderForm.tif,
+        limitPrice: orderForm.limitPrice || undefined,
       });
       setPreview(result);
+      setPreviewError(null);
     } catch (error) {
       console.error('Preview error:', error);
       setPreview(null);
+      setPreviewError(error instanceof Error ? error.message : 'Order preview is unavailable.');
     } finally {
       setPreviewLoading(false);
     }
@@ -90,7 +89,7 @@ export default function TradingPage() {
         side: orderForm.side,
         type: orderForm.type,
         qty: orderForm.qty,
-        limit_price: orderForm.limitPrice || undefined,
+        limitPrice: orderForm.limitPrice || undefined,
         tif: orderForm.tif,
       }, idempotencyKey);
       
@@ -110,32 +109,33 @@ export default function TradingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-surface-50 dark:bg-surface-950">
+    <div className="min-h-screen bg-surface-950">
       {showLatency && <LatencyOverlay position="top-right" showDetails={false} compact />}
       
-      <div className="p-4 sm:p-6 lg:p-8">
+      <div className="mx-auto max-w-[1800px] p-4 sm:p-6 lg:p-8">
         {/* Header */}
         <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-surface-900 dark:text-surface-50">Trading</h1>
-            <p className="mt-1 text-surface-600 dark:text-surface-400">Place and manage orders</p>
+            <p className="terminal-label text-primary-400">Execution workspace</p>
+            <h1 className="mt-1 font-display text-3xl font-semibold tracking-tight text-surface-50">Trading terminal</h1>
+            <p className="mt-2 text-sm text-surface-300">Live order-book views and a pre-trade order ticket.</p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-100 dark:bg-surface-800">
-              <span className={`w-2 h-2 rounded-full animate-pulse ${
-                connectionStatus.status === 'connected' ? 'bg-green-500' :
-                connectionStatus.status === 'connecting' ? 'bg-yellow-500' :
-                connectionStatus.status === 'resyncing' ? 'bg-blue-500' :
-                'bg-red-500'
+            <div className="flex items-center gap-2 border border-surface-600 bg-surface-800 px-3 py-1.5">
+              <span className={`h-2 w-2 ${
+                connectionStatus.status === 'connected' ? 'bg-positive' :
+                connectionStatus.status === 'connecting' ? 'bg-warning' :
+                connectionStatus.status === 'resyncing' ? 'bg-info' :
+                'bg-negative'
               }`}></span>
-              <span className="text-sm font-medium text-surface-700 dark:text-surface-300 capitalize">
+              <span className="font-mono text-xs font-medium uppercase tracking-wide text-surface-100">
                 {connectionStatus.status}
               </span>
             </div>
             <button
               onClick={() => setShowLatency(!showLatency)}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                showLatency ? 'bg-primary-600 text-white' : 'bg-surface-100 dark:bg-surface-800 text-surface-700 dark:text-surface-300'
+              className={`border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                showLatency ? 'border-primary-500 bg-primary-500 text-surface-950' : 'border-surface-600 bg-surface-800 text-surface-100 hover:bg-surface-700'
               }`}
             >
               {showLatency ? 'Hide Latency' : 'Show Latency'}
@@ -145,15 +145,15 @@ export default function TradingPage() {
 
         {/* Resync Banner */}
         {useMarketStore.getState().isResyncing(activeSymbol) && (
-          <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg flex items-center justify-between">
-            <div className="flex items-center gap-2 text-blue-800 dark:text-blue-200">
+          <div className="mb-4 flex items-center justify-between border border-info/60 bg-info/10 p-3">
+            <div className="flex items-center gap-2 text-surface-100">
               <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/>
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
               </svg>
               <span className="font-medium">Resyncing order book for {activeSymbol}...</span>
             </div>
-            <button onClick={() => resync(activeSymbol)} className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700">
+            <button onClick={() => resync(activeSymbol)} className="terminal-button-secondary min-h-8 px-3 py-1 text-xs">
               Force Resync
             </button>
           </div>
@@ -164,17 +164,17 @@ export default function TradingPage() {
           {/* Left Sidebar */}
           <div className="lg:col-span-3 space-y-6">
             {/* Symbol Selector */}
-            <div className="bg-white dark:bg-surface-900 rounded-xl border border-surface-200 dark:border-surface-800 p-4">
-              <h3 className="font-semibold text-surface-900 dark:text-surface-50 mb-3">Symbol</h3>
+            <div className="terminal-panel p-4">
+              <p className="terminal-label">Market watch</p><h3 className="mt-1 font-display text-lg font-semibold text-surface-50">Symbol</h3>
               <div className="space-y-1">
                 {WATCHLIST_SYMBOLS.map(symbol => (
                   <button
                     key={symbol}
                     onClick={() => setActiveSymbol(symbol)}
-                    className={`w-full flex items-center justify-between p-2 rounded-lg text-left transition-colors ${
+                    className={`mt-3 flex w-full items-center justify-between border p-2.5 text-left transition-colors ${
                       activeSymbol === symbol
-                        ? 'bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300'
-                        : 'text-surface-700 dark:text-surface-300 hover:bg-surface-100 dark:hover:bg-surface-800'
+                        ? 'border-primary-500 bg-primary-500/10 text-primary-300'
+                        : 'border-transparent text-surface-200 hover:border-surface-600 hover:bg-surface-700'
                     }`}
                   >
                     <span className="font-medium">{symbol.split(':')[1]?.split('-')[0] || symbol}</span>
@@ -185,27 +185,27 @@ export default function TradingPage() {
             </div>
 
             {/* Order Form */}
-            <div className="bg-white dark:bg-surface-900 rounded-xl border border-surface-200 dark:border-surface-800 p-4">
-              <h3 className="font-semibold text-surface-900 dark:text-surface-50 mb-4">New Order</h3>
+            <div className="terminal-panel p-4">
+              <p className="terminal-label text-primary-400">Pre-trade</p><h3 className="mt-1 font-display text-lg font-semibold text-surface-50">New order</h3>
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">Side</label>
+                    <label className="terminal-label mb-1 block">Side</label>
                     <select
                       value={orderForm.side}
                       onChange={(e) => setOrderForm({ ...orderForm, side: e.target.value as OrderSide })}
-                      className="w-full rounded-lg border border-surface-300 dark:border-surface-700 bg-white dark:bg-surface-800 px-3 py-2 text-surface-900 dark:text-surface-50"
+                      className="terminal-input"
                     >
                       <option value="BUY">Buy</option>
                       <option value="SELL">Sell</option>
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">Type</label>
+                    <label className="terminal-label mb-1 block">Type</label>
                     <select
                       value={orderForm.type}
                       onChange={(e) => setOrderForm({ ...orderForm, type: e.target.value as OrderType })}
-                      className="w-full rounded-lg border border-surface-300 dark:border-surface-700 bg-white dark:bg-surface-800 px-3 py-2 text-surface-900 dark:text-surface-50"
+                      className="terminal-input"
                     >
                       <option value="LIMIT">Limit</option>
                       <option value="MARKET">Market</option>
@@ -215,20 +215,20 @@ export default function TradingPage() {
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">Quantity</label>
+                    <label className="terminal-label mb-1 block">Quantity</label>
                     <input
                       type="number"
                       step="0.0001"
                       min="0"
                       value={orderForm.qty}
                       onChange={(e) => setOrderForm({ ...orderForm, qty: e.target.value })}
-                      className="w-full rounded-lg border border-surface-300 dark:border-surface-700 bg-white dark:bg-surface-800 px-3 py-2 text-surface-900 dark:text-surface-50"
+                      className="terminal-input"
                       placeholder="0.001"
                       required
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">
+                    <label className="terminal-label mb-1 block">
                       {orderForm.type === 'LIMIT' ? 'Limit Price' : 'Price (est.)'}
                     </label>
                     <input
@@ -237,7 +237,7 @@ export default function TradingPage() {
                       min="0"
                       value={orderForm.limitPrice}
                       onChange={(e) => setOrderForm({ ...orderForm, limitPrice: e.target.value })}
-                      className="w-full rounded-lg border border-surface-300 dark:border-surface-700 bg-white dark:bg-surface-800 px-3 py-2 text-surface-900 dark:text-surface-50"
+                      className="terminal-input disabled:cursor-not-allowed disabled:bg-surface-800"
                       placeholder={orderForm.type === 'LIMIT' ? '50000' : 'Market'}
                       disabled={orderForm.type === 'MARKET'}
                       required={orderForm.type === 'LIMIT'}
@@ -246,39 +246,37 @@ export default function TradingPage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">Time in Force</label>
+                  <label className="terminal-label mb-1 block">Time in force</label>
                   <select
                     value={orderForm.tif}
                     onChange={(e) => setOrderForm({ ...orderForm, tif: e.target.value as TimeInForce })}
-                    className="w-full rounded-lg border border-surface-300 dark:border-surface-700 bg-white dark:bg-surface-800 px-3 py-2 text-surface-900 dark:text-surface-50"
+                    className="terminal-input"
                   >
                     <option value="GTC">GTC</option>
                     <option value="IOC">IOC</option>
-                    <option value="FOK">FOK</option>
-                    <option value="DAY">DAY</option>
                   </select>
                 </div>
 
                 {/* Slippage Preview */}
                 {preview && (
-                  <div className="bg-surface-50 dark:bg-surface-800/50 rounded-lg p-4 border border-surface-200 dark:border-surface-700">
-                    <h4 className="font-medium text-surface-900 dark:text-surface-50 mb-3">Slippage Preview</h4>
+                  <div className="terminal-panel-raised p-4">
+                    <p className="terminal-label">Estimated execution</p><h4 className="mt-1 font-display font-semibold text-surface-50">Order preview</h4>
                     <div className="grid grid-cols-2 gap-3 text-sm">
                       <div>
-                        <span className="text-surface-500">Est. Fill Price</span>
-                        <p className="font-mono font-bold text-surface-900 dark:text-surface-50">{preview.est_fill_price}</p>
+                        <span className="terminal-label">Est. fill price</span>
+                        <p className="terminal-value mt-1 font-bold">{preview.est_fill_price}</p>
                       </div>
                       <div>
-                        <span className="text-surface-500">Est. Fees</span>
-                        <p className="font-mono font-bold text-surface-900 dark:text-surface-50">{preview.est_fees}</p>
+                        <span className="terminal-label">Est. fees</span>
+                        <p className="terminal-value mt-1 font-bold">{preview.est_fees}</p>
                       </div>
                       <div>
-                        <span className="text-surface-500">Est. Slippage</span>
-                        <p className="font-mono font-bold text-orange-600">{preview.est_slippage_bps} bps</p>
+                        <span className="terminal-label">Est. slippage</span>
+                        <p className="mt-1 font-mono font-bold text-warning">{preview.est_slippage_bps} bps</p>
                       </div>
                       <div>
-                        <span className="text-surface-500">Book Valid</span>
-                        <p className="font-mono font-bold {preview.book_valid ? 'text-green-600' : 'text-red-600'}">
+                        <span className="terminal-label">Book valid</span>
+                        <p className={`mt-1 font-mono font-bold ${preview.book_valid ? 'text-positive' : 'text-negative'}`}>
                           {preview.book_valid ? 'Yes' : 'No'}
                         </p>
                       </div>
@@ -286,10 +284,11 @@ export default function TradingPage() {
                   </div>
                 )}
 
+                {previewError ? <p role="alert" className="border border-negative/60 bg-negative/10 p-3 text-sm text-surface-100">{previewError}</p> : null}
                 <button
                   type="submit"
                   disabled={submitting || previewLoading || !orderForm.qty || (orderForm.type === 'LIMIT' && !orderForm.limitPrice)}
-                  className="w-full rounded-lg bg-primary-600 py-3 text-base font-medium text-white hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  className="terminal-button w-full py-3 text-base"
                 >
                   {submitting ? (
                     <>
@@ -303,62 +302,38 @@ export default function TradingPage() {
               </form>
             </div>
 
-            {/* Preview Chart */}
-            <div className="bg-white dark:bg-surface-900 rounded-xl border border-surface-200 dark:border-surface-800 p-4">
-              <h3 className="font-semibold text-surface-900 dark:text-surface-50 mb-3">Chart</h3>
-              <CandlesCanvas 
-                symbol={activeSymbol} 
-                height={300}
-                timeframe={timeframe}
-              />
-              <div className="flex gap-1 mt-3">
-                {(['1m', '5m', '15m', '1h', '4h', '1d'] as const).map(tf => (
-                  <button
-                    key={tf}
-                    onClick={() => setTimeframe(tf)}
-                    className={`px-2 py-1 text-xs rounded transition-colors ${
-                      timeframe === tf
-                        ? 'bg-primary-600 text-white'
-                        : 'bg-surface-100 dark:bg-surface-800 text-surface-600 dark:text-surface-400 hover:bg-surface-200 dark:hover:bg-surface-700'
-                    }`}
-                  >
-                    {tf}
-                  </button>
-                ))}
-              </div>
-            </div>
           </div>
 
           {/* Main Content */}
           <div className="lg:col-span-9 space-y-6">
             {/* Active Symbol Header */}
-            <div className="bg-white dark:bg-surface-900 rounded-xl border border-surface-200 dark:border-surface-800 p-4">
+            <div className="terminal-panel p-4">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center">
-                    <span className="text-lg font-bold text-primary-700 dark:text-primary-400">
+                  <div className="flex h-10 w-10 items-center justify-center border border-primary-500 bg-primary-500/10">
+                    <span className="font-mono text-lg font-bold text-primary-300">
                       {activeSymbol.split(':')[1]?.split('-')[0] || activeSymbol}
                     </span>
                   </div>
                   <div>
-                    <h2 className="text-xl font-bold text-surface-900 dark:text-surface-50">
+                    <h2 className="font-display text-xl font-bold text-surface-50">
                       {activeSymbol.split(':')[1] || activeSymbol}
                     </h2>
-                    <p className="text-sm text-surface-500 dark:text-surface-400">{activeSymbol}</p>
+                    <p className="font-mono text-xs text-surface-300">{activeSymbol}</p>
                   </div>
                   {activeBook && (
                     <div className="flex items-center gap-4 ml-auto">
                       <div className="text-right">
-                        <p className="text-xs text-surface-500 dark:text-surface-400">Mid</p>
-                        <p className="font-bold text-surface-900 dark:text-surface-50">
+                        <p className="terminal-label">Mid</p>
+                        <p className="terminal-value mt-1 font-bold">
                           {activeBook.bids[0] && activeBook.asks[0] 
                             ? ((parseFloat(activeBook.bids[0].price) + parseFloat(activeBook.asks[0].price)) / 2).toLocaleString()
                             : '—'}
                         </p>
                       </div>
                       <div className="text-right">
-                        <p className="text-xs text-surface-500 dark:text-surface-400">Spread</p>
-                        <p className="font-bold text-surface-900 dark:text-surface-50">
+                        <p className="terminal-label">Spread</p>
+                        <p className="terminal-value mt-1 font-bold">
                           {activeBook.bids[0] && activeBook.asks[0] 
                             ? `${((parseFloat(activeBook.asks[0].price) - parseFloat(activeBook.bids[0].price)) / ((parseFloat(activeBook.bids[0].price) + parseFloat(activeBook.asks[0].price)) / 2) * 10000).toFixed(1)} bps`
                             : '—'}
@@ -421,7 +396,7 @@ interface OrderFormState {
   type: 'LIMIT' | 'MARKET';
   qty: string;
   limitPrice: string;
-  tif: 'GTC' | 'IOC' | 'FOK' | 'DAY';
+  tif: 'GTC' | 'IOC';
 }
 
 interface OrderPreviewResponse {
@@ -439,4 +414,4 @@ interface Toast {
 
 type OrderSide = 'BUY' | 'SELL';
 type OrderType = 'LIMIT' | 'MARKET';
-type TimeInForce = 'GTC' | 'IOC' | 'FOK' | 'DAY';
+type TimeInForce = 'GTC' | 'IOC';

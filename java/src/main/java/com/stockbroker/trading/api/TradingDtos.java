@@ -24,7 +24,7 @@ public final class TradingDtos {
             @NotNull @DecimalMin(value = "0.00000001", message = "Quantity must be positive") String qty,
             @DecimalMin(value = "0", message = "Limit price must be non-negative") String limitPrice,
             @NotNull TimeInForce tif,
-            @NotBlank @Size(max = 64) @JsonProperty("idempotency_key") String idempotencyKey
+            @Size(max = 64) @JsonProperty("idempotency_key") String idempotencyKey
     ) {}
 
     public record OrderResponse(
@@ -77,6 +77,11 @@ public final class TradingDtos {
             @JsonProperty("unrealized_pnl") String unrealizedPnl,
             @JsonProperty("realized_pnl") String realizedPnl,
             List<PositionResponse> positions
+    ) {}
+
+    public record AssetBalanceResponse(
+            String asset,
+            String total
     ) {}
 
     public record PositionResponse(

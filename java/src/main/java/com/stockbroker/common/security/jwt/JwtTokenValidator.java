@@ -42,12 +42,16 @@ public class JwtTokenValidator {
 
     private final JwtProperties jwtProperties;
     private final ResourceLoader resourceLoader;
+    private final AccessTokenRevocationService accessTokenRevocationService;
     private RSASSAVerifier verifier;
     private RSAPublicKey publicKey;
 
-    public JwtTokenValidator(JwtProperties jwtProperties, ResourceLoader resourceLoader) {
+    public JwtTokenValidator(JwtProperties jwtProperties,
+                             ResourceLoader resourceLoader,
+                             AccessTokenRevocationService accessTokenRevocationService) {
         this.jwtProperties = jwtProperties;
         this.resourceLoader = resourceLoader;
+        this.accessTokenRevocationService = accessTokenRevocationService;
     }
 
     @PostConstruct
@@ -126,6 +130,17 @@ public class JwtTokenValidator {
                 throw new JwtValidationException("Missing JWT ID claim");
             }
 
+            String sessionIdClaim = claims.getStringClaim("sid");
+            if (sessionIdClaim == null || sessionIdClaim.isBlank()) {
+                throw new JwtValidationException("Missing session ID claim");
+            }
+            UUID sessionId;
+            try {
+                sessionId = UUID.fromString(sessionIdClaim);
+            } catch (IllegalArgumentException e) {
+                throw new JwtValidationException("Invalid session ID claim");
+            }
+
             String role = claims.getStringClaim("role");
             if (!"USER".equals(role) && !"ADMIN".equals(role)) {
                 throw new JwtValidationException("Invalid role claim");
@@ -156,6 +171,10 @@ public class JwtTokenValidator {
             // Verify audience
             if (claims.getAudience() == null || !claims.getAudience().contains(jwtProperties.getAudience())) {
                 throw new JwtValidationException("Invalid audience");
+            }
+
+            if (accessTokenRevocationService.isSessionRevoked(sessionId)) {
+                throw new JwtValidationException("Session revoked");
             }
 
             return claims;

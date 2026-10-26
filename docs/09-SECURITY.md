@@ -38,10 +38,10 @@ Additional abuse cases: using the platform as a free compute service (backtest a
 ## 4. Authentication and sessions
 
 - **Passwords:** Argon2id with parameters at or above OWASP's current minimum recommendation (tune to about 50 to 100 ms on the target host); unique salt; optional pepper from secret store. Minimum length 12; allow long passphrases; no composition rules; reject known-breached passwords (offline list or k-anonymity API).
-- **Access token:** JWT, signed with an asymmetric key (EdDSA or RS256), `kid` for rotation, lifetime about 15 minutes, claims: `sub`, `role`, `iat`, `exp`, `jti`. Validate signature, `exp`, `iss`, `aud`. No sensitive data in claims.
+- **Access token:** JWT, signed with an asymmetric key (EdDSA or RS256), `kid` for rotation, lifetime about 15 minutes, claims: `sub`, `role`, `iat`, `exp`, `jti`, and a non-secret session (`sid`) UUID. Validate signature, `exp`, `iss`, `aud`, and the session's Redis revocation marker. The marker is keyed only by `sid`; a short-lived session-expiry index bounds it to no later than the latest affected access-token expiry. Redis lookup failure rejects authentication (fail closed). No sensitive data in claims.
 - **Refresh token:** random 256-bit opaque value; only a SHA-256 hash stored; lifetime 7 to 30 days (sliding limit); **rotate on every use**; reuse of a rotated token revokes the entire family and forces re-login.
 - **Browser storage:** access token in memory only; refresh token in `httpOnly; Secure; SameSite=Strict` cookie set by Next.js (same site as the UI). Refresh endpoint requires a CSRF defense (custom header or double-submit token) in addition to SameSite.
-- **Logout:** revoke family; clear cookie.
+- **Logout:** revoke the refresh-token family, write a bounded shared revocation marker for its `sid`, and clear the cookie. This immediately invalidates access tokens for that session only; separately authenticated sessions remain valid. A previously issued 30-second WebSocket ticket is not a bearer token and remains governed by its existing one-use TTL, but a revoked access token cannot obtain a new ticket.
 - **Brute force:** per-account and per-IP counters in Redis; exponential lockout; uniform error and timing for unknown users vs wrong password.
 - **Account enumeration:** same response for register-with-existing-email (email verification flow handles the notice) where feasible.
 

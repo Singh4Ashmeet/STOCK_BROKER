@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { shouldUseSecureRefreshCookie } from '@/lib/auth/refresh-cookie';
+import { isUpstreamUnavailable, upstreamUnavailableResponse } from '@/lib/api/upstream';
 
 const API_BASE = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081';
 
@@ -49,7 +51,7 @@ export async function POST(request: NextRequest) {
     if (refreshToken) {
       nextResponse.cookies.set('refresh_token', refreshToken, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
+        secure: shouldUseSecureRefreshCookie(request),
         sameSite: 'strict',
         maxAge: 30 * 24 * 60 * 60, // 30 days
         path: '/',
@@ -59,6 +61,9 @@ export async function POST(request: NextRequest) {
     return nextResponse;
   } catch (error) {
     console.error('Login error:', error);
+    if (isUpstreamUnavailable(error)) {
+      return upstreamUnavailableResponse();
+    }
     return NextResponse.json(
       {
         type: 'urn:stockbroker:error:INTERNAL_ERROR',
