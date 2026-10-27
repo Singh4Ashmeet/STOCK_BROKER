@@ -5,7 +5,6 @@ import com.stockbroker.common.config.RateLimitProperties;
 import com.stockbroker.market.state.MarketStateManager;
 import com.stockbroker.market.subscription.SubscriptionManager;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Profile;
 import org.springframework.scheduling.TaskScheduler;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.web.socket.config.annotation.EnableWebSocket;
