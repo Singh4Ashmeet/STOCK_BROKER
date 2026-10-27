@@ -6,8 +6,10 @@ frontend together, then exposes a local-only service dashboard on port 8080.
 Examples:
     python main.py start
     python main.py status
-    python main.py stop
     python main.py test
+
+Shutdown: press Ctrl+C in the terminal running ``python main.py start``.  The
+supervisor is a foreground process; there is no detached ``stop`` subcommand.
 
 The supervisor is intentionally local-only. It does not expose secrets or
 proxy arbitrary requests; its dashboard only reports process state and fixed
@@ -25,6 +27,7 @@ import subprocess
 import sys
 import threading
 import time
+import venv
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -78,6 +81,18 @@ def load_dotenv() -> dict[str, str]:
     return values
 
 
+def merged_env() -> dict[str, str]:
+    """Return .env defaults merged with the current shell environment.
+
+    Shell environment variables take precedence over .env values, so that
+    explicit overrides like ``SB_API_PORT=9090 python main.py start`` work
+    as expected.
+    """
+    dotenv = load_dotenv()
+    # .env first, then overlay with real env so explicit vars win.
+    return {**dotenv, **os.environ}
+
+
 def command_available(command: tuple[str, ...]) -> bool:
     executable = command[0]
     if Path(executable).is_absolute():
@@ -109,8 +124,7 @@ def python_with_research_dependencies() -> str:
 
 
 def service_specs() -> list[ServiceSpec]:
-    env = load_dotenv()
-    merged = {**env, **os.environ}
+    merged = merged_env()
     cargo = "cargo.exe" if os.name == "nt" else "cargo"
     npm = "npm.cmd" if os.name == "nt" else "npm"
     mvnw = str(ROOT / "java" / ("mvnw.cmd" if os.name == "nt" else "mvnw"))
@@ -209,12 +223,17 @@ class Supervisor:
     def __init__(self) -> None:
         self.processes: dict[str, ManagedProcess] = {}
         self.external_services: set[str] = set()
+        self.disabled_services: set[str] = set()
         self.lock = threading.RLock()
 
     def start(self, selected: set[str] | None = None) -> None:
         LOG_DIR.mkdir(parents=True, exist_ok=True)
-        specs = [spec for spec in service_specs() if selected is None or spec.name in selected]
+        specs = service_specs()
         for spec in specs:
+            if selected is not None and spec.name not in selected:
+                with self.lock:
+                    self.disabled_services.add(spec.name)
+                continue
             with self.lock:
                 existing = self.processes.get(spec.name)
             if existing and existing.process.poll() is None:
@@ -233,8 +252,10 @@ class Supervisor:
                 raise RuntimeError(f"{spec.name} executable is unavailable: {spec.command[0]}")
             log_path = LOG_DIR / f"{spec.name}.log"
             log_file = log_path.open("a", encoding="utf-8", buffering=1)
-            child_env = os.environ.copy()
-            child_env.update(load_dotenv())
+            # Build child environment: start with current shell env, then
+            # layer .env defaults underneath (shell wins), then layer
+            # service-specific overrides on top.
+            child_env = {**load_dotenv(), **os.environ}
             child_env.update(spec.env)
             creationflags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
             process = subprocess.Popen(
@@ -267,25 +288,42 @@ class Supervisor:
                     process.terminate()
                 process.wait(timeout=8)
             except (subprocess.TimeoutExpired, OSError):
-                process.kill()
+                if os.name == "nt":
+                    subprocess.run(
+                        ["taskkill", "/F", "/T", "/PID", str(process.pid)],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        check=False,
+                    )
+                else:
+                    process.kill()
                 process.wait(timeout=3)
         with self.lock:
             self.processes.clear()
             self.external_services.clear()
+            self.disabled_services.clear()
         self._write_state()
 
     def snapshot(self) -> dict[str, Any]:
         services: list[dict[str, Any]] = []
         with self.lock:
             managed_by_name = dict(self.processes)
+            disabled = set(self.disabled_services)
         for spec in service_specs():
             managed = managed_by_name.get(spec.name)
             return_code = managed.process.poll() if managed else None
-            process_state = "running" if managed and return_code is None else "stopped"
-            if spec.name in self.external_services:
-                process_state = "external"
-            if managed and return_code is not None:
+            is_open = port_open(spec.port)
+            health = probe(spec.health_url)
+            if spec.name in disabled:
+                process_state = "disabled"
+            elif managed and return_code is None:
+                process_state = "running"
+            elif managed and return_code is not None:
                 process_state = "exited"
+            elif spec.name in self.external_services or (is_open and health.get("state") in ("healthy", "tcp-only")):
+                process_state = "external"
+            else:
+                process_state = "stopped"
             services.append({
                 "name": spec.name,
                 "port": spec.port,
@@ -293,14 +331,19 @@ class Supervisor:
                 "process": process_state,
                 "pid": managed.process.pid if managed else None,
                 "return_code": return_code,
-                "port_open": port_open(spec.port),
-                "health": probe(spec.health_url),
+                "port_open": is_open,
+                "health": health,
                 "log": str(managed.log_path.relative_to(ROOT)) if managed else None,
             })
+        enabled_services = [s for s in services if s["process"] != "disabled"]
         return {
             "supervisor": {"host": SUPERVISOR_HOST, "port": SUPERVISOR_PORT, "state_file": str(STATE_FILE.relative_to(ROOT))},
             "services": services,
-            "all_processes_running": all(service["process"] in ("running", "external") for service in services),
+            "all_healthy": bool(enabled_services) and all(
+                s["process"] in ("running", "external")
+                and (s["health"]["state"] == "healthy" or (s["health"]["state"] == "tcp-only" and s["port_open"]))
+                for s in enabled_services
+            ),
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         }
 
@@ -313,30 +356,54 @@ def dashboard_html() -> str:
     return """<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Stock Broker Service Monitor</title><style>
-:root{color-scheme:dark;font:14px system-ui;background:#171916;color:#f0eee7}body{max-width:1100px;margin:0 auto;padding:28px}h1{font-size:28px}p{color:#b9baaf}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}.card{border:1px solid #383a32;background:#22241f;padding:16px}.name{font-weight:700;color:#c2a46d}.state{font-family:monospace;margin-top:12px}.healthy{color:#8ba58b}.bad{color:#c77c73}.muted{color:#92948a}code{color:#d0b782}button{background:#c2a46d;color:#171916;border:0;padding:9px 14px;font-weight:700;cursor:pointer}a{color:#d0b782}</style></head>
-<body><p class="name">STOCK_BROKER // LOCAL SUPERVISOR</p><h1>Service health</h1><p>Process and fixed health-endpoint status for the local development stack. Refreshes every 3 seconds.</p><p><button onclick="load()">Refresh now</button> <span id="time" class="muted"></span></p><main id="services" class="grid"></main>
-<script>async function load(){const r=await fetch('/api/status');const d=await r.json();document.getElementById('time').textContent=d.timestamp;document.getElementById('services').innerHTML=d.services.map(s=>{const h=s.health||{};const ok=h.state==='healthy'||(h.state==='tcp-only'&&s.port_open);return `<article class="card"><div class="name">${s.name}</div><div class="state ${ok?'healthy':'bad'}">${h.state} · ${s.process}</div><p>port <code>${s.port}</code> · pid <code>${s.pid??'—'}</code></p><p><a href="${s.url}" target="_blank" rel="noreferrer">open service</a>${s.log?`<br><span class="muted">log: ${s.log}</span>`:''}</p></article>`}).join('')}</script></body></html>"""
+:root{color-scheme:dark;font:14px system-ui;background:#171916;color:#f0eee7}body{max-width:1100px;margin:0 auto;padding:28px}h1{font-size:28px}p{color:#b9baaf}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}.card{border:1px solid #383a32;background:#22241f;padding:16px}.name{font-weight:700;color:#c2a46d}.state{font-family:monospace;margin-top:12px}.healthy{color:#8ba58b}.bad{color:#c77c73}.muted{color:#92948a}code{color:#d0b782}button{background:#c2a46d;color:#171916;border:0;padding:9px 14px;font-weight:700;cursor:pointer}a{color:#d0b782}.err{color:#c77c73;font-style:italic}
+</style></head>
+<body><p class="name">STOCK_BROKER // LOCAL SUPERVISOR</p><h1>Service health</h1><p>Process and fixed health-endpoint status for the local development stack. Refreshes every 3\u00a0seconds.</p><p><button onclick="load()">Refresh now</button> <span id="time" class="muted"></span> <span id="error" class="err"></span></p><main id="services" class="grid"></main>
+<script>
+let _timer=null;
+async function load(){
+  const errEl=document.getElementById('error');
+  try{
+    const r=await fetch('/api/status');
+    if(!r.ok){errEl.textContent='status '+r.status;return}
+    const d=await r.json();
+    errEl.textContent='';
+    document.getElementById('time').textContent=d.timestamp;
+    document.getElementById('services').innerHTML=d.services.map(s=>{
+      const h=s.health||{};const ok=h.state==='healthy'||(h.state==='tcp-only'&&s.port_open);
+      const stateClass=s.process==='disabled'?'muted':ok?'healthy':'bad';
+      return `<article class="card"><div class="name">${s.name}</div><div class="state ${stateClass}">${h.state} · ${s.process}</div><p>port <code>${s.port}</code> · pid <code>${s.pid??'—'}</code></p><p><a href="${s.url}" target="_blank" rel="noreferrer">open service</a>${s.log?`<br><span class="muted">log: ${s.log}</span>`:''}</p></article>`
+    }).join('');
+  }catch(e){errEl.textContent='fetch failed: '+e.message}
+}
+function startPolling(){if(_timer)clearInterval(_timer);load();_timer=setInterval(load,3000)}
+startPolling();
+window.addEventListener('beforeunload',function(){if(_timer){clearInterval(_timer);_timer=null}});
+</script></body></html>"""
 
 
 class DashboardHandler(BaseHTTPRequestHandler):
     supervisor: Supervisor
 
     def do_GET(self) -> None:  # noqa: N802
-        if self.path == "/api/status":
-            body = json.dumps(self.supervisor.snapshot()).encode("utf-8")
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json; charset=utf-8")
-        elif self.path in ("/", "/index.html"):
-            body = dashboard_html().encode("utf-8")
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-        else:
-            body = b"Not found"
-            self.send_response(404)
-            self.send_header("Content-Type", "text/plain; charset=utf-8")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
+        try:
+            if self.path == "/api/status":
+                body = json.dumps(self.supervisor.snapshot()).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+            elif self.path in ("/", "/index.html"):
+                body = dashboard_html().encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+            else:
+                body = b"Not found"
+                self.send_response(404)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        except (ConnectionError, BrokenPipeError):
+            return
 
     def log_message(self, fmt: str, *args: Any) -> None:
         # Keep the monitor quiet; service output belongs in .stockbroker/logs.
@@ -353,7 +420,12 @@ def serve_dashboard(supervisor: Supervisor) -> ThreadingHTTPServer:
 
 def run_start(args: argparse.Namespace) -> int:
     supervisor = Supervisor()
-    selected = {name for name, enabled in (("rust-feed", not args.no_feed), ("python-research", not args.no_python), ("java-api", not args.no_java), ("next-frontend", not args.no_frontend)) if enabled}
+    selected = {name for name, enabled in ((
+        "rust-feed", not args.no_feed),
+        ("python-research", not args.no_python),
+        ("java-api", not args.no_java),
+        ("next-frontend", not args.no_frontend),
+    ) if enabled}
     try:
         supervisor.start(selected)
     except RuntimeError as exc:
@@ -376,9 +448,19 @@ def run_start(args: argparse.Namespace) -> int:
 
 
 def run_status() -> int:
-    snapshot = Supervisor().snapshot()
+    snapshot: dict[str, Any] | None = None
+    if port_open(SUPERVISOR_PORT):
+        try:
+            req = Request(f"http://{SUPERVISOR_HOST}:{SUPERVISOR_PORT}/api/status")
+            with urlopen(req, timeout=10.0) as resp:
+                if resp.status == 200:
+                    snapshot = json.loads(resp.read().decode("utf-8"))
+        except (URLError, OSError, json.JSONDecodeError):
+            snapshot = None
+    if snapshot is None:
+        snapshot = Supervisor().snapshot()
     print(json.dumps(snapshot, indent=2))
-    return 0 if all(service["health"]["state"] in ("healthy", "tcp-only") for service in snapshot["services"] if service["port_open"]) else 1
+    return 0 if snapshot.get("all_healthy") else 1
 
 
 def run_tests() -> int:
@@ -390,15 +472,28 @@ def run_tests() -> int:
     ]
     for cwd_name, command in commands:
         print(f"\n$ ({cwd_name}) {' '.join(command)}")
-        result = subprocess.run(command, cwd=ROOT / cwd_name, env={**os.environ, **load_dotenv()})
+        result = subprocess.run(command, cwd=ROOT / cwd_name, env=merged_env())
         if result.returncode != 0:
             return result.returncode
     return 0
 
 
+def ensure_venv() -> Path:
+    """Create the repository .venv if it does not already exist."""
+    venv_dir = ROOT / ".venv"
+    if not venv_dir.exists():
+        print(f"Creating virtual environment at {venv_dir}")
+        venv.create(str(venv_dir), with_pip=True)
+    return venv_dir
+
+
 def run_install() -> int:
-    venv_python = ROOT / ".venv" / ("Scripts" if os.name == "nt" else "bin") / ("python.exe" if os.name == "nt" else "python")
-    python = str(venv_python if venv_python.exists() else Path(sys.executable))
+    venv_dir = ensure_venv()
+    venv_python = venv_dir / ("Scripts" if os.name == "nt" else "bin") / ("python.exe" if os.name == "nt" else "python")
+    if not venv_python.exists():
+        print(f"error: .venv Python not found at {venv_python}", file=sys.stderr)
+        return 1
+    python = str(venv_python)
     requirements = ROOT / "python" / "backtest" / "requirements.txt"
     print(f"Installing research API dependencies into {python}")
     return subprocess.run([python, "-m", "pip", "install", "-r", str(requirements)], cwd=ROOT).returncode
@@ -408,15 +503,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Start and monitor the local Stock Broker stack.")
     sub = parser.add_subparsers(dest="command", required=True)
     start = sub.add_parser("start", help="start services and the dashboard on port 8080")
-    start.add_argument("--with-feed", action="store_true", default=True, help="start the Rust market feed (default)")
     start.add_argument("--no-feed", action="store_true", help="skip the Rust market feed")
-    start.add_argument("--no-python", action="store_true")
-    start.add_argument("--no-java", action="store_true")
-    start.add_argument("--no-frontend", action="store_true")
+    start.add_argument("--no-python", action="store_true", help="skip the Python research API")
+    start.add_argument("--no-java", action="store_true", help="skip the Java product API")
+    start.add_argument("--no-frontend", action="store_true", help="skip the Next.js frontend")
     sub.add_parser("status", help="print process and endpoint status")
-    sub.add_parser("stop", help="stop services recorded by this process")
     sub.add_parser("test", help="run the fast local frontend and Rust checks")
-    sub.add_parser("install", help="install the pinned Python research API dependencies into .venv")
+    sub.add_parser("install", help="install the range-constrained Python research API dependencies into .venv")
     return parser
 
 
@@ -430,9 +523,6 @@ def main() -> int:
         return run_tests()
     if args.command == "install":
         return run_install()
-    if args.command == "stop":
-        print("stop must be issued from the running supervisor with Ctrl+C; no detached process registry is used")
-        return 0
     return 2
 
 

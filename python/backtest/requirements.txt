@@ -1,4 +1,4 @@
-# Runtime dependencies for the local research API.
+# Range-pinned runtime dependencies for the local research API.
 # Keep FastAPI and Starlette on a compatible release line for Python 3.10+.
 fastapi>=0.111,<0.112
 uvicorn[standard]>=0.30,<0.31

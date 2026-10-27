@@ -43,14 +43,16 @@ stock_broker/
 git clone <repo> && cd stock_broker
 ./scripts/bootstrap.sh
 
-# 2. Install the project dependencies
+# 2. Install range-constrained Python research API dependencies into .venv
+#    (creates .venv automatically if it does not exist)
 python main.py install
 
 # 3. Start Rust, Python, Java, and Next.js together
-# PostgreSQL and Redis must already be installed and running locally.
+#    PostgreSQL and Redis must already be installed and running locally.
 python main.py start
 # Local service dashboard: http://127.0.0.1:8080
 # JSON status: http://127.0.0.1:8080/api/status
+# Stop all services: press Ctrl+C in the same terminal.
 
 # 4. Verify CI configuration (action pins)
 make ci-lint
@@ -61,10 +63,13 @@ make proto
 # 6. Run pre-commit hooks
 pre-commit install --install-hooks -t pre-commit -t commit-msg
 pre-commit run --all-files
-
-# 7. Stop when done (Ctrl+C also stops services)
-python main.py stop
 ```
+
+### Environment variable precedence
+
+Explicit shell variables override values loaded from `.env`. For example,
+`SB_API_PORT=9090 python main.py start` uses port 9090 regardless of what `.env`
+contains.
 
 ## Where to start
 
