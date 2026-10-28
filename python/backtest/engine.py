@@ -8,7 +8,7 @@ import random
 import uuid
 import json
 from dataclasses import dataclass, field
-from typing import Any, Deque, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from collections.abc import Callable
 from datetime import datetime, timezone
@@ -36,6 +36,34 @@ class Order:
     # For tracking
     strategy_id: str = ""
     client_order_id: str = field(default_factory=lambda: str(uuid.uuid4()))
+
+
+@dataclass
+class QueuedOrder:
+    """Resting limit order in the queue with mutable state."""
+    order: Order
+    remaining_qty: float
+    status: str = "OPEN"  # "OPEN", "PARTIAL", "FILLED", "CANCELLED", "REJECTED"
+    queue_position: int = 0
+    created_ts: int = 0
+    created_batch_epoch: int = 0
+    created_batch_seq: int = 0
+    
+    @property
+    def is_buy(self) -> bool:
+        return self.order.side == "buy"
+    
+    @property
+    def limit_price(self) -> float:
+        return self.order.limit_price or 0.0
+    
+    @property
+    def is_marketable(self, best_bid: float, best_ask: float) -> bool:
+        """Check if order is marketable given current best bid/ask."""
+        if self.is_buy:
+            return self.limit_price >= best_ask
+        else:
+            return self.limit_price <= best_bid
 
 
 @dataclass
@@ -181,7 +209,7 @@ class Engine:
 
         # Order tracking
         self._open_orders: Dict[str, Order] = {}
-        self._order_queue: Dict[str, Deque[Order]] = {}
+        self._order_queue: Dict[str, List[QueuedOrder]] = {}  # List for sorting by price-time
 
         # Fill tracking
         self._fill_id_counter = 0
@@ -276,6 +304,7 @@ class Engine:
         self._first_snapshot_received = False
         self._open_orders = {}
         self._order_queue = {}
+        self._fill_id_counter = 0
 
         batch_count = 0
         while True:
@@ -321,10 +350,161 @@ class Engine:
             elif event_kind == 3:
                 pass
 
+            # After book update, match queued limit orders
+            if self._book_initialized:
+                self._match_queued_orders()
+
             # Call strategy if we have a valid book
             if self._book_initialized and self.on_event and batch.book_valid[i]:
                 state = self._build_state(self._current_batch, i)
                 self._call_strategy_safely(state, i)
+
+    def _match_queued_orders(self) -> None:
+        """Match queued limit orders against current book state."""
+        if self.symbol not in self._order_queue:
+            return
+        
+        bid = self.book.best_bid()
+        ask = self.book.best_ask()
+        if not bid or not ask:
+            return
+        
+        bid_price = self.spec.price_to_float(bid[0])
+        ask_price = self.spec.price_to_float(ask[0])
+        
+        queue = self._order_queue[self.symbol]
+        any_filled = False
+        
+        for queued_order in queue:
+            if queued_order.status not in ("OPEN", "PARTIAL"):
+                continue
+            if queued_order.remaining_qty <= 0:
+                continue
+            
+            # Check if order is now marketable
+            if queued_order.is_buy:
+                if queued_order.limit_price < ask_price:
+                    continue  # Not marketable yet
+                max_price = queued_order.limit_price
+            else:
+                if queued_order.limit_price > bid_price:
+                    continue  # Not marketable yet
+                min_price = queued_order.limit_price
+            
+            # Walk the book for the remaining quantity
+            if queued_order.is_buy:
+                fills = self._walk_book_for_fill("ask", queued_order.remaining_qty, max_price=max_price)
+            else:
+                fills = self._walk_book_for_fill("bid", queued_order.remaining_qty, min_price=min_price)
+            
+            if not fills:
+                continue
+            
+            # Execute fills for this queued order
+            self._execute_queued_fills(queued_order, fills)
+            any_filled = True
+        
+        # Re-sort queue after fills
+        if any_filled:
+            self._sort_queue(self.symbol)
+
+    def _execute_queued_fills(self, queued_order: QueuedOrder, fills: List[Tuple[float, float]]) -> None:
+        """Execute fills for a queued limit order (MAKER liquidity)."""
+        order = queued_order.order
+        total_filled = 0.0
+        fill_idx = 0
+        
+        for fill_price, fill_qty in fills:
+            if fill_qty <= 0:
+                continue
+            
+            # Record pre-slippage price
+            pre_slippage_price = fill_price
+            
+            # Apply slippage and market impact
+            adj_price = self._apply_slippage(fill_price, order.side)
+            adj_price = self._apply_market_impact(adj_price, order.side, fill_qty)
+            
+            # Calculate fee (MAKER gets rebate)
+            fee_bps = -self.maker_rebate_bps  # Negative for rebate
+            fee = adj_price * fill_qty * fee_bps / 10000.0
+            
+            # Check cash/position for this fill
+            cost = adj_price * fill_qty + fee
+            if order.side == "buy":
+                if self.account.cash < cost:
+                    break  # Insufficient cash for this fill
+                self.account.cash -= cost
+            else:
+                pos = self.account.positions.get(order.symbol)
+                if pos is None or pos.qty < fill_qty:
+                    break  # Insufficient position
+                self.account.cash += adj_price * fill_qty - fee
+            
+            # Update position
+            pos = self.account.positions.get(order.symbol)
+            if pos is None:
+                pos = Position(order.symbol)
+                self.account.positions[order.symbol] = pos
+            
+            if order.side == "buy":
+                new_qty = pos.qty + fill_qty
+                new_avg = (pos.avg_price * pos.qty + adj_price * fill_qty) / new_qty if new_qty > 0 else adj_price
+                pos.qty = new_qty
+                pos.avg_price = new_avg
+            else:
+                realized_pnl = (adj_price - pos.avg_price) * fill_qty
+                pos.realized_pnl += realized_pnl
+                pos.qty -= fill_qty
+                if pos.qty == 0:
+                    pos.avg_price = 0.0
+                    # Don't reset realized_pnl - it should accumulate
+            
+            # Calculate slippage
+            if pre_slippage_price != 0:
+                slippage_bps = ((adj_price - pre_slippage_price) / pre_slippage_price) * 10000.0
+                if order.side == "sell":
+                    slippage_bps = -slippage_bps
+            else:
+                slippage_bps = 0.0
+            
+            # Record fill with MAKER liquidity
+            fill_id = f"fill_{self._fill_id_counter}_q{fill_idx}"
+            self._fill_id_counter += 1
+            
+            fill = Fill(
+                symbol=order.symbol,
+                side=order.side,
+                qty=fill_qty,
+                price=adj_price,
+                fee=fee,
+                timestamp_ns=self._current_ts,
+                order_id=order.client_order_id,
+                fill_id=fill_id,
+                liquidity="MAKER",
+                fee_asset="USDT",
+                fill_type="LIMIT",
+                book_epoch=self._current_batch.epoch[self._current_event_idx] if self._current_batch else 0,
+                book_seq=self._current_batch.seq[self._current_event_idx] if self._current_batch else 0,
+                slippage_bps=slippage_bps,
+                queue_position=queued_order.queue_position,
+            )
+            
+            self.account.fills.append(fill)
+            total_filled += fill_qty
+            fill_idx += 1
+            
+            if total_filled >= queued_order.remaining_qty:
+                break
+        
+        # Update queued order state
+        queued_order.remaining_qty -= total_filled
+        if queued_order.remaining_qty <= 0:
+            queued_order.status = "FILLED"
+        elif total_filled > 0:
+            queued_order.status = "PARTIAL"
+        else:
+            queued_order.status = "OPEN"
 
     def _apply_snapshot(self, batch, idx):
         bids = batch.bid_prices[idx] if idx < len(batch.bid_prices) else []
@@ -396,114 +576,218 @@ class Engine:
         bid_price = self.spec.price_to_float(bid[0])
         ask_price = self.spec.price_to_float(ask[0])
         
-        # Determine fill price and liquidity based on order type
-        # Market orders are always TAKER (cross spread)
-        # Limit orders that cross the spread are TAKER
-        # Limit orders that rest are MAKER (handled by queue, not filled here)
         if order.order_type == "market":
-            liquidity = "TAKER"
-            if order.side == "buy":
-                fill_price = ask_price
-            else:
-                fill_price = bid_price
+            # Market orders are always TAKER
+            self._fill_market_order(order, bid_price, ask_price, fill_id)
         elif order.order_type == "limit":
             if order.limit_price is None:
                 return
+            # Check if limit order is immediately marketable
             if order.side == "buy" and order.limit_price >= ask_price:
                 # Crosses spread - TAKER
-                liquidity = "TAKER"
-                fill_price = ask_price
+                self._fill_limit_order_as_taker(order, ask_price, fill_id)
             elif order.side == "sell" and order.limit_price <= bid_price:
                 # Crosses spread - TAKER
-                liquidity = "TAKER"
-                fill_price = bid_price
+                self._fill_limit_order_as_taker(order, bid_price, fill_id)
             else:
-                # Limit price not met, add to order queue (MAKER if filled later)
-                if order.symbol not in self._order_queue:
-                    self._order_queue[order.symbol] = []
-                self._order_queue[order.symbol].append(order)
-                return
+                # Resting limit order - add to queue as MAKER
+                self._queue_limit_order(order)
         else:
             return
-        
-        # Record pre-slippage price for slippage calculation
-        pre_slippage_price = fill_price
-        
-        # Apply slippage
-        fill_price = self._apply_slippage(fill_price, order.side)
-        
-        # Apply market impact
-        fill_price = self._apply_market_impact(fill_price, order.side, order.qty)
-        
-        # Calculate fee based on liquidity
-        if liquidity == "TAKER":
-            fee_bps = self.fee_bps
-        else:  # MAKER
-            fee_bps = -self.maker_rebate_bps  # Negative for rebate, positive for maker fee
-        
-        # Fee can be negative (rebate) for makers
-        fee = fill_price * order.qty * fee_bps / 10000.0
-        
-        # Check if we have enough cash/position
-        cost = fill_price * order.qty + fee
+
+    def _fill_market_order(self, order: Order, bid_price: float, ask_price: float, fill_id: str) -> None:
+        """Fill a market order by walking the book."""
         if order.side == "buy":
-            if self.account.cash < cost:
-                return  # Insufficient cash
-            self.account.cash -= cost
+            # Buy walks asks (lowest to highest)
+            fills = self._walk_book_for_fill("ask", order.qty)
+            if not fills:
+                return
+            self._execute_fills(order, fills, "TAKER", fill_id)
         else:
-            pos = self.account.positions.get(order.symbol)
-            if pos is None or pos.qty < order.qty:
-                return  # Insufficient position
-            self.account.cash += fill_price * order.qty - fee
-        
-        # Update position and realized PnL - ensure position exists in dict
-        pos = self.account.positions.get(order.symbol)
-        if pos is None:
-            pos = Position(order.symbol)
-            self.account.positions[order.symbol] = pos
+            # Sell walks bids (highest to lowest)
+            fills = self._walk_book_for_fill("bid", order.qty)
+            if not fills:
+                return
+            self._execute_fills(order, fills, "TAKER", fill_id)
+
+    def _fill_limit_order_as_taker(self, order: Order, fill_price: float, fill_id: str) -> None:
+        """Fill a limit order that crosses the spread (TAKER liquidity)."""
+        # Walk the book up to the limit price
         if order.side == "buy":
-            new_qty = pos.qty + order.qty
-            new_avg = (pos.avg_price * pos.qty + fill_price * order.qty) / new_qty if new_qty > 0 else fill_price
-            pos.qty = new_qty
-            pos.avg_price = new_avg
+            fills = self._walk_book_for_fill("ask", order.qty, max_price=order.limit_price)
         else:
-            # Realized PnL = (fill_price - avg_price) * qty - fees on both legs
-            # The fee is already accounted in cash, so realized_pnl tracks price difference
-            realized_pnl = (fill_price - pos.avg_price) * order.qty
-            pos.realized_pnl += realized_pnl
-            pos.qty -= order.qty
-            if pos.qty == 0:
-                pos.avg_price = 0.0
-                pos.realized_pnl = 0.0
+            fills = self._walk_book_for_fill("bid", order.qty, min_price=order.limit_price)
         
-        # Calculate actual slippage in bps
-        if pre_slippage_price != 0:
-            slippage_bps = ((fill_price - pre_slippage_price) / pre_slippage_price) * 10000.0
-            if order.side == "sell":
-                slippage_bps = -slippage_bps
-        else:
-            slippage_bps = 0.0
+        if not fills:
+            return
         
-        # Record fill with proper fee sign (negative for rebate)
-        fill = Fill(
-            symbol=order.symbol,
-            side=order.side,
-            qty=order.qty,
-            price=fill_price,
-            fee=fee,  # Can be negative for maker rebate
-            timestamp_ns=self._current_ts,
-            order_id=order.client_order_id,
-            fill_id=fill_id,
-            liquidity=liquidity,
-            fee_asset="USDT",  # Default, could be configurable
-            fill_type=order.order_type.upper(),
-            book_epoch=self._current_batch.epoch[self._current_event_idx] if self._current_batch else 0,
-            book_seq=self._current_batch.seq[self._current_event_idx] if self._current_batch else 0,
-            slippage_bps=slippage_bps,
+        self._execute_fills(order, fills, "TAKER", fill_id)
+
+    def _queue_limit_order(self, order: Order) -> None:
+        """Add a resting limit order to the queue (MAKER liquidity)."""
+        if order.symbol not in self._order_queue:
+            self._order_queue[order.symbol] = []
+        
+        queued = QueuedOrder(
+            order=order,
+            remaining_qty=order.qty,
+            status="OPEN",
+            queue_position=0,  # Will be set after sorting
+            created_ts=self._current_ts,
+            created_batch_epoch=self._current_batch.epoch[self._current_event_idx] if self._current_batch else 0,
+            created_batch_seq=self._current_batch.seq[self._current_event_idx] if self._current_batch else 0,
         )
+        self._order_queue[order.symbol].append(queued)
+        self._sort_queue(order.symbol)
+
+    def _walk_book_for_fill(self, side: str, qty: float, max_price: float = None, min_price: float = None) -> List[Tuple[float, float]]:
+        """Walk the book for a fill using Python-side book levels to avoid notional overflow."""
+        target_qty = qty
+        if target_qty <= 0:
+            return []
         
-        self.account.fills.append(fill)
+        # Get book levels from Rust (up to 50 levels)
+        levels = self.book.levels(side, 50)
+        if not levels:
+            return []
+        
+        results = []
+        remaining = target_qty
+        
+        for price_units, qty_units in levels:
+            if remaining <= 0:
+                break
+            
+            price = self.spec.price_to_float(price_units)
+            level_qty = self.spec.qty_to_float(qty_units)
+            
+            # Apply price limits for limit orders
+            if max_price is not None and price > max_price:
+                break
+            if min_price is not None and price < min_price:
+                break
+            
+            fill_qty = min(level_qty, remaining)
+            results.append((price, fill_qty))
+            remaining -= fill_qty
+        
+        return results
+
+    def _execute_fills(self, order: Order, fills: List[Tuple[float, float]], liquidity: str, base_fill_id: str) -> None:
+        """Execute a list of fills for an order, handling partial fills."""
+        total_filled = 0.0
+        fill_idx = 0
+        
+        for fill_price, fill_qty in fills:
+            if fill_qty <= 0:
+                continue
+            
+            # Record pre-slippage price
+            pre_slippage_price = fill_price
+            
+            # Apply slippage and market impact
+            adj_price = self._apply_slippage(fill_price, order.side)
+            adj_price = self._apply_market_impact(adj_price, order.side, fill_qty)
+            
+            # Calculate fee
+            if liquidity == "TAKER":
+                fee_bps = self.fee_bps
+            else:  # MAKER
+                fee_bps = -self.maker_rebate_bps
+            
+            fee = adj_price * fill_qty * fee_bps / 10000.0
+            
+            # Check cash/position for this fill
+            cost = adj_price * fill_qty + fee
+            if order.side == "buy":
+                if self.account.cash < cost:
+                    break  # Insufficient cash for this fill
+                self.account.cash -= cost
+            else:
+                pos = self.account.positions.get(order.symbol)
+                if pos is None or pos.qty < fill_qty:
+                    break  # Insufficient position
+                self.account.cash += adj_price * fill_qty - fee
+            
+            # Update position
+            pos = self.account.positions.get(order.symbol)
+            if pos is None:
+                pos = Position(order.symbol)
+                self.account.positions[order.symbol] = pos
+            
+            if order.side == "buy":
+                new_qty = pos.qty + fill_qty
+                new_avg = (pos.avg_price * pos.qty + adj_price * fill_qty) / new_qty if new_qty > 0 else adj_price
+                pos.qty = new_qty
+                pos.avg_price = new_avg
+            else:
+                realized_pnl = (adj_price - pos.avg_price) * fill_qty
+                pos.realized_pnl += realized_pnl
+                pos.qty -= fill_qty
+                if pos.qty == 0:
+                    pos.avg_price = 0.0
+                    # Don't reset realized_pnl - it should accumulate
+            
+            # Calculate slippage
+            if pre_slippage_price != 0:
+                slippage_bps = ((adj_price - pre_slippage_price) / pre_slippage_price) * 10000.0
+                if order.side == "sell":
+                    slippage_bps = -slippage_bps
+            else:
+                slippage_bps = 0.0
+            
+            # Record fill
+            fill_id = f"{base_fill_id}_{fill_idx}"
+            fill = Fill(
+                symbol=order.symbol,
+                side=order.side,
+                qty=fill_qty,
+                price=adj_price,
+                fee=fee,
+                timestamp_ns=self._current_ts,
+                order_id=order.client_order_id,
+                fill_id=fill_id,
+                liquidity=liquidity,
+                fee_asset="USDT",
+                fill_type=order.order_type.upper(),
+                book_epoch=self._current_batch.epoch[self._current_event_idx] if self._current_batch else 0,
+                book_seq=self._current_batch.seq[self._current_event_idx] if self._current_batch else 0,
+                slippage_bps=slippage_bps,
+            )
+            
+            self.account.fills.append(fill)
+            total_filled += fill_qty
+            fill_idx += 1
+            
+            if total_filled >= order.qty:
+                break
+        
         self._open_orders[order.client_order_id] = order
+
+    def _sort_queue(self, symbol: str) -> None:
+        """Sort the order queue by price-time priority."""
+        if symbol not in self._order_queue:
+            return
+        
+        queue = self._order_queue[symbol]
+        # Filter open orders
+        open_orders = [o for o in queue if o.status == "OPEN" or o.status == "PARTIAL"]
+        
+        # Sort by price-time priority
+        # Buy: higher price first, then earlier time
+        # Sell: lower price first, then earlier time
+        if open_orders and open_orders[0].is_buy:
+            open_orders.sort(key=lambda o: (-o.limit_price, o.created_ts))
+        else:
+            open_orders.sort(key=lambda o: (o.limit_price, o.created_ts))
+        
+        # Update queue positions
+        for i, o in enumerate(open_orders):
+            o.queue_position = i + 1
+        
+        # Rebuild queue: open orders first, then filled/cancelled at end
+        filled_cancelled = [o for o in queue if o.status in ("FILLED", "CANCELLED", "REJECTED")]
+        self._order_queue[symbol] = open_orders + filled_cancelled
 
     def _apply_slippage(self, price: float, side: str) -> float:
         """Apply slippage to fill price."""
