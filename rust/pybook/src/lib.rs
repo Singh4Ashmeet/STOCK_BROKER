@@ -36,7 +36,7 @@ fn build_info<'py>(py: Python<'py>) -> Bound<'py, PyDict> {
 
 /// PyO3 C-extension module entry point.
 #[pymodule]
-fn _pybook(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn pybook(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     m.add_function(wrap_pyfunction!(build_info, m)?)?;
 

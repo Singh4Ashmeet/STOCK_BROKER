@@ -56,3 +56,6 @@ rust/core/fuzz/artifacts/
 rust/core/fuzz/target/
 
 rust/advisory-db.git-*
+
+# Generated code-analysis artifacts and caches
+graphify-out/

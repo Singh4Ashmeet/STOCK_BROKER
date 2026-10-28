@@ -4,9 +4,9 @@
 help:
 	@echo "stock_broker native development commands"
 	@echo "  make install       Install all project dependencies"
-	@echo "  make start         Start the Java API and Next.js web UI"
-	@echo "  make start-feed    Start API, web UI, and Rust feed"
-	@echo "  make stop          Stop processes started by main.py"
+	@echo "  make start         Start the Rust feed, Python research API, Java API, and Next.js web UI"
+	@echo "  make start-feed    Alias for 'make start' (starts all services including Rust feed)"
+	@echo "  make stop          Stop processes started by main.py (press Ctrl+C in the terminal running 'make start')"
 	@echo "  make status        Show managed process status"
 	@echo "  make proto         Run native protobuf checks"
 	@echo "  make java-test     Run Java tests"
@@ -21,10 +21,10 @@ start:
 	python main.py start
 
 start-feed:
-	python main.py start --with-feed
+	python main.py start
 
 stop:
-	python main.py stop
+	@echo "To stop services, press Ctrl+C in the terminal running 'make start'"
 
 status:
 	python main.py status
@@ -68,4 +68,4 @@ rust-test:
 	cd rust && cargo test --workspace
 
 python-test:
-	.venv/Scripts/python -m pytest python/tests
+	.venv/Scripts/python -m pytest python/backtest/tests

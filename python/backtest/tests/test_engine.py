@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
 import pytest
 
-from pybook import InstrumentSpec
+# Add the backtest directory to the path
+BACKTEST_DIR = Path(__file__).parent.parent
+sys.path.insert(0, str(BACKTEST_DIR))
 
-import sys
-sys.path.insert(0, "C:/dev/stock_broker/python/backtest")
+from pybook import InstrumentSpec
 from engine import (
     Engine,
     State,
