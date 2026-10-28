@@ -11,8 +11,8 @@ import pytest
 BACKTEST_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(BACKTEST_DIR))
 
-from pybook import InstrumentSpec
-from engine import (
+from pybook import InstrumentSpec  # noqa: E402
+from engine import (  # noqa: E402
     Engine,
     State,
     buy_and_hold_strategy,

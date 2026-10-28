@@ -123,13 +123,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut handles: Vec<JoinHandle<()>> = vec![grpc_handle, http_handle];
 
     if server_config.observability.enable_prometheus {
-        let prom_addr = format!(
-            "127.0.0.1:{}",
-            server_config.observability.prometheus_port
-        );
-        let prom_addr: std::net::SocketAddr = prom_addr
-            .parse()
-            .expect("invalid prometheus address");
+        let prom_addr = format!("127.0.0.1:{}", server_config.observability.prometheus_port);
+        let prom_addr: std::net::SocketAddr =
+            prom_addr.parse().expect("invalid prometheus address");
         let prom_handle = start_prometheus_server(prom_addr, &prom_metrics).await?;
         handles.push(prom_handle);
         tracing::info!(%prom_addr, "Prometheus exporter listening");

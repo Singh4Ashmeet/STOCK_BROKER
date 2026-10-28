@@ -55,10 +55,10 @@ jobs:
         run: |
           pip install -q ruff mypy
       - name: Ruff lint
-        run: ruff check python
+        run: ruff check .
         working-directory: python
       - name: Mypy type check
-        run: mypy --strict python
+        run: mypy --strict .
         working-directory: python
 
   test:
@@ -70,6 +70,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
+        with:
+          toolchain: stable
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
@@ -95,6 +97,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
+        with:
+          toolchain: stable
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
@@ -123,5 +127,27 @@ jobs:
           python-version: '3.12'
       - name: Install pip-audit
         run: pip install pip-audit
-      - name: Run pip-audit
-        run: pip-audit -r python/requirements.txt
+      - name: Generate requirements file from pyproject.toml
+        id: gen-req-file
+        working-directory: python
+        run: |
+          python -c "
+            import tomllib
+            import tempfile
+            import sys
+            with open('pyproject.toml', 'rb') as f:
+                data = tomllib.load(f)
+            deps = data.get('project', {}).get('dependencies', [])
+            if not deps:
+                print('No dependencies found in pyproject.toml')
+                sys.exit(0)
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
+                for dep in deps:
+                    f.write(dep + '\n')
+                req_file = f.name
+            print(req_file, file=sys.stdout)
+            print(f'req_file={req_file}', file=sys.stdout)
+          "
+      - name: Run pip-audit with generated requirements
+        run: pip-audit -r ${{ steps.gen-req-file.outputs.req_file }}
+        working-directory: python

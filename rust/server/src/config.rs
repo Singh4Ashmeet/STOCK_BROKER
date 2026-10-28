@@ -196,9 +196,12 @@ pub fn load_config(path: &str) -> Result<ServerConfig, Box<dyn std::error::Error
 
     // Apply environment variable override for Prometheus port
     if let Ok(env_val) = std::env::var("SB_FEED_PROMETHEUS_PORT") {
-        let port: u16 = env_val
-            .parse()
-            .map_err(|_| format!("invalid SB_FEED_PROMETHEUS_PORT value '{}': must be a valid u16", env_val))?;
+        let port: u16 = env_val.parse().map_err(|_| {
+            format!(
+                "invalid SB_FEED_PROMETHEUS_PORT value '{}': must be a valid u16",
+                env_val
+            )
+        })?;
         if port == 0 {
             return Err("SB_FEED_PROMETHEUS_PORT must be non-zero".into());
         }
@@ -273,7 +276,9 @@ mod tests {
         use std::env;
         let _guard = ENV_MUTEX.lock().unwrap();
         let original = env::var("SB_FEED_PROMETHEUS_PORT").ok();
-        unsafe { env::set_var("SB_FEED_PROMETHEUS_PORT", "9200"); }
+        unsafe {
+            env::set_var("SB_FEED_PROMETHEUS_PORT", "9200");
+        }
 
         let toml = r#"
             symbols = ["BINANCE:BTC-USDT"]
@@ -282,9 +287,13 @@ mod tests {
         assert_eq!(cfg.observability.prometheus_port, 9200);
 
         if let Some(val) = original {
-            unsafe { env::set_var("SB_FEED_PROMETHEUS_PORT", val); }
+            unsafe {
+                env::set_var("SB_FEED_PROMETHEUS_PORT", val);
+            }
         } else {
-            unsafe { env::remove_var("SB_FEED_PROMETHEUS_PORT"); }
+            unsafe {
+                env::remove_var("SB_FEED_PROMETHEUS_PORT");
+            }
         }
     }
 
@@ -293,7 +302,9 @@ mod tests {
         use std::env;
         let _guard = ENV_MUTEX.lock().unwrap();
         let original = env::var("SB_FEED_PROMETHEUS_PORT").ok();
-        unsafe { env::set_var("SB_FEED_PROMETHEUS_PORT", "9300"); }
+        unsafe {
+            env::set_var("SB_FEED_PROMETHEUS_PORT", "9300");
+        }
 
         let toml = r#"
             symbols = ["BINANCE:BTC-USDT"]
@@ -304,9 +315,13 @@ mod tests {
         assert_eq!(cfg.observability.prometheus_port, 9300);
 
         if let Some(val) = original {
-            unsafe { env::set_var("SB_FEED_PROMETHEUS_PORT", val); }
+            unsafe {
+                env::set_var("SB_FEED_PROMETHEUS_PORT", val);
+            }
         } else {
-            unsafe { env::remove_var("SB_FEED_PROMETHEUS_PORT"); }
+            unsafe {
+                env::remove_var("SB_FEED_PROMETHEUS_PORT");
+            }
         }
     }
 
@@ -315,7 +330,9 @@ mod tests {
         use std::env;
         let _guard = ENV_MUTEX.lock().unwrap();
         let original = env::var("SB_FEED_PROMETHEUS_PORT").ok();
-        unsafe { env::set_var("SB_FEED_PROMETHEUS_PORT", "not_a_number"); }
+        unsafe {
+            env::set_var("SB_FEED_PROMETHEUS_PORT", "not_a_number");
+        }
 
         let toml = r#"
             symbols = ["BINANCE:BTC-USDT"]
@@ -326,9 +343,13 @@ mod tests {
         assert!(err.contains("invalid SB_FEED_PROMETHEUS_PORT value"));
 
         if let Some(val) = original {
-            unsafe { env::set_var("SB_FEED_PROMETHEUS_PORT", val); }
+            unsafe {
+                env::set_var("SB_FEED_PROMETHEUS_PORT", val);
+            }
         } else {
-            unsafe { env::remove_var("SB_FEED_PROMETHEUS_PORT"); }
+            unsafe {
+                env::remove_var("SB_FEED_PROMETHEUS_PORT");
+            }
         }
     }
 
@@ -337,7 +358,9 @@ mod tests {
         use std::env;
         let _guard = ENV_MUTEX.lock().unwrap();
         let original = env::var("SB_FEED_PROMETHEUS_PORT").ok();
-        unsafe { env::set_var("SB_FEED_PROMETHEUS_PORT", "0"); }
+        unsafe {
+            env::set_var("SB_FEED_PROMETHEUS_PORT", "0");
+        }
 
         let toml = r#"
             symbols = ["BINANCE:BTC-USDT"]
@@ -348,9 +371,13 @@ mod tests {
         assert!(err.contains("non-zero"));
 
         if let Some(val) = original {
-            unsafe { env::set_var("SB_FEED_PROMETHEUS_PORT", val); }
+            unsafe {
+                env::set_var("SB_FEED_PROMETHEUS_PORT", val);
+            }
         } else {
-            unsafe { env::remove_var("SB_FEED_PROMETHEUS_PORT"); }
+            unsafe {
+                env::remove_var("SB_FEED_PROMETHEUS_PORT");
+            }
         }
     }
 
@@ -358,9 +385,12 @@ mod tests {
         let mut config: ServerConfig = toml::from_str(toml)?;
 
         if let Ok(env_val) = std::env::var("SB_FEED_PROMETHEUS_PORT") {
-            let port: u16 = env_val
-                .parse()
-                .map_err(|_| format!("invalid SB_FEED_PROMETHEUS_PORT value '{}': must be a valid u16", env_val))?;
+            let port: u16 = env_val.parse().map_err(|_| {
+                format!(
+                    "invalid SB_FEED_PROMETHEUS_PORT value '{}': must be a valid u16",
+                    env_val
+                )
+            })?;
             if port == 0 {
                 return Err("SB_FEED_PROMETHEUS_PORT must be non-zero".into());
             }
