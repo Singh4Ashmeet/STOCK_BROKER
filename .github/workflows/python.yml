@@ -132,22 +132,22 @@ jobs:
         working-directory: python
         run: |
           python -c "
-            import tomllib
-            import tempfile
-            import sys
-            with open('pyproject.toml', 'rb') as f:
-                data = tomllib.load(f)
-            deps = data.get('project', {}).get('dependencies', [])
-            if not deps:
-                print('No dependencies found in pyproject.toml')
-                sys.exit(0)
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
-                for dep in deps:
-                    f.write(dep + '\n')
-                req_file = f.name
-            print(req_file, file=sys.stdout)
-            print(f'req_file={req_file}', file=sys.stdout)
-          "
+import tomllib
+import tempfile
+import sys
+with open('pyproject.toml', 'rb') as f:
+    data = tomllib.load(f)
+deps = data.get('project', {}).get('dependencies', [])
+if not deps:
+    print('No dependencies found in pyproject.toml')
+    sys.exit(0)
+with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
+    for dep in deps:
+        f.write(dep + '\n')
+    req_file = f.name
+    print(req_file)
+    echo \"req_file=$req_file\" >> $GITHUB_OUTPUT
+  "
       - name: Run pip-audit with generated requirements
         run: pip-audit -r ${{ steps.gen-req-file.outputs.req_file }}
         working-directory: python
