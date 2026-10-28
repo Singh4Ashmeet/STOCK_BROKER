@@ -1,11 +1,15 @@
 """Parity test: Replay recorded day through pybook and assert invariants across all events."""
 
+from pathlib import Path
 from pybook import EventReader
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+RECORDED_DAY = REPO_ROOT / "testdata" / "recorded_day"
 
 
 def test_replay_parity_across_full_day() -> None:
     reader = EventReader.open_day(
-        "../testdata/recorded_day",
+        str(RECORDED_DAY),
         "BINANCE",
         "BTC-USDT",
         "2026-10-09",

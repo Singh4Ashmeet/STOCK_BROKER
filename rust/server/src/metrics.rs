@@ -949,10 +949,12 @@ pub fn health_router(
 }
 
 /// Start the Prometheus HTTP server.
-pub fn start_prometheus_server(
+///
+/// Returns an error if the TCP listener cannot bind to the given address.
+pub async fn start_prometheus_server(
     addr: std::net::SocketAddr,
     prom_metrics: &Arc<PrometheusMetrics>,
-) -> tokio::task::JoinHandle<()> {
+) -> Result<tokio::task::JoinHandle<()>, Box<dyn std::error::Error>> {
     use axum::routing::get;
 
     let prom_clone = Arc::clone(prom_metrics);
@@ -972,11 +974,18 @@ pub fn start_prometheus_server(
         }),
     );
 
-    tokio::spawn(async move {
-        if let Ok(listener) = tokio::net::TcpListener::bind(addr).await {
-            let _ = axum::serve(listener, router).await;
+    let listener = tokio::net::TcpListener::bind(addr)
+        .await
+        .map_err(|e| format!("failed to bind Prometheus exporter to {}: {}", addr, e))?;
+    tracing::info!(%addr, "Prometheus exporter bound successfully");
+
+    let handle = tokio::spawn(async move {
+        if let Err(e) = axum::serve(listener, router).await {
+            tracing::error!(%addr, "Prometheus exporter error: {}", e);
         }
-    })
+    });
+
+    Ok(handle)
 }
 
 /// Latency reporter that periodically exports `HdrHistogram` percentiles to Prometheus gauges.

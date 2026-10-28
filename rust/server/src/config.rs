@@ -4,15 +4,19 @@
 //! `server.toml` shipped with the crate.
 
 use serde::Deserialize;
+use std::sync::Mutex;
+
+#[allow(dead_code)]
+static ENV_MUTEX: Mutex<()> = Mutex::new(());
 
 /// Top-level server configuration.
 #[derive(Debug, Clone, Deserialize)]
 pub struct ServerConfig {
-    /// gRPC listen address (e.g. "[::1]:50051").
+    /// gRPC listen address (e.g. "127.0.0.1:50151").
     #[serde(default = "default_listen_addr")]
     pub listen_addr: String,
 
-    /// HTTP health/metrics listen address (e.g. "[::1]:9090").
+    /// HTTP health/metrics listen address (e.g. "127.0.0.1:9090").
     #[serde(default = "default_http_addr")]
     pub http_addr: String,
 
@@ -96,6 +100,9 @@ pub struct ObservabilityConfig {
     /// Prometheus exporter path (e.g. "/metrics").
     #[serde(default = "default_prometheus_path")]
     pub prometheus_path: String,
+    /// Prometheus exporter listen port (e.g. 9100). Loopback only.
+    #[serde(default = "default_prometheus_port")]
+    pub prometheus_port: u16,
     /// Latency reporting interval in seconds.
     #[serde(default = "default_latency_report_interval_secs")]
     pub latency_report_interval_secs: u64,
@@ -118,6 +125,7 @@ impl Default for ObservabilityConfig {
         Self {
             enable_prometheus: default_enable_prometheus(),
             prometheus_path: default_prometheus_path(),
+            prometheus_port: default_prometheus_port(),
             latency_report_interval_secs: default_latency_report_interval_secs(),
             cross_check_interval_secs: default_cross_check_interval_secs(),
             exchange_endpoint: default_exchange_endpoint(),
@@ -128,10 +136,10 @@ impl Default for ObservabilityConfig {
 }
 
 fn default_listen_addr() -> String {
-    "[::1]:50051".to_owned()
+    "127.0.0.1:50151".to_owned()
 }
 fn default_http_addr() -> String {
-    "[::1]:9090".to_owned()
+    "127.0.0.1:9090".to_owned()
 }
 fn default_subscriber_queue_capacity() -> usize {
     256
@@ -172,15 +180,31 @@ fn default_cross_check_depth() -> usize {
 fn default_cross_check_qty_tolerance() -> i64 {
     100
 }
+fn default_prometheus_port() -> u16 {
+    9100
+}
 
-/// Load configuration from a TOML file.
+/// Load configuration from a TOML file with environment variable overrides.
 ///
 /// # Errors
 ///
-/// Returns an error if the file cannot be read or parsed.
+/// Returns an error if the file cannot be read or parsed, or if an
+/// environment variable contains an invalid value.
 pub fn load_config(path: &str) -> Result<ServerConfig, Box<dyn std::error::Error>> {
     let contents = std::fs::read_to_string(path)?;
-    let config: ServerConfig = toml::from_str(&contents)?;
+    let mut config: ServerConfig = toml::from_str(&contents)?;
+
+    // Apply environment variable override for Prometheus port
+    if let Ok(env_val) = std::env::var("SB_FEED_PROMETHEUS_PORT") {
+        let port: u16 = env_val
+            .parse()
+            .map_err(|_| format!("invalid SB_FEED_PROMETHEUS_PORT value '{}': must be a valid u16", env_val))?;
+        if port == 0 {
+            return Err("SB_FEED_PROMETHEUS_PORT must be non-zero".into());
+        }
+        config.observability.prometheus_port = port;
+    }
+
     Ok(config)
 }
 
@@ -195,10 +219,11 @@ mod tests {
         "#;
         let cfg: ServerConfig = toml::from_str(toml).unwrap();
         assert_eq!(cfg.symbols.len(), 1);
-        assert_eq!(cfg.listen_addr, "[::1]:50051");
-        assert_eq!(cfg.http_addr, "[::1]:9090");
+        assert_eq!(cfg.listen_addr, "127.0.0.1:50151");
+        assert_eq!(cfg.http_addr, "127.0.0.1:9090");
         assert_eq!(cfg.subscriber_queue_capacity, 256);
         assert!(cfg.observability.enable_prometheus);
+        assert_eq!(cfg.observability.prometheus_port, 9100);
     }
 
     #[test]
@@ -220,6 +245,7 @@ mod tests {
             enable_prometheus = true
             latency_report_interval_secs = 5
             cross_check_interval_secs = 30
+            prometheus_port = 9100
 
             [[instruments]]
             symbol = "BINANCE:BTC-USDT"
@@ -237,7 +263,110 @@ mod tests {
         assert_eq!(cfg.metrics.depth_levels, 5);
         assert_eq!(cfg.observability.latency_report_interval_secs, 5);
         assert_eq!(cfg.observability.cross_check_interval_secs, 30);
+        assert_eq!(cfg.observability.prometheus_port, 9100);
         assert_eq!(cfg.instruments.len(), 1);
         assert_eq!(cfg.instruments[0].price_scale, 2);
+    }
+
+    #[test]
+    fn env_override_prometheus_port() {
+        use std::env;
+        let _guard = ENV_MUTEX.lock().unwrap();
+        let original = env::var("SB_FEED_PROMETHEUS_PORT").ok();
+        unsafe { env::set_var("SB_FEED_PROMETHEUS_PORT", "9200"); }
+
+        let toml = r#"
+            symbols = ["BINANCE:BTC-USDT"]
+        "#;
+        let cfg = load_config_from_str(toml).unwrap();
+        assert_eq!(cfg.observability.prometheus_port, 9200);
+
+        if let Some(val) = original {
+            unsafe { env::set_var("SB_FEED_PROMETHEUS_PORT", val); }
+        } else {
+            unsafe { env::remove_var("SB_FEED_PROMETHEUS_PORT"); }
+        }
+    }
+
+    #[test]
+    fn env_override_takes_precedence_over_toml() {
+        use std::env;
+        let _guard = ENV_MUTEX.lock().unwrap();
+        let original = env::var("SB_FEED_PROMETHEUS_PORT").ok();
+        unsafe { env::set_var("SB_FEED_PROMETHEUS_PORT", "9300"); }
+
+        let toml = r#"
+            symbols = ["BINANCE:BTC-USDT"]
+            [observability]
+            prometheus_port = 9400
+        "#;
+        let cfg = load_config_from_str(toml).unwrap();
+        assert_eq!(cfg.observability.prometheus_port, 9300);
+
+        if let Some(val) = original {
+            unsafe { env::set_var("SB_FEED_PROMETHEUS_PORT", val); }
+        } else {
+            unsafe { env::remove_var("SB_FEED_PROMETHEUS_PORT"); }
+        }
+    }
+
+    #[test]
+    fn invalid_env_value_rejected() {
+        use std::env;
+        let _guard = ENV_MUTEX.lock().unwrap();
+        let original = env::var("SB_FEED_PROMETHEUS_PORT").ok();
+        unsafe { env::set_var("SB_FEED_PROMETHEUS_PORT", "not_a_number"); }
+
+        let toml = r#"
+            symbols = ["BINANCE:BTC-USDT"]
+        "#;
+        let result = load_config_from_str(toml);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("invalid SB_FEED_PROMETHEUS_PORT value"));
+
+        if let Some(val) = original {
+            unsafe { env::set_var("SB_FEED_PROMETHEUS_PORT", val); }
+        } else {
+            unsafe { env::remove_var("SB_FEED_PROMETHEUS_PORT"); }
+        }
+    }
+
+    #[test]
+    fn zero_port_rejected() {
+        use std::env;
+        let _guard = ENV_MUTEX.lock().unwrap();
+        let original = env::var("SB_FEED_PROMETHEUS_PORT").ok();
+        unsafe { env::set_var("SB_FEED_PROMETHEUS_PORT", "0"); }
+
+        let toml = r#"
+            symbols = ["BINANCE:BTC-USDT"]
+        "#;
+        let result = load_config_from_str(toml);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("non-zero"));
+
+        if let Some(val) = original {
+            unsafe { env::set_var("SB_FEED_PROMETHEUS_PORT", val); }
+        } else {
+            unsafe { env::remove_var("SB_FEED_PROMETHEUS_PORT"); }
+        }
+    }
+
+    fn load_config_from_str(toml: &str) -> Result<ServerConfig, Box<dyn std::error::Error>> {
+        let mut config: ServerConfig = toml::from_str(toml)?;
+
+        if let Ok(env_val) = std::env::var("SB_FEED_PROMETHEUS_PORT") {
+            let port: u16 = env_val
+                .parse()
+                .map_err(|_| format!("invalid SB_FEED_PROMETHEUS_PORT value '{}': must be a valid u16", env_val))?;
+            if port == 0 {
+                return Err("SB_FEED_PROMETHEUS_PORT must be non-zero".into());
+            }
+            config.observability.prometheus_port = port;
+        }
+
+        Ok(config)
     }
 }

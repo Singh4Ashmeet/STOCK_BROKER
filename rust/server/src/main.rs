@@ -119,22 +119,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     });
 
-    // Start Prometheus metrics exporter if enabled (on separate port if needed)
+    // Start Prometheus metrics exporter if enabled (on separate port)
     let mut handles: Vec<JoinHandle<()>> = vec![grpc_handle, http_handle];
 
     if server_config.observability.enable_prometheus {
         let prom_addr = format!(
-            "0.0.0.0:{}",
-            server_config
-                .http_addr
-                .split(':')
-                .next_back()
-                .unwrap_or("9090")
+            "127.0.0.1:{}",
+            server_config.observability.prometheus_port
         );
         let prom_addr: std::net::SocketAddr = prom_addr
             .parse()
-            .unwrap_or_else(|_| "[::]:9090".parse().unwrap());
-        let prom_handle = start_prometheus_server(prom_addr, &prom_metrics);
+            .expect("invalid prometheus address");
+        let prom_handle = start_prometheus_server(prom_addr, &prom_metrics).await?;
         handles.push(prom_handle);
         tracing::info!(%prom_addr, "Prometheus exporter listening");
     }

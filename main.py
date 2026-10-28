@@ -130,7 +130,10 @@ def service_specs() -> list[ServiceSpec]:
     mvnw = str(ROOT / "java" / ("mvnw.cmd" if os.name == "nt" else "mvnw"))
     python = python_with_research_dependencies()
 
-    rust_env = {"RUST_LOG": merged.get("RUST_LOG", "sb_server=info")}
+    rust_env = {
+        "RUST_LOG": merged.get("RUST_LOG", "sb_server=info"),
+        "SB_FEED_PROMETHEUS_PORT": merged.get("SB_FEED_PROMETHEUS_PORT", "9100"),
+    }
     private_key = merged.get("SB_JWT_PRIVATE_KEY_PATH")
     public_key = merged.get("SB_JWT_PUBLIC_KEY_PATH")
     if not private_key or not Path(private_key.removeprefix("file:")).is_absolute():
@@ -139,8 +142,8 @@ def service_specs() -> list[ServiceSpec]:
         public_key = f"file:{ROOT / 'infra' / 'secrets' / 'jwt_public.key'}"
     java_env = {
         "SB_API_PORT": merged.get("SB_API_PORT", "8081"),
-        # The Java default is 9000; the Rust TOML default is 50051.
-        "SB_FEED_GRPC_PORT": merged.get("SB_FEED_GRPC_PORT", "50051"),
+        # The Java default and Rust TOML default are both 50151.
+        "SB_FEED_GRPC_PORT": merged.get("SB_FEED_GRPC_PORT", "50151"),
         # Resolve development keys from the repository root.  Relative
         # `file:../infra/...` values are interpreted against Spring's servlet
         # resource context when launched through the Maven plugin on Windows.
@@ -169,8 +172,8 @@ def service_specs() -> list[ServiceSpec]:
             "rust-feed",
             (cargo, "run", "--manifest-path", str(ROOT / "rust" / "server" / "Cargo.toml"), "--", str(ROOT / "rust" / "server" / "server.toml")),
             ROOT,
-            50051,
-            "http://[::1]:9090/health",
+            50151,
+            "http://127.0.0.1:9090/health",
             rust_env,
         ),
         ServiceSpec(

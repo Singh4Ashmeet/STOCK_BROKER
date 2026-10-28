@@ -2,10 +2,10 @@
 # All settings can be overridden via environment variables
 
 # gRPC listen address
-listen_addr = "[::1]:50051"
+listen_addr = "127.0.0.1:50151"
 
 # HTTP health/metrics listen address
-http_addr = "[::1]:9090"
+http_addr = "127.0.0.1:9090"
 
 # Symbols to serve
 symbols = ["BINANCE:BTC-USDT", "BINANCE:ETH-USDT"]
@@ -30,6 +30,7 @@ trade_flow_window_secs = 60
 # Enable Prometheus metrics exporter on /metrics
 enable_prometheus = true
 prometheus_path = "/metrics"
+prometheus_port = 9100
 
 # Latency reporting interval (seconds) - exports HdrHistogram percentiles to Prometheus
 latency_report_interval_secs = 10

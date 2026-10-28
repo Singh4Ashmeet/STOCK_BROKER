@@ -151,7 +151,7 @@ sb:
   market:
     gateway:
       host: ${SB_FEED_HOST:localhost}
-      port: ${SB_FEED_GRPC_PORT:9000}
+      port: ${SB_FEED_GRPC_PORT:50151}
       plaintext: true
       connect-timeout: 5s
       keepalive:

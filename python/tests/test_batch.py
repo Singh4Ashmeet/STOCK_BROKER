@@ -2,12 +2,16 @@
 
 import numpy as np
 import pyarrow as pa
+from pathlib import Path
 from pybook import EventReader
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+RECORDED_DAY = REPO_ROOT / "testdata" / "recorded_day"
 
 
 def test_batch_properties_and_arrays() -> None:
     reader = EventReader.open_day(
-        "../testdata/recorded_day",
+        str(RECORDED_DAY),
         "BINANCE",
         "BTC-USDT",
         "2026-10-09",
@@ -56,7 +60,7 @@ def test_batch_properties_and_arrays() -> None:
 
 def test_batch_to_dict_and_to_arrow() -> None:
     reader = EventReader.open_day(
-        "../testdata/recorded_day",
+        str(RECORDED_DAY),
         "BINANCE",
         "BTC-USDT",
         "2026-10-09",
