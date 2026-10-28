@@ -385,7 +385,7 @@ class Engine:
         """Process an order from the strategy and simulate fill."""
         # Generate fill ID
         self._fill_id_counter += 1
-        _fill_id = f"fill_{self._fill_id_counter}"
+        fill_id = f"fill_{self._fill_id_counter}"
         
         # Get current book state
         bid = self.book.best_bid()
@@ -396,8 +396,12 @@ class Engine:
         bid_price = self.spec.price_to_float(bid[0])
         ask_price = self.spec.price_to_float(ask[0])
         
-        # Determine fill price based on order type
+        # Determine fill price and liquidity based on order type
+        # Market orders are always TAKER (cross spread)
+        # Limit orders that cross the spread are TAKER
+        # Limit orders that rest are MAKER (handled by queue, not filled here)
         if order.order_type == "market":
+            liquidity = "TAKER"
             if order.side == "buy":
                 fill_price = ask_price
             else:
@@ -406,11 +410,15 @@ class Engine:
             if order.limit_price is None:
                 return
             if order.side == "buy" and order.limit_price >= ask_price:
+                # Crosses spread - TAKER
+                liquidity = "TAKER"
                 fill_price = ask_price
             elif order.side == "sell" and order.limit_price <= bid_price:
+                # Crosses spread - TAKER
+                liquidity = "TAKER"
                 fill_price = bid_price
             else:
-                # Limit price not met, add to order queue
+                # Limit price not met, add to order queue (MAKER if filled later)
                 if order.symbol not in self._order_queue:
                     self._order_queue[order.symbol] = []
                 self._order_queue[order.symbol].append(order)
@@ -418,17 +426,23 @@ class Engine:
         else:
             return
         
+        # Record pre-slippage price for slippage calculation
+        pre_slippage_price = fill_price
+        
         # Apply slippage
         fill_price = self._apply_slippage(fill_price, order.side)
         
         # Apply market impact
         fill_price = self._apply_market_impact(fill_price, order.side, order.qty)
         
-        # Calculate fee
-        fee_bps = self.fee_bps if order.liquidity == "TAKER" else -self.maker_rebate_bps
-        fee = fill_price * order.qty * abs(fee_bps) / 10000.0
-        if order.liquidity == "MAKER" and self.maker_rebate_bps > 0:
-            fee = -abs(fee)  # Rebate
+        # Calculate fee based on liquidity
+        if liquidity == "TAKER":
+            fee_bps = self.fee_bps
+        else:  # MAKER
+            fee_bps = -self.maker_rebate_bps  # Negative for rebate, positive for maker fee
+        
+        # Fee can be negative (rebate) for makers
+        fee = fill_price * order.qty * fee_bps / 10000.0
         
         # Check if we have enough cash/position
         cost = fill_price * order.qty + fee
@@ -437,38 +451,55 @@ class Engine:
                 return  # Insufficient cash
             self.account.cash -= cost
         else:
-            pos = self.account.positions.get(order.symbol, Position(order.symbol))
-            if pos.qty < order.qty:
+            pos = self.account.positions.get(order.symbol)
+            if pos is None or pos.qty < order.qty:
                 return  # Insufficient position
             self.account.cash += fill_price * order.qty - fee
         
-        # Update position
-        pos = self.account.positions.get(order.symbol, Position(order.symbol))
+        # Update position and realized PnL - ensure position exists in dict
+        pos = self.account.positions.get(order.symbol)
+        if pos is None:
+            pos = Position(order.symbol)
+            self.account.positions[order.symbol] = pos
         if order.side == "buy":
             new_qty = pos.qty + order.qty
             new_avg = (pos.avg_price * pos.qty + fill_price * order.qty) / new_qty if new_qty > 0 else fill_price
             pos.qty = new_qty
             pos.avg_price = new_avg
         else:
+            # Realized PnL = (fill_price - avg_price) * qty - fees on both legs
+            # The fee is already accounted in cash, so realized_pnl tracks price difference
+            realized_pnl = (fill_price - pos.avg_price) * order.qty
+            pos.realized_pnl += realized_pnl
             pos.qty -= order.qty
             if pos.qty == 0:
                 pos.avg_price = 0.0
+                pos.realized_pnl = 0.0
         
-        # Record fill
+        # Calculate actual slippage in bps
+        if pre_slippage_price != 0:
+            slippage_bps = ((fill_price - pre_slippage_price) / pre_slippage_price) * 10000.0
+            if order.side == "sell":
+                slippage_bps = -slippage_bps
+        else:
+            slippage_bps = 0.0
+        
+        # Record fill with proper fee sign (negative for rebate)
         fill = Fill(
             symbol=order.symbol,
             side=order.side,
             qty=order.qty,
             price=fill_price,
-            fee=abs(fee) if fee >= 0 else -fee,  # Store as positive fee
+            fee=fee,  # Can be negative for maker rebate
             timestamp_ns=self._current_ts,
             order_id=order.client_order_id,
-            liquidity=order.liquidity if hasattr(order, 'liquidity') else "TAKER",
-            fee_asset=order.fee_asset if hasattr(order, 'fee_asset') else "USDT",
-            fill_type=order.order_type,
+            fill_id=fill_id,
+            liquidity=liquidity,
+            fee_asset="USDT",  # Default, could be configurable
+            fill_type=order.order_type.upper(),
             book_epoch=self._current_batch.epoch[self._current_event_idx] if self._current_batch else 0,
             book_seq=self._current_batch.seq[self._current_event_idx] if self._current_batch else 0,
-            slippage_bps=0.0,  # Would calculate actual slippage
+            slippage_bps=slippage_bps,
         )
         
         self.account.fills.append(fill)
