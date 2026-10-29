@@ -176,6 +176,8 @@ class Engine:
         enable_slippage: bool = True,
         enable_market_impact: bool = True,
         impact_coefficient: float = 0.1,
+        # Determinism
+        random_seed: Optional[int] = None,
     ):
         self.spec = spec
         self.initial_cash = initial_cash
@@ -191,6 +193,12 @@ class Engine:
         self.enable_slippage = enable_slippage
         self.enable_market_impact = enable_market_impact
         self.impact_coefficient = impact_coefficient
+
+        # Determinism
+        self._random_seed = random_seed
+        if random_seed is not None:
+            random.seed(random_seed)
+            np.random.seed(random_seed)
 
         self.book = OrderBook(spec, window_ticks=2000)
         self.account = Account(cash=initial_cash)
@@ -306,6 +314,11 @@ class Engine:
         self._order_queue = {}
         self._fill_id_counter = 0
 
+        # Reseed for deterministic replay if seed was provided
+        if self._random_seed is not None:
+            random.seed(self._random_seed)
+            np.random.seed(self._random_seed)
+
         batch_count = 0
         while True:
             batch = reader.next_batch(10000)
@@ -340,6 +353,9 @@ class Engine:
             self._current_event_idx = i
             event_kind = batch.event_kind[i]
 
+            # Set current timestamp from event's receive time (nanoseconds since epoch)
+            self._current_ts = batch.recv_ts[i]
+
             # Update book
             if event_kind == 0:
                 self._apply_snapshot(batch, i)
@@ -351,7 +367,8 @@ class Engine:
                 pass
 
             # After book update, match queued limit orders
-            if self._book_initialized:
+            # Only match if book is valid (skip matching after gap markers when skip_gaps=True)
+            if self._book_initialized and batch.book_valid[i]:
                 self._match_queued_orders()
 
             # Call strategy if we have a valid book
@@ -506,14 +523,52 @@ class Engine:
         else:
             queued_order.status = "OPEN"
 
-    def _apply_snapshot(self, batch, idx):
-        bids = batch.bid_prices[idx] if idx < len(batch.bid_prices) else []
-        asks = batch.ask_prices[idx] if idx < len(batch.ask_prices) else []
+    def _get_book_levels_for_event(self, batch, idx, side: str):
+        """Extract book levels for a specific event from batch (handles flat, nested, and mock formats)."""
+        depth = getattr(batch, 'depth_levels', 10)
+        prices_attr = f"{side}_prices"
+        qtys_attr = f"{side}_qtys"
+        
+        prices = getattr(batch, prices_attr, [])
+        qtys = getattr(batch, qtys_attr, [])
+        
+        if not prices:
+            return []
+        
+        # Detect format and extract event's price/qty arrays
+        if prices and isinstance(prices[0], list):
+            # Nested format (mocks): prices[idx] is list of prices for this event
+            event_prices = prices[idx] if idx < len(prices) else []
+            event_qtys = getattr(batch, qtys_attr, [])[idx] if idx < len(getattr(batch, qtys_attr, [])) else []
+            
+            # Handle 3-level nesting from mocks: [[[5000000000000]]] -> flatten one level
+            if event_prices and isinstance(event_prices[0], list):
+                event_prices = event_prices[0]
+                event_qtys = event_qtys[0] if event_qtys else []
+        else:
+            # Flat format (real reader): prices[idx * depth : (idx + 1) * depth]
+            start = idx * depth
+            end = start + depth
+            event_prices = prices[start:end] if start < len(prices) else []
+            event_qtys = qtys[start:end] if start < len(qtys) else []
+        
+        # Filter out zero/empty levels but KEEP zero quantities (they indicate removals)
+        # Ensure integers (price units, qty units) for Rust
+        levels = []
+        for p, q in zip(event_prices, event_qtys):
+            # Flatten any remaining nested lists
+            while isinstance(p, list) and len(p) == 1:
+                p = p[0]
+            while isinstance(q, list) and len(q) == 1:
+                q = q[0]
+            # Keep zero quantities (they indicate removals), but skip zero prices
+            if p != 0:
+                levels.append((p, q))
+        return levels
 
-        bid_list = [(self.spec.price_to_float(p), self.spec.qty_to_float(q))
-                    for p, q in zip(bids, batch.bid_qtys[idx] if idx < len(batch.bid_qtys) else [])]
-        ask_list = [(self.spec.price_to_float(p), self.spec.qty_to_float(q))
-                    for p, q in zip(asks, batch.ask_qtys[idx] if idx < len(batch.ask_qtys) else [])]
+    def _apply_snapshot(self, batch, idx):
+        bid_list = self._get_book_levels_for_event(batch, idx, "bid")
+        ask_list = self._get_book_levels_for_event(batch, idx, "ask")
 
         self.book.apply_snapshot(bid_list, ask_list)
         self._book_initialized = True
@@ -523,13 +578,8 @@ class Engine:
         if not self._book_initialized:
             return
 
-        bids = batch.bid_prices[idx] if idx < len(batch.bid_prices) else []
-        asks = batch.ask_prices[idx] if idx < len(batch.ask_prices) else []
-
-        bid_list = [(self.spec.price_to_float(p), self.spec.qty_to_float(q))
-                    for p, q in zip(bids, batch.bid_qtys[idx] if idx < len(batch.bid_qtys) else [])]
-        ask_list = [(self.spec.price_to_float(p), self.spec.qty_to_float(q))
-                    for p, q in zip(asks, batch.ask_qtys[idx] if idx < len(batch.ask_qtys) else [])]
+        bid_list = self._get_book_levels_for_event(batch, idx, "bid")
+        ask_list = self._get_book_levels_for_event(batch, idx, "ask")
 
         self.book.apply_delta(bid_list, ask_list)
 
